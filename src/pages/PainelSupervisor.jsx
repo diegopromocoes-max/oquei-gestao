@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut as authSignOut } from 'firebase/auth';
 import { 
   Store, BookOpen, Clock, TrendingUp, Users, Calendar, 
@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, ExternalLink, MapPin, AlertTriangle, CheckCircle, 
   ListTodo, UserX, CalendarClock, Briefcase, Wallet, Megaphone, 
   FileCheck, Mail, LayoutGrid, Share2, ArrowRight, User, XCircle, RefreshCw,
-  ChevronRight, AlertCircle, Flame, Activity, Tv, PhoneCall, CalendarDays
+  ChevronRight, AlertCircle, Flame, Activity, Tv, PhoneCall, CalendarDays, TrendingDown
 } from 'lucide-react';
 
 // ============================================================================
@@ -29,6 +29,7 @@ import LinksUteis from './LinksUteis';
 import Wallboard from './Wallboard';
 import HubOquei from './HubOquei';
 import RelatorioGeral from './RelatorioGeral';
+import LaboratorioChurn from './LaboratorioChurn';
 
 // ============================================================================
 // 1. ESTILOS GLOBAIS DO COMPONENTE
@@ -87,13 +88,17 @@ const styles = {
   card: { background: 'white', padding: '28px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' },
   statusActive: { color: '#10b981', fontSize: '11px', fontWeight: '900', background: '#ecfdf5', padding: '4px 10px', borderRadius: '8px' },
   statusInactive: { color: '#ef4444', fontSize: '11px', fontWeight: '900', background: '#fef2f2', padding: '4px 10px', borderRadius: '8px' },
-  linkCard: { background: 'white', padding: '28px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'transform 0.3s ease' }
+  linkCard: { background: 'white', padding: '28px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer', transition: 'transform 0.3s ease' },
+
+  // TOAST GLOBAL
+  toastWrapper: { position: 'fixed', bottom: '30px', right: '30px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' },
+  toastSuccess: { background: '#10b981', color: 'white', padding: '15px 25px', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 10px 25px rgba(16,185,129,0.3)', animation: 'slideUp 0.3s ease-out' },
+  toastError: { background: '#ef4444', color: 'white', padding: '15px 25px', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 10px 25px rgba(239,68,68,0.3)', animation: 'slideUp 0.3s ease-out' }
 };
 
 // ============================================================================
-// 2. SUBCOMPONENTES VISUAIS (Fora da função principal)
+// 2. SUBCOMPONENTES VISUAIS
 // ============================================================================
-
 const SidebarItem = ({ icon: Icon, label, active, onClick, open, color }) => (
   <button 
     onClick={onClick} 
@@ -157,22 +162,6 @@ const ActionMenuBtn = ({ label, icon: Icon, onClick, color }) => (
   </button>
 );
 
-const LinkCard = ({ title, desc, icon: Icon, color, onClick }) => (
-  <div 
-    onClick={onClick} 
-    style={styles.linkCard}
-    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.06)'; }}
-    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)'; }}
-  >
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-      <div style={{ padding: '12px', borderRadius: '12px', background: `${color}15`, color: color }}><Icon size={24} /></div>
-      <ExternalLink size={16} color="#cbd5e1" />
-    </div>
-    <h3 style={{ fontWeight: 'bold', fontSize: '17px', color: '#1e293b', marginBottom: '5px' }}>{title}</h3>
-    <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.4', margin: 0 }}>{desc}</p>
-  </div>
-);
-
 // ============================================================================
 // 3. COMPONENTE PRINCIPAL
 // ============================================================================
@@ -186,6 +175,63 @@ export default function PainelSupervisor({ userData }) {
   
   const [reunioes, setReunioes] = useState([]);
   const [mensagens, setMensagens] = useState([]);
+  
+  // NOVOS ESTADOS PARA ALERTA DE SANGRAMENTO E TOASTS
+  const [bleedingAlerts, setBleedingAlerts] = useState([]);
+  const [toasts, setToasts] = useState([]);
+
+  // ==========================================================================
+  // --- MÓDULO DE AUTOMAÇÃO DE RH (Feature Flag) ---
+  // ==========================================================================
+  // Desativado por padrão para evitar o envio de e-mails de teste durante a fase beta.
+  const ENABLE_RH_AUTOMATION = false; 
+
+  const handleRHAutomation = async (type, payload) => {
+    if (!ENABLE_RH_AUTOMATION) {
+      console.log(`🔒 [MODO TESTE] E-mail para RH Bloqueado. Ação: ${type}`, payload);
+      showToast(`Ação registada internamente. (Automação RH em modo OFF)`, "success");
+      return;
+    }
+
+    try {
+      // Envia notificação gerando um documento na collection 'mail'
+      // Utiliza a extensão Trigger Email (Firebase) configurada para rh@oquei.net.br
+      await addDoc(collection(db, "mail"), {
+        to: "rh@oquei.net.br",
+        message: {
+          subject: `[Aviso Operacional] ${type} - ${payload.employeeName || 'Colaborador'}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #334155; line-height: 1.6;">
+              <h2 style="color: #2563eb;">Notificação de ${type}</h2>
+              <p>O(A) Supervisor(a) <strong>${userData?.name || 'Gestão'}</strong> acabou de registar ou aprovar uma nova ocorrência.</p>
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <p style="margin: 5px 0;"><strong>Colaborador Alvo:</strong> ${payload.employeeName || 'N/A'}</p>
+                <p style="margin: 5px 0;"><strong>Loja/Regional:</strong> ${payload.storeName || 'N/A'}</p>
+                <p style="margin: 5px 0;"><strong>Data / Período:</strong> ${payload.date || 'N/A'}</p>
+                <p style="margin: 5px 0;"><strong>Motivo / Justificativa:</strong> ${payload.reason || 'N/A'}</p>
+              </div>
+              <p style="font-size: 11px; color: #94a3b8; margin-top: 20px;">Mensagem gerada e enviada automaticamente pelo Ecossistema Oquei Telecom.</p>
+            </div>
+          `
+        },
+        createdAt: serverTimestamp()
+      });
+      showToast("E-mail automático enviado ao RH com sucesso!", "success");
+    } catch (err) {
+      console.error("Erro ao notificar RH automaticamente:", err);
+      showToast("Ação registada, mas ocorreu um erro na automação de e-mail.", "error");
+    }
+  };
+  // ==========================================================================
+
+  // Função Global de Toast
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
 
   // --- MENU DE NAVEGAÇÃO ---
   const MENU_ITEMS = [
@@ -195,6 +241,7 @@ export default function PainelSupervisor({ userData }) {
     
     // SISTEMAS
     { id: 'hub_oquei', label: 'HubOquei Radar', icon: Zap, section: 'Inteligência', color: '#00f2fe' },
+    { id: 'churn', label: 'Laboratório Churn', icon: Activity, section: 'Inteligência', color: '#8b5cf6' },
     { id: 'relatorio_geral', label: 'Relatório BI', icon: BarChart3, section: 'Inteligência', color: '#3b82f6' },
     { id: 'vendas', label: 'Painel Vendas', icon: TrendingUp, section: 'Sistemas' },
     { id: 'war_room', label: 'Sala de Guerra', icon: Flame, section: 'Sistemas' }, 
@@ -236,7 +283,8 @@ export default function PainelSupervisor({ userData }) {
         setMyStores(storesData);
         
         const myStoreIds = storesData.map(s => s.id);
-        const today = new Date().toLocaleDateString('en-CA'); 
+        const myStoreNames = storesData.map(s => s.name);
+        const todayStr = new Date().toLocaleDateString('en-CA'); 
         
         const qAbsences = query(collection(db, "absences"));
         const snapAbsences = await getDocs(qAbsences);
@@ -248,7 +296,7 @@ export default function PainelSupervisor({ userData }) {
              const isMyCluster = abs.clusterId === userData.clusterId;
              const isMyStore = myStoreIds.includes(abs.storeId);
              if (!isMyCluster && !isMyStore) return false;
-             if (abs.endDate < today) return false;
+             if (abs.endDate < todayStr) return false;
              if (abs.status === 'Pendente') return true; 
              if (!abs.coverageMap || Object.keys(abs.coverageMap).length === 0) return true; 
              
@@ -257,6 +305,44 @@ export default function PainelSupervisor({ userData }) {
           });
 
         setPendingAbsences(criticalAbsences);
+
+        // LÓGICA DE ALERTA DE SANGRAMENTO (Últimos 3 dias)
+        if (myStoreNames.length > 0) {
+          const threeDaysAgo = new Date();
+          threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+          const dateStr3Days = threeDaysAgo.toISOString().split('T')[0];
+
+          const qLeads = query(
+            collection(db, "leads"),
+            where("date", ">=", dateStr3Days)
+          );
+          
+          const snapLeads = await getDocs(qLeads);
+          const recentLeads = snapLeads.docs.map(d => d.data()).filter(l => myStoreNames.includes(l.cityId));
+          
+          const bleeding = [];
+          
+          myStoreNames.forEach(cityName => {
+            const cityLeads = recentLeads.filter(l => l.cityId === cityName);
+            const sales = cityLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
+            const cancels = cityLeads.filter(l => l.status === 'Descartado').length;
+            
+            if (cancels > sales && cancels > 0) {
+              bleeding.push({
+                city: cityName,
+                sales,
+                cancels,
+                diff: cancels - sales
+              });
+            }
+          });
+          
+          setBleedingAlerts(bleeding);
+          
+          if (bleeding.length > 0 && activeView === 'dashboard') {
+            showToast(`Atenção: ${bleeding.length} loja(s) com sangramento de base nos últimos 3 dias!`, 'error');
+          }
+        }
       }
 
       if (auth.currentUser) {
@@ -300,7 +386,7 @@ export default function PainelSupervisor({ userData }) {
             <h2 style={styles.heroTitle}>Olá, {userData?.name?.split(' ')[0]}</h2>
             <p style={styles.heroSub}>Gestão do Cluster: <strong style={{color: '#2563eb', textTransform: 'uppercase'}}>{userData?.clusterId || 'Geral'}</strong></p>
           </div>
-          <button onClick={carregarDados} style={styles.refreshBtn} title="Atualizar Dados">
+          <button onClick={() => { carregarDados(); showToast('Painel atualizado!'); }} style={styles.refreshBtn} title="Atualizar Dados">
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
@@ -309,22 +395,47 @@ export default function PainelSupervisor({ userData }) {
           <KpiCard title="Lojas" value={myStores.length} icon={Store} color="blue" />
           <KpiCard title="Reuniões" value={reunioes.length} icon={Calendar} color="purple" />
           <KpiCard title="Pendências" value={pendingAbsences.length} icon={AlertCircle} color={pendingAbsences.length > 0 ? "red" : "green"} />
-          <KpiCard title="Caixa Atual" value="R$ 0,00" icon={Wallet} color="orange" />
+          <KpiCard title="Alertas de Evasão" value={bleedingAlerts.length} icon={TrendingDown} color={bleedingAlerts.length > 0 ? "orange" : "blue"} />
         </div>
         
         <h3 style={styles.sectionHeader}>Acesso Rápido</h3>
         <div style={styles.actionGrid}>
-           <ActionMenuBtn label="HubOquei Radar" icon={Zap} color="#00f2fe" onClick={() => setActiveView('hub_oquei')} />
-           <ActionMenuBtn label="Relatório BI" icon={BarChart3} color="#3b82f6" onClick={() => setActiveView('relatorio_geral')} />
+           <ActionMenuBtn label="Lab. Churn" icon={Activity} color="#8b5cf6" onClick={() => setActiveView('churn')} />
            <ActionMenuBtn label="Painel de Vendas" icon={TrendingUp} color="#10b981" onClick={() => setActiveView('vendas')} />
            <ActionMenuBtn label="Sala de Guerra" icon={Flame} color="#ef4444" onClick={() => setActiveView('war_room')} />
            <ActionMenuBtn label="Faltas & Escala" icon={AlertTriangle} color="#ea580c" onClick={() => setActiveView('faltas')} />
-           <ActionMenuBtn label="Comunicados" icon={Megaphone} color="#2563eb" onClick={() => setActiveView('comunicados')} />
+           <ActionMenuBtn label="Banco de Horas" icon={Clock} color="#3b82f6" onClick={() => setActiveView('banco_horas')} />
+           <ActionMenuBtn label="Desencaixe" icon={Wallet} color="#059669" onClick={() => setActiveView('desencaixe')} />
         </div>
 
         <h3 style={styles.sectionHeader}>Alertas & Operação</h3>
         <div style={styles.dashboardGrid}>
           
+          {/* SANGRAMENTO / CHURN CRÍTICO */}
+          {bleedingAlerts.length > 0 && (
+            <div style={{...styles.dashboardCard, borderTop: '4px solid #f97316', gridColumn: '1 / -1', minHeight: 'auto'}}>
+              <div style={styles.cardHeaderSmall}>
+                <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+                  <AlertTriangle size={16} color="#ea580c"/> 
+                  <span style={{fontWeight:'bold', color:'#9a3412'}}>Sangramento de Base (Últimas 72h)</span>
+                </div>
+              </div>
+              <div style={{padding: '15px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px'}}>
+                {bleedingAlerts.map((alert, idx) => (
+                  <div key={idx} style={{background: '#fff7ed', border: '1px solid #fed7aa', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                     <div>
+                       <h4 style={{margin: '0 0 5px 0', color: '#9a3412', fontSize: '15px'}}>{alert.city}</h4>
+                       <span style={{fontSize: '12px', color: '#c2410c'}}>Vendas: <strong>{alert.sales}</strong> | Descartes: <strong style={{color: '#ef4444'}}>{alert.cancels}</strong></span>
+                     </div>
+                     <button onClick={() => setActiveView('churn')} style={{background: '#ea580c', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>
+                       Ver Clínica
+                     </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={styles.dashboardCard}>
             <div style={styles.cardHeaderSmall}>
               <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
@@ -348,7 +459,7 @@ export default function PainelSupervisor({ userData }) {
             </div>
           </div>
 
-          <div style={{...styles.dashboardCard, border: pendingAbsences.length > 0 ? '1px solid #fca5a5' : '1px solid #e2e8f0'}}>
+          <div style={{...styles.dashboardCard, borderTop: pendingAbsences.length > 0 ? '4px solid #ef4444' : '4px solid #10b981'}}>
              <div style={styles.cardHeaderSmall}>
               <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
                 <AlertTriangle size={16} color={pendingAbsences.length > 0 ? "#dc2626" : "#059669"}/> 
@@ -453,13 +564,14 @@ export default function PainelSupervisor({ userData }) {
     switch (activeView) {
       case 'dashboard': return <DashboardHome />;
       case 'hub_oquei': return <HubOquei userData={userData} />;
+      case 'churn': return <LaboratorioChurn userData={userData} />;
       case 'relatorio_geral': return <RelatorioGeral userData={userData} />;
       case 'vendas': return <PainelVendas userData={userData} />;
       case 'war_room': return <SalaDeGuerra userData={userData} />;
       case 'banco_horas': return <BancoHorasSupervisor userData={userData} />;
       case 'lojas': return <LojasView />;
-      case 'faltas': return <FaltasSupervisor userData={userData} />;
-      case 'rh_requests': return <RhSupervisor userData={userData} />;
+      case 'faltas': return <FaltasSupervisor userData={userData} onRHAutomation={handleRHAutomation} />;
+      case 'rh_requests': return <RhSupervisor userData={userData} onRHAutomation={handleRHAutomation} />;
       case 'reunioes': return <AgendaSupervisor userData={userData} />;
       case 'patrocinio': return <PatrocinioSupervisor userData={userData} />;
       case 'desencaixe': return <DesencaixeSupervisor userData={userData} />;
@@ -470,7 +582,7 @@ export default function PainelSupervisor({ userData }) {
     }
   };
 
-  const isWideView = ['war_room', 'vendas', 'hub_oquei', 'relatorio_geral'].includes(activeView);
+  const isWideView = ['war_room', 'vendas', 'hub_oquei', 'relatorio_geral', 'churn'].includes(activeView);
 
   if (activeView === 'wallboard') {
     return <Wallboard userData={userData} onExit={() => setActiveView('dashboard')} />;
@@ -478,14 +590,15 @@ export default function PainelSupervisor({ userData }) {
 
   return (
     <div style={styles.layout}>
-      <aside style={{...styles.sidebar, width: isSidebarOpen ? '280px' : '90px'}}>
+      <aside style={{ ...styles.sidebar, width: isSidebarOpen ? '280px' : '90px' }}>
         <div style={styles.sidebarHeader}>
           <div style={styles.logoBox}><Briefcase size={24} color="white" /></div>
           {isSidebarOpen && <div><h1 style={styles.brandTitle}>Oquei Telecom</h1><p style={styles.brandSub}>Supervisor</p></div>}
         </div>
         <nav style={styles.navScroll}>
           {MENU_ITEMS.map((item, index) => {
-            const showHeader = index === 0 || MENU_ITEMS[index - 1].section !== item.section;
+            const showHeader = isSidebarOpen && (index === 0 || MENU_ITEMS[index - 1].section !== item.section);
+
             return (
               <div key={item.id}>
                 {isSidebarOpen && showHeader && <div style={styles.navSection}>{item.section}</div>}
@@ -538,6 +651,17 @@ export default function PainelSupervisor({ userData }) {
           </div>
         </div>
       </main>
+
+      {/* TOAST SYSTEM GLOBAL PARA O PAINEL */}
+      <div style={styles.toastWrapper}>
+        {toasts.map(toast => (
+          <div key={toast.id} style={toast.type === 'error' ? styles.toastError : styles.toastSuccess}>
+             {toast.type === 'error' ? <AlertTriangle size={20}/> : <CheckCircle size={20}/>}
+             <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }

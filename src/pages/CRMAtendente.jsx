@@ -4,7 +4,8 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import {
   PlusCircle, Users, BookOpen, Wallet, BookMarked, 
   Globe, Menu, LogOut, Target, Package, Zap,
-  Megaphone, ChevronRight, TrendingUp, RefreshCw
+  Megaphone, ChevronRight, TrendingUp, RefreshCw, FileCheck,
+  Share2, CalendarDays, Link as LinkIcon, Info, AlertTriangle, Store, CheckCircle2
 } from 'lucide-react';
 
 // --- IMPORTAÇÃO DAS PÁGINAS DO ATENDENTE ---
@@ -13,6 +14,11 @@ import MeusLeads from './MeusLeads';
 import ColinhasAtendente from './ColinhasAtendente';
 import DesencaixeAtendente from './DesencaixeAtendente';
 import ManualAtendente from './ManualAtendente';
+import RhAtendente from './RhAtendente';
+
+// --- IMPORTAÇÃO DOS PAINÉIS DE VISUALIZAÇÃO (GESTÃO) ---
+import JapaSupervisor from './JapaSupervisor';
+import LinksUteis from './LinksUteis';
 
 export default function CRMAtendente({ userData }) {
   const [activeTab, setActiveTab] = useState('inicio');
@@ -21,6 +27,10 @@ export default function CRMAtendente({ userData }) {
   const [stats, setStats] = useState({ totalLeads: 0, totalSales: 0, planos: 0, svas: 0, migracoes: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
   const [messages, setMessages] = useState([]);
+  
+  // Estados para Escala da Rede
+  const [closedStores, setClosedStores] = useState([]); 
+  const [networkAbsences, setNetworkAbsences] = useState([]); 
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -28,7 +38,7 @@ export default function CRMAtendente({ userData }) {
     // Prefixo do mês atual (Ex: "2026-02")
     const currentMonthPrefix = new Date().toISOString().slice(0, 7);
 
-    // 1. ESCUTA DE LEADS (Apenas filtro simples por Atendente para evitar erro de Index no Firestore)
+    // 1. ESCUTA DE LEADS
     const qLeads = query(
       collection(db, "leads"), 
       where("attendantId", "==", auth.currentUser.uid)
@@ -37,10 +47,7 @@ export default function CRMAtendente({ userData }) {
     const unsubscribeLeads = onSnapshot(qLeads, (snap) => {
       const allDocs = snap.docs.map(d => d.data());
       
-      // Filtra na memória (JavaScript) apenas os leads que pertencem ao mês atual
       const monthDocs = allDocs.filter(l => l.date && l.date.startsWith(currentMonthPrefix));
-      
-      // Contabiliza apenas os fechados deste mês e deste atendente
       const sales = monthDocs.filter(l => ['Contratado', 'Instalado'].includes(l.status));
       
       setStats({
@@ -56,32 +63,64 @@ export default function CRMAtendente({ userData }) {
       setLoadingStats(false);
     });
 
-    // 2. ESCUTA DE AVISOS (Busca simples, ordenação na memória)
+    // 2. ESCUTA DE AVISOS
     const qMsgs = query(collection(db, "messages"));
     const unsubscribeMsgs = onSnapshot(qMsgs, (msgSnap) => {
       const msgData = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }))
         .filter(m => m.to === 'all' || m.to === userData?.cityId || m.to === auth.currentUser.uid)
-        .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)) // Ordena do mais recente
-        .slice(0, 5); // Pega apenas os 5 últimos
+        .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+        .slice(0, 5);
         
       setMessages(msgData);
     });
 
-    // Limpeza dos listeners ao desmontar
+    // 3. ESCUTA DE AUSÊNCIAS (Para ver desfalques e calendário da rede)
+    const qAbsences = query(collection(db, "absences"));
+    const unsubscribeAbsences = onSnapshot(qAbsences, (snap) => {
+      const today = new Date().toISOString().split('T')[0];
+      const closed = [];
+      const allAbs = [];
+      
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        allAbs.push({ id: docSnap.id, ...data });
+
+        // Verifica no mapa de cobertura se algum dia está marcado como 'loja_fechada'
+        if (data.coverageMap) {
+          Object.entries(data.coverageMap).forEach(([date, floater]) => {
+            if (date >= today && floater === 'loja_fechada') {
+              closed.push({ store: data.storeId || data.storeName || 'Desconhecida', date });
+            }
+          });
+        }
+      });
+      
+      closed.sort((a,b) => a.date.localeCompare(b.date));
+      setClosedStores(closed);
+      setNetworkAbsences(allAbs);
+    });
+
     return () => {
       unsubscribeLeads();
       unsubscribeMsgs();
+      unsubscribeAbsences();
     };
   }, [userData?.cityId]); 
 
-  // Menu Simplificado e Focado no Atendente
+  // --- MENU DE NAVEGAÇÃO ---
   const MENU_ITEMS = [
     { id: 'inicio', label: 'Início', icon: Globe, section: 'Geral' },
     { id: 'nova_venda', label: 'Registrar Lead', icon: PlusCircle, highlight: true, section: 'Comercial' },
     { id: 'clientes', label: 'Meu Funil (Kanban)', icon: Users, section: 'Comercial' },
+    
+    { id: 'rh', label: 'Solicitações RH', icon: FileCheck, section: 'Ferramentas' },
     { id: 'colinhas', label: 'Colinhas e Scripts', icon: BookMarked, section: 'Ferramentas' },
     { id: 'desencaixe', label: 'Caixa da Loja', icon: Wallet, section: 'Ferramentas' },
-    { id: 'manual', label: 'Manual do Consultor', icon: BookOpen, section: 'Ferramentas' }
+    { id: 'manual', label: 'Manual do Consultor', icon: BookOpen, section: 'Ferramentas' },
+    
+    { id: 'japa', label: 'Ações do Japa', icon: Share2, section: 'Consulta & Escala' },
+    { id: 'escala', label: 'Escala da Rede', icon: CalendarDays, section: 'Consulta & Escala' },
+    { id: 'links', label: 'Links Úteis', icon: LinkIcon, section: 'Consulta & Escala' }
   ];
 
   const DashboardInicio = () => {
@@ -95,17 +134,10 @@ export default function CRMAtendente({ userData }) {
             <h2 style={styles.heroTitle}>Olá, {firstName}! 👋</h2>
             <p style={styles.heroSub}>Resumo das tuas vendas de <strong>{currentMonthName}</strong>.</p>
             
-            {/* Badges com Resumo no Topo */}
             <div style={{display: 'flex', gap: '10px', marginTop: '15px', flexWrap: 'wrap'}}>
-               <div style={{background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)'}}>
-                  🎯 {stats.planos} Planos
-               </div>
-               <div style={{background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)'}}>
-                  🔄 {stats.migracoes} Migrações
-               </div>
-               <div style={{background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)'}}>
-                  📦 {stats.svas} SVAs
-               </div>
+               <div style={styles.heroBadgeSmall}>🎯 {stats.planos} Planos</div>
+               <div style={styles.heroBadgeSmall}>🔄 {stats.migracoes} Migrações</div>
+               <div style={styles.heroBadgeSmall}>📦 {stats.svas} SVAs</div>
             </div>
           </div>
           <div style={styles.heroBadge}>
@@ -162,20 +194,214 @@ export default function CRMAtendente({ userData }) {
     );
   };
 
+  // --- COMPONENTE: CALENDÁRIO VISUAL DA REDE PARA ATENDENTES ---
+  const EscalaAtendenteView = () => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedStoreFilter, setSelectedStoreFilter] = useState('all');
+
+    const uniqueStores = [...new Set(networkAbsences.map(a => a.storeId || a.storeName).filter(Boolean))];
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+    // Mapeia ausências por dia
+    const absencesByDay = {};
+    
+    networkAbsences.forEach(abs => {
+      const storeName = abs.storeId || abs.storeName;
+      if (selectedStoreFilter !== 'all' && storeName !== selectedStoreFilter) return;
+
+      if (!abs.startDate || !abs.endDate) return;
+
+      const start = new Date(abs.startDate + 'T12:00:00');
+      const end = new Date(abs.endDate + 'T12:00:00');
+      
+      if (start > end) return;
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          const day = d.getDate();
+          if (!absencesByDay[day]) absencesByDay[day] = [];
+          
+          const yStr = d.getFullYear();
+          const mStr = String(d.getMonth() + 1).padStart(2, '0');
+          const dStr = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${yStr}-${mStr}-${dStr}`;
+          
+          const coverage = abs.coverageMap?.[dateStr];
+          
+          absencesByDay[day].push({
+            id: abs.id,
+            store: storeName,
+            attendant: abs.attendantName || 'Colaborador',
+            type: abs.type,
+            coverage: coverage
+          });
+        }
+      }
+    });
+
+    const handleMonthChange = (e) => {
+      const [y, m] = e.target.value.split('-');
+      setCurrentDate(new Date(y, m - 1, 1));
+    };
+
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    return (
+      <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
+        <div style={styles.readonlyBanner}>
+           <Info size={18}/> MODO LEITURA: Consulte o calendário de folgas, férias e atestados de toda a rede Oquei.
+        </div>
+
+        {/* ALERTA DE LOJAS FECHADAS */}
+        {closedStores.length > 0 && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '20px', borderRadius: '16px', marginBottom: '30px', boxShadow: '0 4px 6px -1px rgba(239,68,68,0.1)' }}>
+             <h4 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#b91c1c', margin: '0 0 10px 0', fontSize: '15px', fontWeight: 'bold' }}>
+               <AlertTriangle size={20} /> Alerta de Desfalque na Rede (Lojas Fechadas)
+             </h4>
+             <p style={{fontSize: '13px', color: '#991b1b', marginBottom: '15px', marginTop: '0'}}>As seguintes lojas estão sem cobertura escalada para os dias abaixo:</p>
+             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+               {closedStores.map((item, i) => (
+                 <div key={i} style={{ background: 'white', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '8px', fontSize: '13px', color: '#991b1b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                   <Store size={14} color="#ef4444" /> {item.store} <span style={{color: '#f87171'}}>|</span> {item.date.split('-').reverse().join('/')}
+                 </div>
+               ))}
+             </div>
+          </div>
+        )}
+
+        {/* CABEÇALHO DO CALENDÁRIO */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+          <h3 style={styles.sectionTitle}><CalendarDays size={20} color="#2563eb"/> Calendário de Ausências</h3>
+          <div style={{ display: 'flex', gap: '10px' }}>
+             <input type="month" value={monthKey} onChange={handleMonthChange} style={styles.filterInput} />
+             <select value={selectedStoreFilter} onChange={e => setSelectedStoreFilter(e.target.value)} style={styles.filterInput}>
+                <option value="all">Todas as Lojas</option>
+                {uniqueStores.map(s => <option key={s} value={s}>{s}</option>)}
+             </select>
+          </div>
+        </div>
+
+        {/* GRID DO CALENDÁRIO */}
+        <div style={styles.calendarGrid}>
+          {/* Cabeçalho dos Dias da Semana */}
+          <div style={styles.calendarHeaderRow}>
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+              <div key={day} style={{...styles.calendarHeaderCell, color: day === 'Dom' || day === 'Sáb' ? '#ef4444' : '#64748b'}}>
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Dias do Mês */}
+          <div style={styles.calendarDaysRow}>
+            {/* Espaços vazios no início */}
+            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+              <div key={`empty-${i}`} style={styles.calendarCellEmpty} />
+            ))}
+            
+            {/* Células de cada dia */}
+            {daysArray.map(day => {
+              const dayAbsences = absencesByDay[day] || [];
+              const isToday = new Date().getDate() === day && new Date().getMonth() === new Date().getMonth() && new Date().getFullYear() === new Date().getFullYear();
+
+              return (
+                <div key={day} style={{...styles.calendarCell, background: isToday ? '#f0fdf4' : 'white'}}>
+                  <span style={{...styles.calendarDayNum, color: isToday ? '#10b981' : '#334155'}}>
+                    {day}
+                  </span>
+                  
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
+                    {dayAbsences.map((a, i) => {
+                      const isFechada = a.coverage === 'loja_fechada';
+                      const isPendente = !a.coverage;
+                      const isFerias = a.type === 'ferias';
+                      
+                      let bg = isFerias ? '#eff6ff' : '#fef2f2';
+                      let borderColor = isFerias ? '#bfdbfe' : '#fecaca';
+                      let textColor = isFerias ? '#1e40af' : '#991b1b';
+
+                      return (
+                        <div key={i} style={{...styles.absenceTag, background: bg, borderColor: borderColor, color: textColor}}>
+                          <strong style={{fontSize: '11px', color: '#1e293b'}}>{a.store}</strong>
+                          <span style={{marginTop: '2px'}}>{a.attendant.split(' ')[0]} ({isFerias ? 'Férias' : 'Falta'})</span>
+                          
+                          {isFechada ? (
+                            <span style={styles.tagAlert}>🚫 FECHADA</span>
+                          ) : isPendente ? (
+                            <span style={styles.tagWarning}>⚠️ Pendente</span>
+                          ) : (
+                            <span style={styles.tagSuccess}>✅ Coberto</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+    );
+  };
+
+  // --- RENDERIZADOR PRINCIPAL ---
   const renderContent = () => {
     switch (activeTab) {
       case 'inicio': return <DashboardInicio />;
       case 'nova_venda': return <NovoLead userData={userData} onNavigate={setActiveTab} />;
       case 'clientes': return <MeusLeads userData={userData} onNavigate={setActiveTab} />;
+      case 'rh': return <RhAtendente userData={userData} />;
       case 'colinhas': return <ColinhasAtendente userData={userData} />;
       case 'desencaixe': return <DesencaixeAtendente userData={userData} />;
       case 'manual': return <ManualAtendente userData={userData} />;
+      
+      case 'escala': return <EscalaAtendenteView />;
+      
+      // PAINEIS IMPORTADOS (MODO LEITURA)
+      case 'japa': 
+        return (
+          <div className="readonly-mode">
+            <div style={styles.readonlyBanner}><Info size={18}/> MODO LEITURA: Cronograma gerido pelo Marketing.</div>
+            <JapaSupervisor userData={userData} isReadOnly={true} />
+          </div>
+        );
+      case 'links': 
+        return (
+          <div className="readonly-mode">
+            <div style={styles.readonlyBanner}><Info size={18}/> Acesso rápido às plataformas da empresa.</div>
+            <LinksUteis userData={userData} isReadOnly={true} />
+          </div>
+        );
+
       default: return <DashboardInicio />;
     }
   };
 
   return (
     <div style={styles.layout}>
+      
+      {/* INJEÇÃO DE CSS PARA O MODO LEITURA (Desativa cliques indesejados) */}
+      <style>
+        {`
+          .readonly-mode form, 
+          .readonly-mode button:not(.tab-btn), 
+          .readonly-mode input:not([type="month"]), 
+          .readonly-mode select {
+            pointer-events: none !important;
+          }
+          .readonly-mode .allow-click {
+            pointer-events: auto !important;
+          }
+        `}
+      </style>
+
       <aside style={{ ...styles.sidebar, width: isSidebarOpen ? '260px' : '80px' }}>
         <div style={styles.logoArea}>
           {isSidebarOpen ? (
@@ -320,8 +546,11 @@ const styles = {
   heroBadge: { background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', padding: '15px 25px', borderRadius: '16px', textAlign: 'center' },
   heroBadgeLabel: { display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'bold', color: '#cbd5e1' },
   heroBadgeValue: { fontSize: '20px', fontWeight: '900', color: 'white' },
+  heroBadgeSmall: { background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.1)' },
   
-  sectionTitle: { fontSize: '18px', fontWeight: '900', color: '#1e293b', marginBottom: '20px' },
+  sectionTitle: { fontSize: '18px', fontWeight: '900', color: '#1e293b', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' },
+  
+  filterInput: { padding: '10px 15px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '13px', color: '#1e293b', background: 'white', fontWeight: 'bold', cursor: 'pointer' },
   
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' },
   kpiCard: { backgroundColor: '#ffffff', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.01)', transition: 'transform 0.2s' },
@@ -331,5 +560,20 @@ const styles = {
   actionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' },
   actionCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '30px 20px', cursor: 'pointer', transition: 'all 0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.01)', textAlign: 'center' },
   
-  card: { background: 'white', padding: '30px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }
+  card: { background: 'white', padding: '30px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
+  readonlyBanner: { background: '#eff6ff', border: '1px solid #bfdbfe', padding: '12px 20px', borderRadius: '12px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e3a8a', fontWeight: 'bold', fontSize: '13px' },
+
+  // CALENDÁRIO
+  calendarGrid: { background: 'white', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
+  calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' },
+  calendarHeaderCell: { textAlign: 'center', padding: '12px', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  calendarDaysRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
+  calendarCellEmpty: { background: '#fcfcfc', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9' },
+  calendarCell: { minHeight: '120px', padding: '10px', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', transition: 'background 0.2s' },
+  calendarDayNum: { fontWeight: '900', fontSize: '14px', marginBottom: '8px', display: 'block' },
+  
+  absenceTag: { padding: '6px 8px', borderRadius: '8px', border: '1px solid', display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2', fontSize: '11px', marginBottom: '6px' },
+  tagAlert: { background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
+  tagWarning: { background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
+  tagSuccess: { background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
 };
