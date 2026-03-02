@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { jsPDF } from "jspdf";
 import { 
   FileCheck, Clock, Calendar, Search, User, MapPin, AlignLeft, 
@@ -8,6 +8,8 @@ import {
   FileText, Users, AlertTriangle, UserMinus, TrendingUp, 
   Briefcase, Paperclip, History, Mail, Shield, CheckCircle
 } from 'lucide-react';
+
+import { styles as global } from '../styles/globalStyles';
 
 export default function RhSupervisor({ userData, onRHAutomation }) {
   const [activeTab, setActiveTab] = useState('nova'); // 'nova', 'aprovacoes', 'historico'
@@ -42,11 +44,11 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
   const [supervisors, setSupervisors] = useState([]);
 
   const REQUEST_TYPES = {
-    advertencia: { label: 'Advertência', icon: AlertTriangle, color: '#f59e0b', bg: '#fffbeb', desc: 'Faltas leves ou reincidência.' },
-    suspensao: { label: 'Suspensão', icon: AlertCircle, color: '#ea580c', bg: '#fff7ed', desc: 'Faltas graves.' },
-    desligamento: { label: 'Desligamento', icon: UserMinus, color: '#dc2626', bg: '#fef2f2', desc: 'Rescisão contratual.' },
-    promocao: { label: 'Promoção', icon: TrendingUp, color: '#2563eb', bg: '#eff6ff', desc: 'Mérito ou cargo.' },
-    atestado: { label: 'Atestado Médico', icon: FileCheck, color: '#db2777', bg: '#fdf2f8', desc: 'Envio de atestado (48h).' },
+    advertencia: { label: 'Advertência', icon: AlertTriangle, color: '#f59e0b', bg: '#f59e0b15', desc: 'Faltas leves ou reincidência.' },
+    suspensao: { label: 'Suspensão', icon: AlertCircle, color: '#ea580c', bg: '#ea580c15', desc: 'Faltas graves.' },
+    desligamento: { label: 'Desligamento', icon: UserMinus, color: '#ef4444', bg: '#ef444415', desc: 'Rescisão contratual.' },
+    promocao: { label: 'Promoção', icon: TrendingUp, color: '#3b82f6', bg: '#3b82f615', desc: 'Mérito ou cargo.' },
+    atestado: { label: 'Atestado Médico', icon: FileCheck, color: '#db2777', bg: '#db277715', desc: 'Envio de atestado (48h).' },
   };
 
   const currentType = REQUEST_TYPES[requestType];
@@ -117,7 +119,6 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
       
       snapAbsences.docs.forEach(d => {
          const data = d.data();
-         // Inclui férias e outras solicitações do absences
          if (data.type !== 'falta' && data.type !== 'atestado' && storeIds.includes(data.storeId)) {
              combined.push({ id: d.id, _collection: 'absences', ...data });
          }
@@ -163,7 +164,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("OQUEI TELECOM - SOLICITAÇÃO RH", 105, 13, null, null, "center");
+    doc.text("OQUEI TELECOM - SOLICITACAO RH", 105, 13, null, null, "center");
 
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
@@ -173,14 +174,14 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
     const lineHeight = 10;
 
     doc.text(`Data: ${new Date().toLocaleDateString()}`, 20, y); y += lineHeight;
-    doc.text(`Solicitante: ${userData.name} (${isCoordinator ? 'Coordenação' : 'Supervisor'})`, 20, y); y += lineHeight;
+    doc.text(`Solicitante: ${userData.name} (${isCoordinator ? 'Coordenacao' : 'Supervisor'})`, 20, y); y += lineHeight;
     doc.text(`Tipo: ${REQUEST_TYPES[requestData.type].label.toUpperCase()}`, 20, y); y += lineHeight * 1.5;
 
     doc.setFont("helvetica", "bold");
     doc.text("DADOS DO ALVO:", 20, y);
     doc.setFont("helvetica", "normal"); y += lineHeight;
     doc.text(`Nome: ${requestData.targetName}`, 20, y); y += lineHeight;
-    doc.text(`Cargo/Função: ${requestData.targetRole === 'supervisor' ? 'Supervisor' : 'Atendente'}`, 20, y); y += lineHeight;
+    doc.text(`Cargo/Funcao: ${requestData.targetRole === 'supervisor' ? 'Supervisor' : 'Atendente'}`, 20, y); y += lineHeight;
     doc.text(`Unidade/Setor: ${requestData.storeName}`, 20, y); y += lineHeight * 1.5;
 
     doc.setFont("helvetica", "bold");
@@ -188,8 +189,8 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
     doc.setFont("helvetica", "normal"); y += lineHeight;
 
     if (requestData.type === 'atestado') {
-      doc.text(`Início: ${new Date(requestData.dateEvent).toLocaleDateString()}`, 20, y); y += lineHeight;
-      doc.text(`Duração: ${requestData.atestadoDays} dias`, 20, y);
+      doc.text(`Inicio: ${new Date(requestData.dateEvent).toLocaleDateString()}`, 20, y); y += lineHeight;
+      doc.text(`Duracao: ${requestData.atestadoDays} dias`, 20, y);
     } else {
       doc.text(`Motivo: ${requestData.reason}`, 20, y); y += lineHeight;
       doc.text(`Data do Fato: ${new Date(requestData.dateEvent).toLocaleDateString()}`, 20, y);
@@ -197,7 +198,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 
     y += 10;
     doc.setFont("helvetica", "bold");
-    doc.text("DESCRIÇÃO:", 20, y); y += 7;
+    doc.text("DESCRICAO:", 20, y); y += 7;
     doc.setFont("helvetica", "normal");
     const splitText = doc.splitTextToSize(requestData.description, 170);
     doc.text(splitText, 20, y);
@@ -291,7 +292,6 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
         updatedByName: userData?.name || 'Gestor'
       });
 
-      // Gatilho de Automação de E-mail
       if (onRHAutomation) {
         onRHAutomation(`Solicitação de RH - ${newStatus}`, {
           employeeName: request.targetName || request.attendantName || 'Colaborador',
@@ -322,68 +322,67 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
     return matchStatus && matchSearch;
   });
 
-  // Auxiliares Visuais
   const getStatusBadge = (status) => {
     switch(status) {
-      case 'Aprovado': return <span style={styles.badgeSuccess}><CheckCircle2 size={12}/> Aprovado</span>;
-      case 'Rejeitado': return <span style={styles.badgeError}><XCircle size={12}/> Rejeitado</span>;
-      default: return <span style={styles.badgeWarning}><Clock size={12}/> Pendente</span>;
+      case 'Aprovado': return <span style={local.badgeSuccess}><CheckCircle2 size={12}/> Aprovado</span>;
+      case 'Rejeitado': return <span style={local.badgeError}><XCircle size={12}/> Rejeitado</span>;
+      default: return <span style={local.badgeWarning}><Clock size={12}/> Pendente</span>;
     }
   };
 
   const getTypeBadge = (type) => {
-    let color = '#3b82f6'; let bg = '#eff6ff'; let label = type;
+    let color = '#3b82f6'; let bg = '#3b82f615'; let label = type;
     switch(type) {
-      case 'ferias': label = 'Férias'; color = '#059669'; bg = '#ecfdf5'; break;
-      case 'desligamento': label = 'Desligamento'; color = '#dc2626'; bg = '#fef2f2'; break;
-      case 'adiantamento': label = 'Adiantamento'; color = '#d97706'; bg = '#fffbeb'; break;
-      case 'advertencia': label = 'Advertência'; color = '#f59e0b'; bg = '#fffbeb'; break;
-      case 'suspensao': label = 'Suspensão'; color = '#ea580c'; bg = '#fff7ed'; break;
-      case 'promocao': label = 'Promoção'; color = '#2563eb'; bg = '#eff6ff'; break;
-      case 'atestado': label = 'Atestado'; color = '#db2777'; bg = '#fdf2f8'; break;
+      case 'ferias': label = 'Férias'; color = '#10b981'; bg = '#10b98115'; break;
+      case 'desligamento': label = 'Desligamento'; color = '#ef4444'; bg = '#ef444415'; break;
+      case 'adiantamento': label = 'Adiantamento'; color = '#f59e0b'; bg = '#f59e0b15'; break;
+      case 'advertencia': label = 'Advertência'; color = '#f59e0b'; bg = '#f59e0b15'; break;
+      case 'suspensao': label = 'Suspensão'; color = '#ea580c'; bg = '#ea580c15'; break;
+      case 'promocao': label = 'Promoção'; color = '#3b82f6'; bg = '#3b82f615'; break;
+      case 'atestado': label = 'Atestado'; color = '#db2777'; bg = '#db277715'; break;
       default: label = type;
     }
-    return <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>{label}</span>;
+    return <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: `1px solid ${color}30` }}>{label}</span>;
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...global.container, maxWidth: '1000px', margin: '0 auto' }}>
       
-      <div style={styles.header}>
-        <div style={styles.iconHeader}><FileCheck size={28} color="white"/></div>
+      <div style={global.header}>
+        <div style={{...global.iconHeader, background: '#db2777'}}><FileCheck size={28} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Departamento de RH</h1>
-          <p style={styles.subtitle}>Gerencie advertências, atestados e avalie solicitações.</p>
+          <h1 style={global.title}>Departamento de RH</h1>
+          <p style={global.subtitle}>Gerencie advertências, atestados e avalie solicitações.</p>
         </div>
       </div>
 
-      <div style={styles.tabsContainer}>
-        <button onClick={() => setActiveTab('nova')} style={activeTab === 'nova' ? styles.tabActive : styles.tab}>
+      <div style={local.tabsContainer}>
+        <button onClick={() => setActiveTab('nova')} style={activeTab === 'nova' ? local.tabActive : local.tab}>
           <FileText size={16} /> Nova Solicitação
         </button>
-        <button onClick={() => setActiveTab('aprovacoes')} style={activeTab === 'aprovacoes' ? styles.tabActive : styles.tab}>
+        <button onClick={() => setActiveTab('aprovacoes')} style={activeTab === 'aprovacoes' ? local.tabActive : local.tab}>
           <ShieldAlert size={16} /> Central de Aprovações
         </button>
-        <button onClick={() => setActiveTab('historico')} style={activeTab === 'historico' ? styles.tabActive : styles.tab}>
+        <button onClick={() => setActiveTab('historico')} style={activeTab === 'historico' ? local.tabActive : local.tab}>
           <History size={16} /> Meu Histórico
         </button>
       </div>
 
-      <div style={styles.content}>
+      <div style={global.card}>
         
         {/* ========================================== */}
         {/* ABA 1: NOVA SOLICITAÇÃO                    */}
         {/* ========================================== */}
         {activeTab === 'nova' && (
           <div style={{animation: 'fadeIn 0.4s'}}>
-            <div style={styles.rhNoticeBox}>
+            <div style={local.rhNoticeBox}>
               <div style={{display: 'flex', gap: '15px'}}>
-                <div style={{background: '#dbeafe', padding: '10px', borderRadius: '50%', height: 'fit-content'}}>
-                  <Mail size={24} color="#1e40af" />
+                <div style={{background: 'var(--bg-app)', padding: '10px', borderRadius: '50%', height: 'fit-content'}}>
+                  <Mail size={24} color="var(--text-brand)" />
                 </div>
                 <div>
-                  <h3 style={{fontWeight: 'bold', color: '#1e3a8a', marginBottom: '10px', fontSize: '15px'}}>Informação ao Gestor</h3>
-                  <ul style={{fontSize: '13px', color: '#1e3a8a', lineHeight: '1.6', paddingLeft: '20px', margin: 0}}>
+                  <h3 style={{fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '10px', fontSize: '15px'}}>Informação ao Gestor</h3>
+                  <ul style={{fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.6', paddingLeft: '20px', margin: 0}}>
                     <li>O documento PDF será gerado automaticamente.</li>
                     <li>A solicitação entrará como <strong>Pendente</strong> para avaliação da Coordenação.</li>
                   </ul>
@@ -392,47 +391,47 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
             </div>
             
             {isCoordinator && (
-              <div style={{marginBottom: '25px', padding: '15px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
-                 <label style={styles.label}>Quem será o alvo da solicitação?</label>
+              <div style={{marginBottom: '25px', padding: '15px', background: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border)'}}>
+                 <label style={global.label}>Quem será o alvo da solicitação?</label>
                  <div style={{display:'flex', gap:'20px', marginTop:'10px'}}>
-                    <label style={styles.radioLabel}><input type="radio" checked={targetType === 'atendente'} onChange={() => setTargetType('atendente')} /><Users size={16} /> Atendente</label>
-                    <label style={styles.radioLabel}><input type="radio" checked={targetType === 'supervisor'} onChange={() => setTargetType('supervisor')} /><Shield size={16} /> Supervisor</label>
+                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'atendente'} onChange={() => setTargetType('atendente')} /><Users size={16} /> Atendente</label>
+                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'supervisor'} onChange={() => setTargetType('supervisor')} /><Shield size={16} /> Supervisor</label>
                  </div>
               </div>
             )}
             
-            <div style={styles.typeGrid}>
+            <div style={local.typeGrid}>
               {Object.entries(REQUEST_TYPES).map(([key, data]) => (
-                <button key={key} onClick={() => setRequestType(key)} style={{...styles.typeCard, borderColor: requestType === key ? data.color : 'transparent', backgroundColor: requestType === key ? data.bg : '#f8fafc'}}>
+                <button key={key} onClick={() => setRequestType(key)} style={{...local.typeCard, borderColor: requestType === key ? data.color : 'transparent', backgroundColor: requestType === key ? data.bg : 'var(--bg-app)'}}>
                   <data.icon size={24} color={data.color} style={{marginBottom: '10px'}} />
-                  <span style={{fontWeight: 'bold', color: '#334155'}}>{data.label}</span>
+                  <span style={{fontWeight: 'bold', color: 'var(--text-main)'}}>{data.label}</span>
                 </button>
               ))}
             </div>
 
-            <form onSubmit={handleCreateRequest} style={styles.formGrid}>
-              <div style={styles.row}>
+            <form onSubmit={handleCreateRequest} style={global.form}>
+              <div style={global.row}>
                 {targetType === 'atendente' ? (
                    <>
-                     <div style={styles.field}>
-                       <label style={styles.label}>Loja</label>
-                       <select style={styles.input} value={form.storeId} onChange={handleStoreChange} required>
+                     <div style={global.field}>
+                       <label style={global.label}>Loja</label>
+                       <select style={global.select} value={form.storeId} onChange={handleStoreChange} required>
                          <option value="">Selecione...</option>
                          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                        </select>
                      </div>
-                     <div style={styles.field}>
-                       <label style={styles.label}>Colaborador</label>
-                       <select style={styles.input} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required disabled={!form.storeId}>
+                     <div style={global.field}>
+                       <label style={global.label}>Colaborador</label>
+                       <select style={global.select} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required disabled={!form.storeId}>
                          <option value="">Selecione...</option>
                          {attendants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                        </select>
                      </div>
                    </>
                 ) : (
-                   <div style={{...styles.field, gridColumn: '1 / -1'}}>
-                      <label style={styles.label}>Selecione o Supervisor</label>
-                      <select style={styles.input} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required>
+                   <div style={{...global.field, gridColumn: '1 / -1'}}>
+                      <label style={global.label}>Selecione o Supervisor</label>
+                      <select style={global.select} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required>
                          <option value="">Selecione...</option>
                          {supervisors.map(s => <option key={s.id} value={s.id}>{s.name} ({s.clusterId})</option>)}
                       </select>
@@ -441,21 +440,21 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
               </div>
 
               {requestType === 'atestado' ? (
-                <div style={styles.row}>
-                  <div style={styles.field}><label style={styles.label}>Data Início</label><input type="date" style={styles.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required /></div>
-                  <div style={styles.field}><label style={styles.label}>Dias</label><input type="number" style={styles.input} placeholder="Ex: 3" value={form.atestadoDays} onChange={e => setForm({...form, atestadoDays: e.target.value})} required /></div>
+                <div style={global.row}>
+                  <div style={global.field}><label style={global.label}>Data Início</label><input type="date" style={global.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required /></div>
+                  <div style={global.field}><label style={global.label}>Dias</label><input type="number" style={global.input} placeholder="Ex: 3" value={form.atestadoDays} onChange={e => setForm({...form, atestadoDays: e.target.value})} required /></div>
                 </div>
               ) : (
-                <div style={styles.field}>
-                  <label style={styles.label}>Data do Fato / Sugerida</label>
-                  <input type="date" style={styles.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required />
+                <div style={global.field}>
+                  <label style={global.label}>Data do Fato / Sugerida</label>
+                  <input type="date" style={global.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required />
                 </div>
               )}
 
               {(requestType === 'advertencia' || requestType === 'suspensao') && (
-                <div style={styles.field}>
-                  <label style={styles.label}>Motivo Principal</label>
-                  <select style={styles.input} value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} required>
+                <div style={global.field}>
+                  <label style={global.label}>Motivo Principal</label>
+                  <select style={global.select} value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} required>
                     <option value="">Selecione...</option>
                     <option value="Insubordinação">Insubordinação</option>
                     <option value="Faltas">Faltas/Atrasos</option>
@@ -465,21 +464,21 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
                 </div>
               )}
 
-              <div style={styles.field}>
-                <label style={styles.label}>Descrição Detalhada</label>
-                <textarea style={{...styles.input, height: '120px'}} placeholder="Descreva o ocorrido..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
+              <div style={global.field}>
+                <label style={global.label}>Descrição Detalhada</label>
+                <textarea style={global.textarea} placeholder="Descreva o ocorrido..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
               </div>
 
-              <div style={styles.field}>
-                <label style={styles.label}>Anexar Arquivo</label>
-                <label htmlFor="file-upload" style={styles.uploadBox}>
+              <div style={global.field}>
+                <label style={global.label}>Anexar Arquivo</label>
+                <label htmlFor="file-upload" style={{border: '2px dashed var(--border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--bg-app)', gap: '10px'}}>
                    <input id="file-upload" type="file" style={{display: 'none'}} onChange={handleFileChange} />
-                   <Paperclip size={24} color="#94a3b8" />
-                   <span style={{fontSize: '13px', color: '#64748b', marginTop: '5px'}}>{fileName ? `Arquivo: ${fileName}` : "Clique para anexar"}</span>
+                   <Paperclip size={24} color="var(--text-muted)" />
+                   <span style={{fontSize: '13px', color: 'var(--text-muted)', marginTop: '5px'}}>{fileName ? `Arquivo: ${fileName}` : "Clique para anexar"}</span>
                 </label>
               </div>
 
-              <button type="submit" style={{...styles.btnSubmit, backgroundColor: currentType.color}} disabled={loading}>
+              <button type="submit" style={{...global.btnPrimary, backgroundColor: currentType.color}} disabled={loading}>
                 {loading ? 'Processando...' : `Enviar e Gerar PDF`}
               </button>
             </form>
@@ -491,14 +490,14 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
         {/* ========================================== */}
         {activeTab === 'aprovacoes' && (
           <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-            <div style={styles.toolbar}>
-              <div style={styles.searchBox}>
-                <Search size={18} color="#94a3b8" />
-                <input type="text" placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
+            <div style={local.toolbar}>
+              <div style={global.searchBox}>
+                <Search size={18} color="var(--text-muted)" />
+                <input type="text" placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={global.searchInput} />
               </div>
-              <div style={styles.filterGroup}>
+              <div style={local.filterGroup}>
                 {['Pendente', 'Aprovado', 'Rejeitado', 'Todos'].map(status => (
-                  <button key={status} onClick={() => setFilterStatus(status)} style={filterStatus === status ? styles.filterBtnActive : styles.filterBtn}>{status}</button>
+                  <button key={status} onClick={() => setFilterStatus(status)} style={filterStatus === status ? local.filterBtnActive : local.filterBtn}>{status}</button>
                 ))}
               </div>
             </div>
@@ -506,28 +505,28 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
             <div style={{ display: 'grid', gridTemplateColumns: selectedApproval ? '1fr 400px' : '1fr', gap: '25px', transition: 'all 0.3s' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {loading ? (
-                  <div style={styles.emptyState}>Carregando solicitações...</div>
+                  <div style={local.emptyState}>Carregando solicitações...</div>
                 ) : filteredApprovals.length === 0 ? (
-                  <div style={styles.emptyState}>
-                    <ShieldAlert size={40} style={{ margin: '0 auto 15px auto', color: '#cbd5e1' }} />
+                  <div style={local.emptyState}>
+                    <ShieldAlert size={40} style={{ margin: '0 auto 15px auto', color: 'var(--border)' }} />
                     Nenhuma solicitação {filterStatus !== 'Todos' ? filterStatus.toLowerCase() : ''} encontrada.
                   </div>
                 ) : (
                   filteredApprovals.map(req => (
-                    <div key={req.id} onClick={() => setSelectedApproval(req)} style={{...styles.requestCard, borderColor: selectedApproval?.id === req.id ? '#2563eb' : '#e2e8f0', boxShadow: selectedApproval?.id === req.id ? '0 4px 15px rgba(37,99,235,0.1)' : '0 2px 4px rgba(0,0,0,0.02)'}}>
+                    <div key={req.id} onClick={() => setSelectedApproval(req)} style={{...local.requestCard, borderColor: selectedApproval?.id === req.id ? 'var(--text-brand)' : 'transparent', boxShadow: selectedApproval?.id === req.id ? 'var(--shadow-sm)' : 'none', border: '1px solid var(--border)'}}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           {getTypeBadge(req.type)}
                           {getStatusBadge(req.status || 'Pendente')}
                         </div>
-                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>
                           {new Date(req.createdAt?.toDate() || Date.now()).toLocaleDateString('pt-BR')}
                         </span>
                       </div>
-                      <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1e293b', margin: '0 0 5px 0' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 5px 0' }}>
                         {req.targetName || req.attendantName || 'Indefinido'}
                       </h3>
-                      <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: '#64748b', marginTop: '10px' }}>
+                      <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={14}/> {req.storeName || req.storeId}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><User size={14}/> {req.supervisorName || 'Gestor'}</span>
                       </div>
@@ -538,43 +537,43 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 
               {/* PAINEL DE DETALHES (Aprovações) */}
               {selectedApproval && (
-                <div style={styles.detailsPanel}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#0f172a', margin: 0 }}>Detalhes da Solicitação</h3>
-                    <button onClick={() => setSelectedApproval(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><XCircle size={20}/></button>
+                <div style={local.detailsPanel}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>Detalhes da Solicitação</h3>
+                    <button onClick={() => setSelectedApproval(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><XCircle size={20}/></button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
+                    <div style={{ background: 'var(--bg-app)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
-                        <div style={{ width: '40px', height: '40px', background: '#2563eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                        <div style={{ width: '40px', height: '40px', background: 'var(--text-brand)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                           {(selectedApproval.targetName || selectedApproval.attendantName || 'U')[0]}
                         </div>
                         <div>
-                          <h4 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>{selectedApproval.targetName || selectedApproval.attendantName}</h4>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Unidade: {selectedApproval.storeName || selectedApproval.storeId}</p>
+                          <h4 style={{ margin: 0, fontSize: '16px', color: 'var(--text-main)' }}>{selectedApproval.targetName || selectedApproval.attendantName}</h4>
+                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Unidade: {selectedApproval.storeName || selectedApproval.storeId}</p>
                         </div>
                       </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                      <div><label style={styles.detailLabel}>Status</label><div>{getStatusBadge(selectedApproval.status || 'Pendente')}</div></div>
-                      <div><label style={styles.detailLabel}>Data Informada</label><p style={styles.detailValue}>{selectedApproval.dateEvent || selectedApproval.startDate ? new Date(selectedApproval.dateEvent || selectedApproval.startDate).toLocaleDateString() : 'N/A'}</p></div>
+                      <div><label style={local.detailLabel}>Status</label><div>{getStatusBadge(selectedApproval.status || 'Pendente')}</div></div>
+                      <div><label style={local.detailLabel}>Data Informada</label><p style={local.detailValue}>{selectedApproval.dateEvent || selectedApproval.startDate ? new Date(selectedApproval.dateEvent || selectedApproval.startDate).toLocaleDateString() : 'N/A'}</p></div>
                     </div>
                     <div>
-                      <label style={styles.detailLabel}><AlignLeft size={14} /> Justificativa / Descrição</label>
-                      <div style={styles.observationBox}>{selectedApproval.reason || selectedApproval.description || 'Sem descrição.'}</div>
+                      <label style={local.detailLabel}><AlignLeft size={14} /> Justificativa / Descrição</label>
+                      <div style={local.observationBox}>{selectedApproval.reason || selectedApproval.description || 'Sem descrição.'}</div>
                     </div>
                     {selectedApproval.supervisorReason && (
                       <div>
-                        <label style={styles.detailLabel}>Parecer Final</label>
-                        <div style={{...styles.observationBox, background: selectedApproval.status === 'Rejeitado' ? '#fef2f2' : '#ecfdf5', borderColor: selectedApproval.status === 'Rejeitado' ? '#fecaca' : '#a7f3d0' }}>
+                        <label style={local.detailLabel}>Parecer Final</label>
+                        <div style={{...local.observationBox, borderColor: selectedApproval.status === 'Rejeitado' ? '#ef444450' : '#10b98150' }}>
                           {selectedApproval.supervisorReason}
                         </div>
                       </div>
                     )}
                     {(selectedApproval.status === 'Pendente' || !selectedApproval.status) && (
-                      <div style={{ display: 'flex', gap: '15px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={styles.btnReject}><XCircle size={18}/> Rejeitar</button>
-                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={styles.btnApprove}><CheckCircle2 size={18}/> Aprovar</button>
+                      <div style={{ display: 'flex', gap: '15px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={{...global.btnPrimary, background: '#ef4444', flex: 1}}><XCircle size={18}/> Rejeitar</button>
+                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={{...global.btnPrimary, background: '#10b981', flex: 1}}><CheckCircle2 size={18}/> Aprovar</button>
                       </div>
                     )}
                   </div>
@@ -589,29 +588,29 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
         {/* ========================================== */}
         {activeTab === 'historico' && (
           <div style={{animation: 'fadeIn 0.4s'}}>
-            <div style={styles.tableCard}>
-              <table style={styles.table}>
+            <div style={local.tableCard}>
+              <table style={local.table}>
                 <thead>
-                  <tr style={styles.tableHeaderRow}>
-                    <th style={styles.th}>Data Envio</th>
-                    <th style={styles.th}>Tipo</th>
-                    <th style={styles.th}>Alvo</th>
-                    <th style={styles.th}>Status</th>
+                  <tr style={local.tableHeaderRow}>
+                    <th style={local.th}>Data Envio</th>
+                    <th style={local.th}>Tipo</th>
+                    <th style={local.th}>Alvo</th>
+                    <th style={local.th}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historyList.map(item => {
                     const typeConfig = REQUEST_TYPES[item.type] || REQUEST_TYPES.advertencia;
                     return (
-                      <tr key={item.id} style={styles.tableRow}>
-                        <td style={styles.td}>{item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'Hoje'}</td>
-                        <td style={styles.td}><span style={{...styles.typeBadge, color: typeConfig.color, background: typeConfig.bg}}>{typeConfig.label}</span></td>
-                        <td style={styles.td}><strong>{item.targetName || item.attendantName}</strong><br/><span style={{fontSize: '10px', color: '#94a3b8'}}>{item.storeName}</span></td>
-                        <td style={styles.td}>{getStatusBadge(item.status)}</td>
+                      <tr key={item.id} style={local.tableRow}>
+                        <td style={local.td}>{item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'Hoje'}</td>
+                        <td style={local.td}><span style={{...local.typeBadge, color: typeConfig.color, background: typeConfig.bg}}>{typeConfig.label}</span></td>
+                        <td style={local.td}><strong>{item.targetName || item.attendantName}</strong><br/><span style={{fontSize: '10px', color: 'var(--text-muted)'}}>{item.storeName}</span></td>
+                        <td style={local.td}>{getStatusBadge(item.status)}</td>
                       </tr>
                     )
                   })}
-                  {historyList.length === 0 && <tr><td colSpan="4" style={styles.emptyState}>Nenhum histórico encontrado.</td></tr>}
+                  {historyList.length === 0 && <tr><td colSpan="4" style={local.emptyState}>Nenhum histórico encontrado.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -622,22 +621,26 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 
       {/* MODAL DE AÇÃO (Aprovação / Rejeição) */}
       {actionModal.isOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-              {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} color="#059669" /> : <ShieldAlert size={24} color="#dc2626" />}
-              <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', margin: 0 }}>
-                {actionModal.type === 'aprovar' ? 'Confirmar Aprovação' : 'Rejeitar Solicitação'}
-              </h3>
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} color="#10b981" /> : <ShieldAlert size={24} color="#ef4444" />}
+                <h3 style={global.modalTitle}>
+                  {actionModal.type === 'aprovar' ? 'Confirmar Aprovação' : 'Rejeitar Solicitação'}
+                </h3>
+              </div>
             </div>
-            <p style={{ fontSize: '14px', color: '#475569', marginBottom: '20px', lineHeight: '1.5' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
               Você está prestes a <strong>{actionModal.type}</strong> a solicitação referente a <strong>{actionModal.request.targetName || actionModal.request.attendantName}</strong>.
             </p>
-            <label style={styles.detailLabel}>{actionModal.type === 'aprovar' ? 'Observação Opcional' : 'Motivo da Rejeição (Obrigatório)'}</label>
-            <textarea value={actionModal.reason} onChange={(e) => setActionModal({...actionModal, reason: e.target.value})} placeholder="..." style={styles.modalTextarea} autoFocus />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '25px' }}>
-              <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} disabled={isProcessing} style={styles.btnCancel}>Cancelar</button>
-              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={actionModal.type === 'aprovar' ? styles.btnApproveModal : styles.btnRejectModal}>
+            <div style={global.field}>
+              <label style={global.label}>{actionModal.type === 'aprovar' ? 'Observação Opcional' : 'Motivo da Rejeição (Obrigatório)'}</label>
+              <textarea value={actionModal.reason} onChange={(e) => setActionModal({...actionModal, reason: e.target.value})} placeholder="..." style={global.textarea} autoFocus />
+            </div>
+            <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
+              <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} disabled={isProcessing} style={{...global.btnSecondary, flex: 1}}>Cancelar</button>
+              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={{...global.btnPrimary, flex: 2, background: actionModal.type === 'aprovar' ? '#10b981' : '#ef4444'}}>
                 {isProcessing ? 'Processando...' : 'Confirmar'} <Send size={16}/>
               </button>
             </div>
@@ -649,69 +652,40 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
   );
 }
 
-// --- ESTILOS INLINE PREMIUM ---
-const styles = {
-  container: { padding: '40px', maxWidth: '1000px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' },
-  iconHeader: { width: '56px', height: '56px', borderRadius: '16px', background: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(219, 39, 119, 0.2)' },
-  title: { fontSize: '28px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '15px', color: '#64748b', margin: '5px 0 0 0' },
-  
-  tabsContainer: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '1px', overflowX: 'auto' },
-  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent' },
+// --- ESTILOS LOCAIS ---
+const local = {
+  tabsContainer: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', overflowX: 'auto', scrollbarWidth: 'none' },
+  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent' },
   tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#db2777', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid #db2777' },
   
-  content: { background: 'white', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', minHeight: '500px' },
-  
-  rhNoticeBox: { background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '20px', marginBottom: '30px' },
+  rhNoticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', marginBottom: '30px' },
   typeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '30px' },
   typeCard: { padding: '15px 10px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: '0.2s', fontSize:'12px', textAlign:'center', gap: '8px' },
   
-  formGrid: { display: 'flex', flexDirection: 'column', gap: '20px' },
-  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
-  field: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  label: { fontSize: '13px', fontWeight: '700', color: '#475569' },
-  input: { padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', color: '#1e293b', width: '100%', boxSizing: 'border-box', background: '#f8fafc' },
-  uploadBox: { border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f8fafc', gap: '10px' },
-  btnSubmit: { padding: '16px', borderRadius: '14px', color: 'white', border: 'none', fontWeight: '800', cursor: 'pointer', fontSize: '16px', marginTop: '10px', width: '100%', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' },
-  
-  radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#334155' },
+  radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-main)' },
 
   // APROVAÇÕES E HISTÓRICO
-  toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', marginBottom: '30px', flexWrap: 'wrap', background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px solid #f1f5f9' },
-  searchBox: { display: 'flex', alignItems: 'center', gap: '10px', background: 'white', padding: '10px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', flex: 1, minWidth: '250px' },
-  searchInput: { border: 'none', background: 'transparent', outline: 'none', fontSize: '14px', color: '#1e293b', width: '100%' },
-  filterGroup: { display: 'flex', gap: '10px', overflowX: 'auto' },
-  filterBtn: { padding: '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
-  filterBtnActive: { padding: '8px 16px', borderRadius: '10px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '13px', fontWeight: '800', cursor: 'pointer' },
+  toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', marginBottom: '30px', flexWrap: 'wrap', background: 'var(--bg-panel)', padding: '15px', borderRadius: '16px', border: '1px solid var(--border)' },
+  filterGroup: { display: 'flex', gap: '10px', overflowX: 'auto', scrollbarWidth: 'none' },
+  filterBtn: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
+  filterBtnActive: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--text-brand)', background: 'var(--bg-primary-light)', color: 'var(--text-brand)', fontSize: '13px', fontWeight: '800', cursor: 'pointer' },
   
-  requestCard: { background: 'white', padding: '20px', borderRadius: '20px', border: '2px solid transparent', cursor: 'pointer', transition: 'all 0.2s' },
-  detailsPanel: { background: 'white', padding: '30px', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'sticky', top: '20px', alignSelf: 'start' },
-  detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' },
-  detailValue: { fontSize: '15px', fontWeight: '600', color: '#1e293b', margin: 0 },
-  observationBox: { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '15px', borderRadius: '12px', fontSize: '13px', color: '#475569', lineHeight: '1.5', whiteSpace: 'pre-wrap' },
+  requestCard: { background: 'var(--bg-card)', padding: '20px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' },
+  detailsPanel: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', position: 'sticky', top: '20px', alignSelf: 'start' },
+  detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' },
+  detailValue: { fontSize: '15px', fontWeight: '600', color: 'var(--text-main)', margin: 0 },
+  observationBox: { background: 'var(--bg-app)', border: '1px solid var(--border)', padding: '15px', borderRadius: '12px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', whiteSpace: 'pre-wrap' },
   
-  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' },
-  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#fef2f2', color: '#dc2626', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' },
-  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#fffbeb', color: '#d97706', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' },
+  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#10b98115', color: '#10b981', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #10b98130' },
+  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ef444415', color: '#ef4444', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #ef444430' },
+  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#f59e0b15', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #f59e0b30' },
 
-  btnApprove: { flex: 1, background: '#10b981', color: 'white', border: 'none', padding: '14px', borderRadius: '14px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-  btnReject: { flex: 1, background: '#fff1f2', color: '#e11d48', border: '1px solid #ffe4e6', padding: '14px', borderRadius: '14px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-
-  tableCard: { overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0' },
+  tableCard: { overflow: 'hidden', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-card)' },
   table: { width: '100%', borderCollapse: 'collapse' },
-  tableHeaderRow: { background: '#f8fafc', borderBottom: '1px solid #e2e8f0' },
-  th: { padding: '15px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' },
-  tableRow: { borderBottom: '1px solid #f1f5f9' },
-  td: { padding: '15px', fontSize: '14px', color: '#334155' },
+  tableHeaderRow: { background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' },
+  th: { padding: '15px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' },
+  tableRow: { borderBottom: '1px solid var(--border)' },
+  td: { padding: '15px', fontSize: '14px', color: 'var(--text-main)' },
   typeBadge: { padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
-  emptyState: { padding: '60px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' },
-
-  // MODAL DE AÇÃO
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalContent: { background: 'white', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', animation: 'slideUp 0.3s' },
-  modalTextarea: { width: '100%', minHeight: '120px', padding: '15px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '14px', color: '#334155', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' },
-  btnCancel: { background: 'white', color: '#64748b', border: '1px solid #cbd5e1', padding: '12px 20px', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' },
-  btnApproveModal: { background: '#10b981', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-  btnRejectModal: { background: '#ef4444', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }
+  emptyState: { padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }
 };

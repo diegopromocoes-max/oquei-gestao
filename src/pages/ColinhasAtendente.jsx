@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
   collection, addDoc, query, getDocs, 
-  serverTimestamp, deleteDoc, doc, updateDoc 
+  serverTimestamp, deleteDoc, doc
 } from 'firebase/firestore';
 import { 
-  BookMarked, Plus, Search, Copy, Share2, 
-  User, Users, Trash2, Edit, X, Check, 
-  MessageSquare, ShieldCheck, Zap, Filter
+  BookMarked, Plus, Search, Copy, 
+  Users, Trash2, X, Zap
 } from 'lucide-react';
+
+// IMPORTAÇÃO DOS ESTILOS GLOBAIS
+import { styles as global } from '../styles/globalStyles';
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'oquei-gestao';
 
@@ -106,36 +108,39 @@ export default function ColinhasAtendente({ userData }) {
   }, [colinhas, searchTerm, activeTab, activeCategory]);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.headerInfo}>
-          <div style={styles.iconCircle}><BookMarked size={28} color="white"/></div>
+    <div style={global.container}>
+      
+      {/* HEADER GLOBAL */}
+      <div style={global.header}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
+          <div style={global.iconHeader}><BookMarked size={28} color="white"/></div>
           <div>
-            <h1 style={styles.title}>Minhas Colinhas</h1>
-            <p style={styles.subtitle}>Scripts de vendas e lembretes rápidos para o dia a dia.</p>
+            <h1 style={global.title}>Minhas Colinhas</h1>
+            <p style={global.subtitle}>Scripts de vendas e lembretes rápidos para o dia a dia.</p>
           </div>
         </div>
-        <button onClick={() => setShowModal(true)} style={styles.btnAdd}>
+        <button onClick={() => setShowModal(true)} style={{...global.btnPrimary, marginLeft: 'auto'}}>
           <Plus size={20} /> Nova Colinha
         </button>
       </div>
 
-      <div style={styles.toolbar}>
-        <div style={styles.searchBox}>
-          <Search size={18} color="#94a3b8" />
+      {/* TOOLBAR */}
+      <div style={global.toolbar}>
+        <div style={global.searchBox}>
+          <Search size={18} color="var(--text-muted)" />
           <input 
-            style={styles.searchInput} 
+            style={global.searchInput} 
             placeholder="Pesquisar por título ou conteúdo..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <div style={styles.categoryBar}>
+        <div style={local.categoryBar}>
           {categories.map(cat => (
             <button 
               key={cat} 
               onClick={() => setActiveCategory(cat)}
-              style={activeCategory === cat ? styles.catBtnActive : styles.catBtn}
+              style={activeCategory === cat ? local.catBtnActive : local.catBtn}
             >
               {cat}
             </button>
@@ -143,66 +148,72 @@ export default function ColinhasAtendente({ userData }) {
         </div>
       </div>
 
-      <div style={styles.tabBar}>
-        <button onClick={() => setActiveTab('all')} style={activeTab === 'all' ? styles.tabActive : styles.tab}>Tudo</button>
-        <button onClick={() => setActiveTab('mine')} style={activeTab === 'mine' ? styles.tabActive : styles.tab}>Criadas por mim</button>
-        <button onClick={() => setActiveTab('shared')} style={activeTab === 'shared' ? styles.tabActive : styles.tab}>Compartilhadas pela equipe</button>
+      {/* TABS DE NAVEGAÇÃO */}
+      <div style={local.tabBar}>
+        <button onClick={() => setActiveTab('all')} style={activeTab === 'all' ? local.tabActive : local.tab}>Tudo</button>
+        <button onClick={() => setActiveTab('mine')} style={activeTab === 'mine' ? local.tabActive : local.tab}>Criadas por mim</button>
+        <button onClick={() => setActiveTab('shared')} style={activeTab === 'shared' ? local.tabActive : local.tab}>Compartilhadas pela equipa</button>
       </div>
 
+      {/* CONTEÚDO */}
       {loading ? (
-        <div style={styles.loading}>Carregando banco de conhecimentos...</div>
+        <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          A carregar banco de conhecimentos...
+        </div>
       ) : (
-        <div style={styles.grid}>
+        <div style={global.gridCards}>
           {filteredColinhas.map(item => (
-            <div key={item.id} style={styles.card}>
-              <div style={styles.cardHeader}>
-                <span style={{...styles.badge, backgroundColor: getCategoryColor(item.category) + '15', color: getCategoryColor(item.category)}}>
+            <div key={item.id} style={{...global.card, display: 'flex', flexDirection: 'column', padding: '24px'}}>
+              <div style={local.cardHeader}>
+                <span style={{...global.badge, backgroundColor: getCategoryColor(item.category) + '15', color: getCategoryColor(item.category)}}>
                   {item.category}
                 </span>
-                <div style={styles.cardActions}>
-                  <button onClick={() => copyToClipboard(item.content)} style={styles.iconBtn} title="Copiar Texto"><Copy size={16}/></button>
+                <div style={local.cardActions}>
+                  <button onClick={() => copyToClipboard(item.content)} style={global.iconBtn} title="Copiar Texto"><Copy size={16}/></button>
                   {item.authorId === auth.currentUser?.uid && (
-                    <button onClick={() => handleDelete(item.id)} style={{...styles.iconBtn, color: '#ef4444'}} title="Excluir"><Trash2 size={16}/></button>
+                    <button onClick={() => handleDelete(item.id)} style={{...global.iconBtn, color: '#ef4444'}} title="Excluir"><Trash2 size={16}/></button>
                   )}
                 </div>
               </div>
               
-              <h3 style={styles.cardTitle}>{item.title}</h3>
-              <p style={styles.cardContent}>{item.content}</p>
+              <h3 style={local.cardTitle}>{item.title}</h3>
+              <p style={local.cardContent}>{item.content}</p>
               
-              <div style={styles.cardFooter}>
-                <div style={styles.authorInfo}>
-                  <div style={styles.miniAvatar}>{item.authorName?.charAt(0)}</div>
-                  <span style={styles.authorName}>{item.authorId === auth.currentUser?.uid ? 'Você' : item.authorName}</span>
+              <div style={local.cardFooter}>
+                <div style={local.authorInfo}>
+                  <div style={local.miniAvatar}>{item.authorName?.charAt(0)}</div>
+                  <span style={local.authorName}>{item.authorId === auth.currentUser?.uid ? 'Você' : item.authorName}</span>
                 </div>
-                {item.isShared && <div style={styles.sharedBadge}><Users size={12}/> Público</div>}
+                {item.isShared && <div style={local.sharedBadge}><Users size={12}/> Público</div>}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* EMPTY STATE GERAL */}
       {filteredColinhas.length === 0 && !loading && (
-        <div style={styles.emptyState}>
-          <Zap size={48} color="#e2e8f0" style={{marginBottom:'15px'}} />
-          <h3>Nenhuma colinha encontrada</h3>
-          <p>Crie sua primeira dica rápida no botão acima.</p>
+        <div style={global.emptyState}>
+          <Zap size={48} color="var(--border)" style={{marginBottom:'15px'}} />
+          <h3 style={{color: 'var(--text-main)', margin: '0 0 10px 0'}}>Nenhuma colinha encontrada</h3>
+          <p style={{margin: 0}}>Crie a sua primeira dica rápida no botão acima.</p>
         </div>
       )}
 
+      {/* MODAL DE CRIAÇÃO */}
       {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Nova Colinha</h3>
-              <button onClick={() => setShowModal(false)} style={styles.closeBtn}><X size={24}/></button>
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <h3 style={global.modalTitle}>Nova Colinha</h3>
+              <button onClick={() => setShowModal(false)} style={global.closeBtn}><X size={24}/></button>
             </div>
             
-            <form onSubmit={handleSave} style={styles.form}>
-              <div style={styles.field}>
-                <label style={styles.label}>Título Curto</label>
+            <form onSubmit={handleSave} style={global.form}>
+              <div style={global.field}>
+                <label style={global.label}>Título Curto</label>
                 <input 
-                  style={styles.input} 
+                  style={global.input} 
                   placeholder="Ex: Script de Boas-vindas" 
                   value={form.title}
                   onChange={e => setForm({...form, title: e.target.value})}
@@ -210,10 +221,10 @@ export default function ColinhasAtendente({ userData }) {
                 />
               </div>
 
-              <div style={styles.field}>
-                <label style={styles.label}>Categoria</label>
+              <div style={global.field}>
+                <label style={global.label}>Categoria</label>
                 <select 
-                  style={styles.select} 
+                  style={global.select} 
                   value={form.category}
                   onChange={e => setForm({...form, category: e.target.value})}
                 >
@@ -221,33 +232,35 @@ export default function ColinhasAtendente({ userData }) {
                 </select>
               </div>
 
-              <div style={styles.field}>
-                <label style={styles.label}>Conteúdo da Colinha</label>
+              <div style={global.field}>
+                <label style={global.label}>Conteúdo da Colinha</label>
                 <textarea 
-                  style={styles.textarea} 
-                  placeholder="Escreva aqui o texto que você costuma usar..." 
+                  style={global.textarea} 
+                  placeholder="Escreva aqui o texto que costuma usar..." 
                   value={form.content}
                   onChange={e => setForm({...form, content: e.target.value})}
                   required
                 />
               </div>
 
-              <div style={styles.shareToggle}>
-                <label style={styles.checkboxLabel}>
+              <div style={local.shareToggle}>
+                <label style={local.checkboxLabel}>
                   <input 
                     type="checkbox" 
                     checked={form.isShared}
                     onChange={e => setForm({...form, isShared: e.target.checked})}
-                    style={styles.checkbox}
+                    style={local.checkbox}
                   />
                   <div style={{display:'flex', flexDirection:'column'}}>
-                    <span style={{fontWeight:'bold', fontSize:'14px', color:'#1e293b'}}>Compartilhar com a equipe</span>
-                    <span style={{fontSize:'12px', color:'#64748b'}}>Outros atendentes poderão ver e usar esta colinha.</span>
+                    <span style={{fontWeight:'bold', fontSize:'14px', color:'var(--text-main)'}}>Compartilhar com a equipa</span>
+                    <span style={{fontSize:'12px', color:'var(--text-muted)'}}>Outros atendentes poderão ver e usar esta colinha.</span>
                   </div>
                 </label>
               </div>
 
-              <button type="submit" style={styles.btnSave}>Salvar Colinha</button>
+              <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: '10px'}}>
+                 <button type="submit" style={global.btnPrimary}>Salvar Colinha</button>
+              </div>
             </form>
           </div>
         </div>
@@ -256,66 +269,39 @@ export default function ColinhasAtendente({ userData }) {
   );
 }
 
+// Helpers
 const getCategoryColor = (cat) => {
   switch(cat) {
-    case 'Vendas': return '#2563eb';
-    case 'Objeções': return '#ea580c';
-    case 'Planos': return '#10b981';
-    case 'Procedimentos': return '#7c3aed';
-    default: return '#64748b';
+    case 'Vendas': return '#2563eb';    // Azul
+    case 'Objeções': return '#f59e0b';  // Laranja
+    case 'Planos': return '#10b981';    // Verde
+    case 'Procedimentos': return '#7c3aed'; // Roxo
+    default: return '#64748b';          // Slate
   }
 };
 
-const styles = {
-  container: { animation: 'fadeIn 0.5s ease-out' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '20px' },
-  headerInfo: { display: 'flex', alignItems: 'center', gap: '20px' },
-  iconCircle: { width: '56px', height: '56px', borderRadius: '16px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37,99,235,0.2)' },
-  title: { fontSize: '28px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '15px', color: '#64748b', margin: '5px 0 0 0' },
-  btnAdd: { background: '#1e293b', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: '0.2s' },
-
-  toolbar: { display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' },
-  searchBox: { display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '12px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box' },
-  searchInput: { border: 'none', background: 'transparent', outline: 'none', fontSize: '15px', width: '100%', color: '#1e293b' },
+// ESTILOS LOCAIS (Apenas o que é exclusivo desta página)
+const local = {
   categoryBar: { display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px' },
-  catBtn: { padding: '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
-  catBtnActive: { padding: '8px 16px', borderRadius: '10px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' },
+  catBtn: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
+  catBtnActive: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--text-brand)', background: 'var(--bg-primary-light)', color: 'var(--text-brand)', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' },
 
-  tabBar: { display: 'flex', gap: '25px', borderBottom: '1px solid #e2e8f0', marginBottom: '30px' },
-  tab: { padding: '12px 0', border: 'none', background: 'transparent', color: '#64748b', fontSize: '14px', fontWeight: '600', cursor: 'pointer', borderBottom: '3px solid transparent' },
-  tabActive: { padding: '12px 0', border: 'none', background: 'transparent', color: '#2563eb', fontSize: '14px', fontWeight: '800', cursor: 'pointer', borderBottom: '3px solid #2563eb' },
+  tabBar: { display: 'flex', gap: '25px', borderBottom: '1px solid var(--border)', marginBottom: '30px' },
+  tab: { padding: '12px 0', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: '14px', fontWeight: '600', cursor: 'pointer', borderBottom: '3px solid transparent' },
+  tabActive: { padding: '12px 0', border: 'none', background: 'transparent', color: 'var(--text-brand)', fontSize: '14px', fontWeight: '800', cursor: 'pointer', borderBottom: '3px solid var(--text-brand)' },
 
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  card: { background: 'white', borderRadius: '20px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', transition: 'transform 0.2s' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  badge: { padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' },
   cardActions: { display: 'flex', gap: '8px' },
-  iconBtn: { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px', borderRadius: '8px', cursor: 'pointer', color: '#64748b' },
-  cardTitle: { fontSize: '18px', fontWeight: '800', color: '#1e293b', margin: '0 0 10px 0' },
-  cardContent: { fontSize: '14px', color: '#475569', lineHeight: '1.6', margin: '0 0 20px 0', flex: 1, whiteSpace: 'pre-line' },
-  cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f1f5f9' },
+  cardTitle: { fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 10px 0' },
+  cardContent: { fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.6', margin: '0 0 20px 0', flex: 1, whiteSpace: 'pre-line' },
+  cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid var(--border)' },
+  
   authorInfo: { display: 'flex', alignItems: 'center', gap: '8px' },
-  miniAvatar: { width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold', color: '#64748b' },
-  authorName: { fontSize: '12px', color: '#64748b', fontWeight: '600' },
-  sharedBadge: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#2563eb', fontWeight: 'bold', background: '#eff6ff', padding: '2px 8px', borderRadius: '20px' },
+  miniAvatar: { width: '24px', height: '24px', borderRadius: '50%', background: 'var(--bg-panel)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold', color: 'var(--text-muted)' },
+  authorName: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' },
+  sharedBadge: { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-brand)', fontWeight: 'bold', background: 'var(--bg-primary-light)', padding: '2px 8px', borderRadius: '20px' },
 
-  emptyState: { textAlign: 'center', padding: '80px 20px', color: '#94a3b8' },
-  loading: { textAlign: 'center', padding: '50px', color: '#94a3b8', fontStyle: 'italic' },
-
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modalBox: { background: 'white', padding: '35px', borderRadius: '28px', width: '90%', maxWidth: '500px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-  modalTitle: { fontSize: '22px', fontWeight: '900', color: '#1e293b', margin: 0 },
-  closeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' },
-  form: { display: 'flex', flexDirection: 'column', gap: '20px' },
-  field: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  label: { fontSize: '13px', fontWeight: '800', color: '#475569' },
-  input: { padding: '14px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', color: '#1e293b' },
-  select: { padding: '14px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', color: '#1e293b', background: 'white' },
-  textarea: { padding: '14px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', color: '#1e293b', minHeight: '120px', resize: 'vertical', fontFamily: 'inherit' },
-  shareToggle: { padding: '15px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' },
+  shareToggle: { padding: '15px', background: 'var(--bg-panel)', borderRadius: '16px', border: '1px solid var(--border)' },
   checkboxLabel: { display: 'flex', gap: '12px', cursor: 'pointer' },
-  checkbox: { width: '18px', height: '18px', cursor: 'pointer', accentColor: '#2563eb' },
-  btnSave: { background: '#2563eb', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 8px 15px rgba(37,99,235,0.2)' }
+  checkbox: { width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--text-brand)' }
 };

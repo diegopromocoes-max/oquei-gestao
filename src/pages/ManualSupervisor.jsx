@@ -9,6 +9,8 @@ import {
   Edit, Plus, Save, Trash2, X, Layout, TrendingUp, RefreshCw
 } from 'lucide-react';
 
+import { styles as global } from '../styles/globalStyles';
+
 // --- MAPA DE ÍCONES ---
 const ICON_MAP = {
   BookOpen, Target, Eye, Heart, CheckCircle, Shield, Users, MessageCircle, 
@@ -17,7 +19,7 @@ const ICON_MAP = {
   Wallet, DollarSign, Layout, TrendingUp
 };
 
-// --- CONTEÚDO PADRÃO BASEADO NA NOVA DESCRIÇÃO DE CARGO (DC Rev. Iuri) ---
+// --- CONTEÚDO PADRÃO ---
 const DEFAULT_CONTENT = {
   identidade: {
     id: 'identidade',
@@ -290,7 +292,7 @@ export default function ManualSupervisor({ userData }) {
       id: id,
       title: newTabName,
       icon: "BookOpen",
-      color: "#64748b",
+      color: "#3b82f6", // Cor dinâmica default
       order: Object.keys(newData).length + 1,
       items: []
     };
@@ -300,7 +302,7 @@ export default function ManualSupervisor({ userData }) {
     setNewTabName('');
   };
 
-  if (loading) return <div style={{padding:40, textAlign:'center'}}>Carregando Manual...</div>;
+  if (loading) return <div style={{padding:40, textAlign:'center', color: 'var(--text-muted)'}}>A carregar Manual...</div>;
   if (!content) return null;
 
   const displayData = isEditing ? editData : content;
@@ -313,43 +315,43 @@ export default function ManualSupervisor({ userData }) {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={{...styles.iconHeader, background: isEditing ? '#f59e0b' : '#2563eb'}}>
+    <div style={global.container}>
+      <div style={global.header}>
+        <div style={{...global.iconHeader, background: isEditing ? '#f59e0b' : '#2563eb'}}>
           {isEditing ? <Edit size={24} color="white"/> : <BookOpen size={24} color="white"/>}
         </div>
         <div>
-          <h1 style={styles.title}>Manual do Supervisor {isEditing && "(Edição)"}</h1>
-          <p style={styles.subtitle}>Diretrizes, responsabilidades e procedimentos baseados na DC.</p>
+          <h1 style={global.title}>Manual do Supervisor {isEditing && "(Edição)"}</h1>
+          <p style={global.subtitle}>Diretrizes, responsabilidades e procedimentos baseados na DC.</p>
         </div>
         
         {isCoordinator && (
-          <div style={{marginLeft: 'auto', display:'flex', gap:'10px'}}>
+          <div style={{marginLeft: 'auto', display:'flex', gap:'10px', flexWrap: 'wrap'}}>
             {!isEditing ? (
-              <button onClick={startEditing} style={styles.btnAction}>
+              <button onClick={startEditing} style={local.btnAction}>
                 <Edit size={16} /> Editar Manual
               </button>
             ) : (
               <>
-                <button onClick={restoreDefault} style={styles.btnRestore} title="Restaurar versão original da DC">
+                <button onClick={restoreDefault} style={local.btnRestore} title="Restaurar versão original da DC">
                   <RefreshCw size={16} /> Padrão
                 </button>
-                <button onClick={cancelEditing} style={styles.btnCancel}>Cancelar</button>
-                <button onClick={handleSave} style={styles.btnSave}><Save size={16} /> Salvar</button>
+                <button onClick={cancelEditing} style={global.btnSecondary}>Cancelar</button>
+                <button onClick={handleSave} style={{...global.btnPrimary, width: 'auto'}}><Save size={16} /> Salvar</button>
               </>
             )}
           </div>
         )}
       </div>
 
-      <div style={styles.tabsContainer}>
+      <div style={local.tabsContainer}>
         {tabs.map(tab => (
           <button 
             key={tab.id} 
             onClick={() => setActiveTab(tab.id)} 
-            style={activeTab === tab.id ? {...styles.tabActive, color: tab.color, borderColor: tab.color} : styles.tab}
+            style={activeTab === tab.id ? {...local.tabActive, color: tab.color, borderColor: tab.color} : local.tab}
           >
-            {renderIcon(tab.icon, 18, activeTab === tab.id ? tab.color : '#94a3b8')} 
+            {renderIcon(tab.icon, 18, activeTab === tab.id ? tab.color : 'var(--text-muted)')} 
             {isEditing ? (
                <input 
                  value={tab.title} 
@@ -358,76 +360,76 @@ export default function ManualSupervisor({ userData }) {
                     newData[tab.id].title = e.target.value;
                     setEditData(newData);
                  }}
-                 style={styles.inputTab}
+                 style={local.inputTab}
                />
             ) : tab.title}
           </button>
         ))}
         {isEditing && (
-          <button onClick={() => setShowNewTabModal(true)} style={styles.btnAddTab}>
+          <button onClick={() => setShowNewTabModal(true)} style={local.btnAddTab}>
             <Plus size={16} /> Nova Aba
           </button>
         )}
       </div>
 
       {currentSection && (
-        <div style={styles.contentArea}>
-          <div style={styles.grid2}>
+        <div style={{ minHeight: '400px', animation: 'fadeIn 0.4s' }}>
+          <div style={local.grid2}>
             {currentSection.items.map((item, index) => (
               <div key={index} style={{
-                ...styles.card, 
-                borderLeft: item.isAlert ? '4px solid #ef4444' : '1px solid #e2e8f0',
-                background: item.isAlert ? '#fff1f2' : 'white'
+                ...global.card, 
+                borderLeft: item.isAlert ? '4px solid #ef4444' : '1px solid var(--border)',
+                background: item.isAlert ? 'var(--bg-danger-light)' : 'var(--bg-card)'
               }}>
                 
                 {isEditing ? (
                    <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-                      <div style={{display:'flex', justifyContent:'space-between'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', gap: '10px'}}>
                         <input 
                           value={item.title} 
                           onChange={(e) => updateCardField(activeTab, index, 'title', e.target.value)}
-                          style={styles.inputTitle}
+                          style={{...global.input, padding: '8px', fontSize: '15px', fontWeight: 'bold'}}
                           placeholder="Título"
                         />
-                        <button onClick={() => removeCard(activeTab, index)} style={{color:'#ef4444', background:'none', border:'none', cursor:'pointer'}}><Trash2 size={16}/></button>
+                        <button onClick={() => removeCard(activeTab, index)} style={global.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
                       </div>
                       
                       <textarea 
                         value={item.text || ''} 
                         onChange={(e) => updateCardField(activeTab, index, 'text', e.target.value)}
-                        style={styles.inputText}
+                        style={{...global.textarea, minHeight: '80px', padding: '8px', fontSize: '13px'}}
                         placeholder="Texto descritivo..."
                       />
 
-                      <label style={{fontSize:'12px', display:'flex', alignItems:'center', gap:'5px'}}>
+                      <label style={{fontSize:'12px', display:'flex', alignItems:'center', gap:'5px', color: 'var(--text-main)', fontWeight: 'bold'}}>
                         <input type="checkbox" checked={item.isAlert} onChange={(e) => updateCardField(activeTab, index, 'isAlert', e.target.checked)}/> 
                         Destacar como Alerta
                       </label>
 
                       {(item.list || []).map((li, liIndex) => (
                          <div key={liIndex} style={{display:'flex', gap:'5px', alignItems:'center'}}>
-                            <div style={{width:6, height:6, borderRadius:'50%', background:'#cbd5e1', flexShrink:0}} />
+                            <div style={{width:6, height:6, borderRadius:'50%', background:'var(--text-muted)', flexShrink:0}} />
                             <input 
                               value={li}
                               onChange={(e) => updateListItem(activeTab, index, liIndex, e.target.value)}
-                              style={styles.inputList}
+                              style={{...global.input, padding: '6px', fontSize: '13px'}}
                             />
                             <button onClick={() => removeListItem(activeTab, index, liIndex)} style={{background:'none', border:'none', cursor:'pointer'}}><X size={12} color="#ef4444"/></button>
                          </div>
                       ))}
-                      <button onClick={() => addListItem(activeTab, index)} style={styles.btnAddList}>+ Item Lista</button>
+                      <button onClick={() => addListItem(activeTab, index)} style={local.btnAddList}>+ Item Lista</button>
                    </div>
                 ) : (
                    <>
-                      <div style={styles.cardHeaderIcon}>
+                      <div style={local.cardHeaderIcon}>
                          {item.isAlert && <AlertTriangle size={20} color="#ef4444" />}
                          {item.title}
                       </div>
-                      {item.text && <p style={{...styles.text, color: item.isAlert ? '#7f1d1d' : '#475569', whiteSpace:'pre-line'}}>{item.text}</p>}
+                      {item.text && <p style={{...local.text, color: item.isAlert ? '#ef4444' : 'var(--text-muted)'}}>{item.text}</p>}
                       {item.list && (
-                        <ul style={styles.list}>
+                        <ul style={local.list}>
                           {item.list.map((li, i) => (
-                            <li key={i} style={styles.listItem}>
+                            <li key={i} style={local.listItem}>
                               <CheckCircle size={14} color={currentSection.color} style={{flexShrink:0, marginTop:3}}/> 
                               {li}
                             </li>
@@ -439,8 +441,8 @@ export default function ManualSupervisor({ userData }) {
               </div>
             ))}
             {isEditing && (
-              <button onClick={() => addCard(activeTab)} style={styles.cardAdd}>
-                <Plus size={32} color="#cbd5e1" />
+              <button onClick={() => addCard(activeTab)} style={local.cardAdd}>
+                <Plus size={32} color="var(--border)" />
                 <span>Adicionar Card</span>
               </button>
             )}
@@ -448,14 +450,24 @@ export default function ManualSupervisor({ userData }) {
         </div>
       )}
 
+      {/* MODAL DE NOVA ABA */}
       {showNewTabModal && (
-        <div style={styles.modalOverlay}>
-           <div style={styles.modal}>
-              <h3 style={{fontSize:'18px', fontWeight:'bold', marginBottom:'15px', color:'#1e293b'}}>Nova Categoria</h3>
-              <input value={newTabName} onChange={e => setNewTabName(e.target.value)} style={styles.inputModal} placeholder="Ex: Novos Produtos" autoFocus />
+        <div style={global.modalOverlay}>
+           <div style={{...global.modalBox, maxWidth: '400px'}}>
+              <div style={global.modalHeader}>
+                <h3 style={global.modalTitle}>Nova Categoria</h3>
+                <button onClick={() => setShowNewTabModal(false)} style={global.closeBtn}><X size={20}/></button>
+              </div>
+              <input 
+                value={newTabName} 
+                onChange={e => setNewTabName(e.target.value)} 
+                style={global.input} 
+                placeholder="Ex: Novos Processos" 
+                autoFocus 
+              />
               <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
-                 <button onClick={createNewTab} style={styles.btnSave}>Criar</button>
-                 <button onClick={() => setShowNewTabModal(false)} style={styles.btnCancel}>Cancelar</button>
+                 <button onClick={() => setShowNewTabModal(false)} style={global.btnSecondary}>Cancelar</button>
+                 <button onClick={createNewTab} style={global.btnPrimary}>Criar Aba</button>
               </div>
            </div>
         </div>
@@ -464,41 +476,24 @@ export default function ManualSupervisor({ userData }) {
   );
 }
 
-const styles = {
-  container: { padding: '20px', maxWidth: '1100px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' },
-  iconHeader: { width: '45px', height: '45px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' },
-  title: { fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: 0 },
-  subtitle: { fontSize: '14px', color: '#64748b', margin: 0 },
+// Estilos específicos do editor/manual
+const local = {
+  tabsContainer: { display: 'flex', gap: '10px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', marginBottom: '30px', overflowX: 'auto', scrollbarWidth: 'none' },
+  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent', transition: '0.2s', whiteSpace: 'nowrap' },
+  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid', transition: '0.2s', whiteSpace: 'nowrap' },
   
-  tabsContainer: { display: 'flex', gap: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '1px', marginBottom: '30px', overflowX: 'auto' },
-  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent', transition: '0.2s', whiteSpace: 'nowrap' },
-  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid', transition: '0.2s', whiteSpace: 'nowrap' },
-  
-  contentArea: { minHeight: '400px' },
   grid2: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' },
-  card: { background: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.01)', transition: 'all 0.2s' },
-  cardAdd: { background: '#f8fafc', padding: '25px', borderRadius: '16px', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#94a3b8', fontWeight: 'bold', cursor: 'pointer', minHeight: '150px' },
+  cardAdd: { background: 'var(--bg-panel)', padding: '25px', borderRadius: '16px', border: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', color: 'var(--text-muted)', fontWeight: 'bold', cursor: 'pointer', minHeight: '150px', transition: '0.2s' },
   
-  cardTitle: { fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' },
-  cardHeaderIcon: { fontSize: '16px', fontWeight: '800', color: '#1e293b', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' },
-  text: { fontSize: '14px', color: '#475569', lineHeight: '1.6', margin: 0 },
+  cardHeaderIcon: { fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' },
+  text: { fontSize: '14px', lineHeight: '1.6', margin: 0, whiteSpace: 'pre-line' },
   list: { listStyle: 'none', padding: 0, margin: '15px 0 0 0', display: 'flex', flexDirection: 'column', gap: '12px' },
-  listItem: { display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: '#475569', lineHeight: '1.4' },
+  listItem: { display: 'flex', gap: '10px', alignItems: 'flex-start', fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' },
   
-  btnAction: { background: '#eff6ff', color: '#2563eb', border: '1px solid #dbeafe', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' },
-  btnSave: { background: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' },
-  btnCancel: { background: '#fef2f2', color: '#ef4444', border: '1px solid #fee2e2', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  btnRestore: { background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' },
-  btnAddTab: { background: '#f8fafc', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center' },
+  btnAction: { background: 'var(--bg-primary-light)', color: 'var(--text-brand)', border: '1px solid var(--text-brand)', padding: '10px 16px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px' },
+  btnRestore: { background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px 16px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px' },
+  btnAddTab: { background: 'var(--bg-panel)', color: 'var(--text-muted)', border: '1px dashed var(--border)', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center' },
 
-  inputTab: { border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '13px', fontWeight: 'bold', width: '120px' },
-  inputTitle: { border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', fontSize: '15px', fontWeight: 'bold', width: '100%', marginBottom: '10px' },
-  inputText: { border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', fontSize: '13px', width: '100%', minHeight: '80px', resize: 'vertical' },
-  inputList: { border: '1px solid #e2e8f0', borderRadius: '4px', padding: '6px', fontSize: '13px', width: '100%' },
-  btnAddList: { background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '5px', textAlign: 'left' },
-
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  modal: { background: 'white', padding: '30px', borderRadius: '16px', width: '300px' },
-  inputModal: { width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', outline: 'none', boxSizing: 'border-box' }
+  inputTab: { border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', borderRadius: '6px', padding: '4px 8px', fontSize: '13px', fontWeight: 'bold', width: '120px', outline: 'none' },
+  btnAddList: { background: 'none', border: 'none', color: 'var(--text-brand)', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '5px', textAlign: 'left' }
 };

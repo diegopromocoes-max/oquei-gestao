@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, getDocs, addDoc, serverTimestamp, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { 
-  Megaphone, Send, User, CheckCircle, 
-  MessageCircle, Users, RefreshCw
-} from 'lucide-react';
+import { Megaphone, Send, User, CheckCircle, MessageCircle, Users, RefreshCw } from 'lucide-react';
+
+// IMPORTAÇÃO DOS ESTILOS GLOBAIS
+import { styles as global } from '../styles/globalStyles';
 
 export default function Comunicados({ userData }) {
   const [messages, setMessages] = useState([]);
@@ -14,11 +14,7 @@ export default function Comunicados({ userData }) {
   
   const canSendToAll = userData?.role === 'coordinator' || userData?.role === 'supervisor';
 
-  const [form, setForm] = useState({
-    text: '',
-    to: canSendToAll ? 'all' : '', 
-    priority: 'normal'
-  });
+  const [form, setForm] = useState({ text: '', to: canSendToAll ? 'all' : '', priority: 'normal' });
 
   useEffect(() => {
     fetchMessages();
@@ -29,28 +25,23 @@ export default function Comunicados({ userData }) {
     try {
       const q = query(collection(db, "users"));
       const snap = await getDocs(q);
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const filteredList = list.filter(u => u.id !== auth.currentUser?.uid);
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== auth.currentUser?.uid);
       
-      filteredList.sort((a, b) => {
+      list.sort((a, b) => {
         if (a.role === 'coordinator') return -1;
         if (b.role === 'coordinator') return 1;
         if (a.role === 'supervisor' && b.role !== 'supervisor') return -1;
         if (b.role === 'supervisor' && a.role !== 'supervisor') return 1;
         return a.name.localeCompare(b.name);
       });
-
-      setRecipients(filteredList);
-    } catch (err) { 
-      window.alert(err.message); 
-    }
+      setRecipients(list);
+    } catch (err) { window.alert(err.message); }
   };
 
   const fetchMessages = async () => {
     setLoading(true);
     try {
       const q = query(collection(db, "messages"), orderBy("createdAt", "desc"));
-      
       const snap = await getDocs(q);
       const allMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -64,9 +55,7 @@ export default function Comunicados({ userData }) {
 
       setMessages(filtered);
       markAsReadBatch(filtered);
-    } catch (err) { 
-      window.alert(err.message); 
-    }
+    } catch (err) { window.alert(err.message); }
     setLoading(false);
   };
 
@@ -75,10 +64,7 @@ export default function Comunicados({ userData }) {
     if (!userId) return;
     msgs.forEach(msg => {
       if (msg.senderId !== userId && (!msg.readBy || !msg.readBy.includes(userId))) {
-        const msgRef = doc(db, "messages", msg.id);
-        updateDoc(msgRef, {
-          readBy: arrayUnion(userId)
-        }).catch(e => console.log(e));
+        updateDoc(doc(db, "messages", msg.id), { readBy: arrayUnion(userId) }).catch(e => console.log(e));
       }
     });
   };
@@ -87,31 +73,20 @@ export default function Comunicados({ userData }) {
     e.preventDefault();
     if (!form.text.trim()) return;
     if (!form.to) return window.alert("Selecione um destinatário válido.");
-
     setSending(true);
 
     try {
-      const recipientName = form.to === 'all' 
-        ? 'Todos' 
-        : recipients.find(r => r.id === form.to)?.name || 'Usuário';
+      const recipientName = form.to === 'all' ? 'Todos' : recipients.find(r => r.id === form.to)?.name || 'Usuário';
 
       await addDoc(collection(db, "messages"), {
-        text: form.text,
-        senderId: auth.currentUser.uid,
-        senderName: userData.name,
-        senderRole: userData.role,
-        to: form.to, 
-        toName: recipientName,
-        priority: form.priority,
-        readBy: [auth.currentUser.uid], 
-        createdAt: serverTimestamp()
+        text: form.text, senderId: auth.currentUser.uid, senderName: userData.name,
+        senderRole: userData.role, to: form.to, toName: recipientName,
+        priority: form.priority, readBy: [auth.currentUser.uid], createdAt: serverTimestamp()
       });
 
       setForm({ ...form, text: '', to: canSendToAll ? 'all' : '' });
       fetchMessages(); 
-    } catch (err) { 
-      window.alert(err.message); 
-    }
+    } catch (err) { window.alert(err.message); }
     setSending(false);
   };
 
@@ -122,114 +97,90 @@ export default function Comunicados({ userData }) {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.iconHeader}><Megaphone size={28} color="white"/></div>
+    <div style={{...global.container, maxWidth: '900px'}}>
+      
+      {/* HEADER GLOBAL */}
+      <div style={global.header}>
+        <div style={global.iconHeader}><Megaphone size={28} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Mural de Comunicados</h1>
-          <p style={styles.subtitle}>Mensagens diretas e avisos públicos da rede.</p>
+          <h1 style={global.title}>Mural de Comunicados</h1>
+          <p style={global.subtitle}>Mensagens diretas e avisos públicos da rede.</p>
         </div>
-        <button onClick={fetchMessages} style={styles.refreshBtn}><RefreshCw size={20}/></button>
+        <button onClick={fetchMessages} style={{...global.iconBtn, marginLeft: 'auto'}}><RefreshCw size={20}/></button>
       </div>
 
-      <div style={styles.layout}>
-        <div style={styles.composeArea}>
-          <h3 style={styles.sectionTitle}>Nova Mensagem</h3>
-          <form onSubmit={handleSend} style={styles.form}>
+      <div style={local.layout}>
+        
+        {/* FORMULÁRIO DE ENVIO */}
+        <div style={global.card}>
+          <h3 style={global.sectionTitle}>Nova Mensagem</h3>
+          <form onSubmit={handleSend} style={global.form}>
             
-            <div style={styles.recipientRow}>
+            <div style={local.recipientRow}>
               {canSendToAll && (
-                <label style={styles.radioLabel}>
-                  <input 
-                    type="radio" 
-                    name="recipient" 
-                    checked={form.to === 'all'} 
-                    onChange={() => setForm({...form, to: 'all'})}
-                    style={{accentColor: '#2563eb'}}
-                  />
-                  <span style={styles.radioText}><Users size={14}/> Público (Todos)</span>
+                <label style={local.radioLabel}>
+                  <input type="radio" checked={form.to === 'all'} onChange={() => setForm({...form, to: 'all'})} style={{accentColor: 'var(--text-brand)'}} />
+                  <span style={{fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', gap: '6px'}}><Users size={14}/> Público (Todos)</span>
                 </label>
               )}
               
               <div style={{display:'flex', alignItems:'center', gap:'10px', flex: 1}}>
-                <span style={{fontSize:'13px', color:'#64748b'}}>
-                  {canSendToAll ? "Ou Direcionado:" : "Enviar para:"}
-                </span>
-                <select 
-                  style={styles.select} 
-                  value={form.to !== 'all' ? form.to : ''} 
-                  onChange={e => setForm({...form, to: e.target.value})}
-                  required={!canSendToAll || form.to !== 'all'}
-                >
+                <span style={{fontSize:'13px', color:'var(--text-muted)'}}>{canSendToAll ? "Ou Direcionado:" : "Enviar para:"}</span>
+                <select style={global.select} value={form.to !== 'all' ? form.to : ''} onChange={e => setForm({...form, to: e.target.value})} required={!canSendToAll || form.to !== 'all'}>
                   <option value="" disabled>Selecionar Colaborador...</option>
-                  {recipients.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({getRoleLabel(u.role)})</option>
-                  ))}
+                  {recipients.map(u => <option key={u.id} value={u.id}>{u.name} ({getRoleLabel(u.role)})</option>)}
                 </select>
               </div>
             </div>
 
-            <textarea 
-              style={styles.textarea} 
-              placeholder="Escreva sua mensagem ou aviso..." 
-              value={form.text}
-              onChange={e => setForm({...form, text: e.target.value})}
-              required
-            />
+            <textarea style={global.textarea} placeholder="Escreva sua mensagem ou aviso..." value={form.text} onChange={e => setForm({...form, text: e.target.value})} required />
 
-            <div style={styles.footerForm}>
-              <button type="submit" style={styles.sendBtn} disabled={sending}>
+            <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+              <button type="submit" style={global.btnPrimary} disabled={sending}>
                 {sending ? 'Enviando...' : 'Enviar Mensagem'} <Send size={16} />
               </button>
             </div>
           </form>
         </div>
 
-        <div style={styles.feedArea}>
-          <h3 style={styles.sectionTitle}>Últimas Atualizações</h3>
+        {/* FEED DE MENSAGENS */}
+        <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+          <h3 style={global.sectionTitle}>Últimas Atualizações</h3>
           
           {loading ? (
-            <p style={{textAlign:'center', color:'#94a3b8', padding:'20px'}}>A carregar...</p>
+            <p style={{textAlign:'center', color:'var(--text-muted)'}}>A carregar...</p>
           ) : messages.length === 0 ? (
-            <div style={styles.emptyState}>
-              <MessageCircle size={40} style={{marginBottom:'10px', opacity:0.3}} />
+            <div style={global.emptyState}>
+              <MessageCircle size={40} style={{opacity:0.3}} />
               <p>Nenhuma mensagem encontrada.</p>
             </div>
           ) : (
-            <div style={styles.feedList}>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
               {messages.map(msg => {
                 const isMine = msg.senderId === auth.currentUser?.uid;
                 const isGeneral = msg.to === 'all';
-                const date = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString('pt-BR') : 'Agora';
-
                 return (
                   <div key={msg.id} style={{
-                    ...styles.messageCard,
-                    alignSelf: isMine ? 'flex-end' : 'flex-start',
-                    backgroundColor: isMine ? '#eff6ff' : isGeneral ? '#fff7ed' : 'white',
-                    border: isGeneral && !isMine ? '1px solid #fed7aa' : '1px solid #e2e8f0',
-                    maxWidth: '85%'
+                    ...local.messageCard, alignSelf: isMine ? 'flex-end' : 'flex-start',
+                    backgroundColor: isMine ? 'var(--bg-primary-light)' : 'var(--bg-card)',
+                    border: isGeneral && !isMine ? '1px solid rgba(234,88,12,0.4)' : '1px solid var(--border)'
                   }}>
-                    <div style={styles.msgHeader}>
+                    <div style={local.msgHeader}>
                       <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
                         {isGeneral && <Megaphone size={14} color="#ea580c" />}
-                        {!isGeneral && !isMine && <User size={14} color="#2563eb" />}
-                        <span style={{fontWeight:'bold', color: isMine ? '#1e3a8a' : '#334155'}}>
-                          {isMine ? 'Você' : msg.senderName}
-                        </span>
-                        {!isMine && <span style={styles.roleBadge}>{getRoleLabel(msg.senderRole)}</span>}
+                        {!isGeneral && !isMine && <User size={14} color="var(--text-brand)" />}
+                        <span style={{fontWeight:'bold', color: isMine ? 'var(--text-brand)' : 'var(--text-main)'}}>{isMine ? 'Você' : msg.senderName}</span>
+                        {!isMine && <span style={local.roleBadge}>{getRoleLabel(msg.senderRole)}</span>}
                       </div>
-                      <span style={{fontSize:'10px', color:'#94a3b8'}}>{date}</span>
+                      <span style={{fontSize:'10px', color:'var(--text-muted)'}}>{msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}</span>
                     </div>
                     
-                    <p style={styles.msgText}>{msg.text}</p>
+                    <p style={local.msgText}>{msg.text}</p>
                     
-                    <div style={styles.msgFooter}>
-                      <span style={{fontSize:'11px', color:'#64748b', fontStyle:'italic'}}>
-                        {isGeneral ? 'Aviso Público' : isMine ? `Enviado para: ${msg.toName}` : 'Mensagem Direta'}
-                      </span>
+                    <div style={local.msgFooter}>
+                      <span style={{fontSize:'11px', color:'var(--text-muted)', fontStyle:'italic'}}>{isGeneral ? 'Aviso Público' : isMine ? `Enviado para: ${msg.toName}` : 'Mensagem Direta'}</span>
                       {isMine && (
-                        <span style={{display:'flex', alignItems:'center', gap:'4px', color: msg.readBy?.length > 1 || msg.to === 'all' ? '#10b981' : '#94a3b8', fontSize:'11px', fontWeight:'bold'}}>
+                        <span style={{display:'flex', alignItems:'center', gap:'4px', color: msg.readBy?.length > 1 || msg.to === 'all' ? '#10b981' : 'var(--text-muted)', fontSize:'11px', fontWeight:'bold'}}>
                            <CheckCircle size={14} /> {msg.readBy?.length > 1 || msg.to === 'all' ? 'Lida' : 'Enviada'}
                         </span>
                       )}
@@ -245,38 +196,15 @@ export default function Comunicados({ userData }) {
   );
 }
 
-const styles = {
-  container: { padding: '40px', maxWidth: '900px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' },
-  iconHeader: { width: '56px', height: '56px', borderRadius: '16px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.25)' },
-  title: { fontSize: '28px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '15px', color: '#64748b', margin: '5px 0 0 0' },
-  refreshBtn: { marginLeft: 'auto', background: 'white', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '12px', cursor: 'pointer', color: '#64748b' },
-
+// ESTILOS LOCAIS (Apenas o que é exclusivo desta página)
+const local = {
   layout: { display: 'flex', flexDirection: 'column', gap: '40px' },
-  
-  composeArea: { background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
-  sectionTitle: { fontSize: '16px', fontWeight: 'bold', color: '#1e293b', marginBottom: '15px' },
-  
-  form: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  recipientRow: { display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', background: '#f8fafc', padding: '12px 15px', borderRadius: '12px', border: '1px solid #f1f5f9' },
+  recipientRow: { display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', background: 'var(--bg-panel)', padding: '12px 15px', borderRadius: '12px', border: '1px solid var(--border)' },
   radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' },
-  radioText: { fontSize: '14px', fontWeight: 'bold', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' },
-  select: { padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', flex: 1, background: 'white', fontWeight: '600', color: '#334155' },
   
-  textarea: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', minHeight: '100px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
-  
-  footerForm: { display: 'flex', justifyContent: 'flex-end' },
-  sendBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-
-  feedArea: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  feedList: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  
-  messageCard: { padding: '18px', borderRadius: '16px', width: '100%', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', boxSizing: 'border-box' },
+  messageCard: { padding: '18px', borderRadius: '16px', width: '100%', maxWidth: '85%', boxShadow: 'var(--shadow-sm)', boxSizing: 'border-box' },
   msgHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
-  roleBadge: { fontSize: '9px', textTransform: 'uppercase', background: '#e2e8f0', color: '#475569', padding: '3px 6px', borderRadius: '6px', fontWeight: 'bold' },
-  msgText: { fontSize: '14px', color: '#1e293b', lineHeight: '1.5', whiteSpace: 'pre-wrap', margin: '0 0 10px 0' },
-  msgFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '10px' },
-
-  emptyState: { textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', padding: '40px', background: '#f8fafc', borderRadius: '16px' }
+  roleBadge: { fontSize: '9px', textTransform: 'uppercase', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '3px 6px', borderRadius: '6px', fontWeight: 'bold' },
+  msgText: { fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5', whiteSpace: 'pre-wrap', margin: '0 0 10px 0' },
+  msgFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '10px' },
 };

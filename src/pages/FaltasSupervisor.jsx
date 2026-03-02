@@ -8,8 +8,11 @@ import {
   Users, AlertCircle
 } from 'lucide-react';
 
+// IMPORTAÇÃO DOS ESTILOS GLOBAIS
+import { styles as global } from '../styles/globalStyles';
+
 export default function FaltasSupervisor({ userData }) {
-  const [activeTab, setActiveTab] = useState('gestao'); // Iniciamos pela Gestão para foco em pendências
+  const [activeTab, setActiveTab] = useState('gestao');
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState(null);
   
@@ -117,7 +120,7 @@ export default function FaltasSupervisor({ userData }) {
     try {
       const newMap = { ...currentMap, [date]: floaterId };
       await updateDoc(doc(db, "absences", absenceId), { coverageMap: newMap });
-      fetchAbsences(); // Recarrega para mostrar atualizado
+      fetchAbsences(); 
     } catch (e) {
       alert("Erro ao atualizar: " + e.message);
     }
@@ -125,11 +128,9 @@ export default function FaltasSupervisor({ userData }) {
 
   // --- COMPONENTES DE ABA ---
 
-  // 1. ABA DE GESTÃO DE FALTAS (NOVA)
   const GestaoView = () => {
     const today = new Date().toISOString().split('T')[0];
     
-    // Filtra faltas futuras ou atuais
     const upcomingAbsences = absencesList.filter(abs => abs.endDate >= today && abs.type === 'falta');
     const upcomingVacations = absencesList.filter(abs => abs.endDate >= today && abs.type === 'ferias');
 
@@ -138,31 +139,29 @@ export default function FaltasSupervisor({ userData }) {
       const storeName = stores.find(s => s.id === item.storeId)?.name || item.storeId;
       const attendantName = attendants.find(a => a.id === item.attendantId)?.name || floaters.find(f => f.id === item.attendantId)?.name || 'Atendente';
 
-      // Verifica pendências
       const hasPending = dates.some(d => !item.coverageMap?.[d]);
 
       return (
-        <div key={item.id} style={{...styles.card, borderLeft: hasPending ? '4px solid #f59e0b' : '4px solid #10b981', marginBottom:'20px'}}>
+        <div key={item.id} style={{...(global.card || {}), borderLeft: hasPending ? '4px solid #f59e0b' : '4px solid #10b981', marginBottom:'20px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px'}}>
             <div>
               <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                <span style={{fontSize:'12px', fontWeight:'bold', color: item.type==='ferias' ? '#2563eb' : '#ef4444', background: item.type==='ferias' ? '#eff6ff' : '#fef2f2', padding:'4px 8px', borderRadius:'6px'}}>
+                <span style={{fontSize:'12px', fontWeight:'bold', color: item.type==='ferias' ? 'var(--text-brand)' : '#ef4444', background: item.type==='ferias' ? 'var(--bg-primary-light)' : 'var(--bg-danger-light)', padding:'4px 8px', borderRadius:'6px'}}>
                   {item.type === 'ferias' ? 'FÉRIAS' : 'FALTA'}
                 </span>
-                <h4 style={{fontWeight:'bold', color:'#1e293b', margin:0}}>{storeName}</h4>
+                <h4 style={{fontWeight:'bold', color:'var(--text-main)', margin:0}}>{storeName}</h4>
               </div>
-              <p style={{fontSize:'14px', color:'#64748b', marginTop:'5px'}}>
-                <strong>{attendantName}</strong> • {item.reason || 'Ausência Programada'}
+              <p style={{fontSize:'14px', color:'var(--text-muted)', marginTop:'5px'}}>
+                <strong style={{color:'var(--text-main)'}}>{attendantName}</strong> • {item.reason || 'Ausência Programada'}
               </p>
-              <p style={{fontSize:'12px', color:'#94a3b8', marginTop:'2px'}}>
+              <p style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'2px', opacity: 0.8}}>
                 {new Date(item.startDate + 'T12:00:00').toLocaleDateString()} até {new Date(item.endDate + 'T12:00:00').toLocaleDateString()}
               </p>
             </div>
             <button onClick={() => deleteAbsence(item.id)} style={{border:'none', background:'none', color:'#ef4444', cursor:'pointer'}}><Trash2 size={16}/></button>
           </div>
 
-          {/* LISTA DE DIAS PARA COBERTURA */}
-          <div style={{background:'#f8fafc', borderRadius:'12px', padding:'10px', display:'flex', flexDirection:'column', gap:'8px'}}>
+          <div style={{background:'var(--bg-app)', borderRadius:'12px', padding:'10px', display:'flex', flexDirection:'column', gap:'8px', border: '1px solid var(--border)'}}>
             {dates.map(date => {
               const assignedId = item.coverageMap?.[date];
               const isClosed = assignedId === 'loja_fechada';
@@ -172,8 +171,8 @@ export default function FaltasSupervisor({ userData }) {
               return (
                 <div key={date} style={{display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'13px'}}>
                   <div style={{display:'flex', gap:'10px', alignItems:'center', width:'120px'}}>
-                    <span style={{fontWeight:'bold', color:'#64748b'}}>{dateObj.getDate()}/{dateObj.getMonth()+1}</span>
-                    <span style={{fontSize:'11px', textTransform:'uppercase', color:'#94a3b8'}}>{dayName}</span>
+                    <span style={{fontWeight:'bold', color:'var(--text-muted)'}}>{dateObj.getDate()}/{dateObj.getMonth()+1}</span>
+                    <span style={{fontSize:'11px', textTransform:'uppercase', color:'var(--text-muted)'}}>{dayName}</span>
                   </div>
                   
                   <div style={{flex: 1}}>
@@ -184,12 +183,13 @@ export default function FaltasSupervisor({ userData }) {
                         width: '100%',
                         padding: '6px',
                         borderRadius: '6px',
-                        border: !assignedId ? '1px solid #f59e0b' : isClosed ? '1px solid #fecaca' : '1px solid #bbf7d0',
-                        background: !assignedId ? '#fffbeb' : isClosed ? '#fef2f2' : '#f0fdf4',
-                        color: !assignedId ? '#b45309' : isClosed ? '#b91c1c' : '#15803d',
+                        border: !assignedId ? '1px solid #f59e0b' : isClosed ? '1px solid var(--border-danger)' : '1px solid var(--border-success)',
+                        background: !assignedId ? '#fffbeb' : isClosed ? 'var(--bg-danger-light)' : 'var(--bg-success-light)',
+                        color: !assignedId ? '#b45309' : isClosed ? '#ef4444' : '#10b981',
                         fontWeight: 'bold',
                         fontSize: '12px',
-                        outline: 'none'
+                        outline: 'none',
+                        cursor: 'pointer'
                       }}
                     >
                       <option value="">⚠️ Pendente - Selecione</option>
@@ -210,20 +210,20 @@ export default function FaltasSupervisor({ userData }) {
     return (
       <div style={{animation: 'fadeIn 0.5s'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-          <h3 style={styles.sectionTitle}>Próximas Ausências</h3>
+          <h3 style={global.sectionTitle}>Próximas Ausências</h3>
           <div style={{display:'flex', gap:'10px'}}>
-             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#ef4444'}}><AlertCircle size={14}/> Pendente</div>
-             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#10b981'}}><CheckCircle size={14}/> Coberto</div>
+             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#ef4444', fontWeight:'bold'}}><AlertCircle size={14}/> Pendente</div>
+             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#10b981', fontWeight:'bold'}}><CheckCircle size={14}/> Coberto</div>
           </div>
         </div>
 
         {upcomingAbsences.length === 0 && upcomingVacations.length === 0 ? (
-          <div style={{textAlign:'center', padding:'60px', color:'#94a3b8', background:'#f8fafc', borderRadius:'16px'}}>
+          <div style={global.emptyState}>
             <CheckCircle size={40} style={{marginBottom:'10px', opacity:0.5}} />
             <p>Nenhuma falta ou férias programada para os próximos dias.</p>
           </div>
         ) : (
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:'20px'}}>
+          <div style={global.gridCards}>
             {upcomingAbsences.map(renderAbsenceCard)}
             {upcomingVacations.map(renderAbsenceCard)}
           </div>
@@ -232,12 +232,10 @@ export default function FaltasSupervisor({ userData }) {
     );
   };
 
-  // 2. ABA DE ESCALA (CALENDÁRIO INTERATIVO)
   const EscalaView = () => {
     const [selectedStore, setSelectedStore] = useState('');
     const [currentDate, setCurrentDate] = useState(new Date());
     
-    // Modal de Feriado
     const [holidayModal, setHolidayModal] = useState({ open: false, date: '' });
     const [newHolidayName, setNewHolidayName] = useState('');
     const [newHolidayType, setNewHolidayType] = useState('municipal');
@@ -303,12 +301,12 @@ export default function FaltasSupervisor({ userData }) {
       <div style={{animation: 'fadeIn 0.5s'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
           <div>
-            <h3 style={styles.sectionTitle}>Calendário de Escala</h3>
-            {selectedStore && <p style={{fontSize:'12px', color:'#64748b'}}>Dias Úteis em {monthKey.split('-')[1]}: <strong style={{color:'#10b981'}}>{diasUteisCount}</strong></p>}
+            <h3 style={global.sectionTitle}>Calendário de Escala</h3>
+            {selectedStore && <p style={{fontSize:'12px', color:'var(--text-muted)'}}>Dias Úteis em {monthKey.split('-')[1]}: <strong style={{color:'#10b981'}}>{diasUteisCount}</strong></p>}
           </div>
           <div style={{display:'flex', gap:'10px'}}>
-            <input type="month" style={styles.inputSmall} value={monthKey} onChange={(e) => setCurrentDate(new Date(e.target.value + '-01T00:00:00'))} />
-            <select style={styles.inputSmall} value={selectedStore} onChange={(e) => setSelectedStore(e.target.value)}>
+            <input type="month" style={{...(global.input || {}), padding: '8px', width: 'auto'}} value={monthKey} onChange={(e) => setCurrentDate(new Date(e.target.value + '-01T00:00:00'))} />
+            <select style={{...(global.select || {}), padding: '8px', width: 'auto'}} value={selectedStore} onChange={(e) => setSelectedStore(e.target.value)}>
               <option value="">Selecione uma Loja...</option>
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -316,34 +314,58 @@ export default function FaltasSupervisor({ userData }) {
         </div>
 
         {!selectedStore ? (
-          <div style={{textAlign:'center', padding:'60px', color:'#94a3b8', background:'#f8fafc', borderRadius:'16px'}}>
+          <div style={global.emptyState}>
             <MapPin size={40} style={{marginBottom:'10px', opacity:0.5}} />
             <p>Selecione uma loja acima para visualizar a escala.</p>
           </div>
         ) : (
-          <div style={{border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'}}>
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0'}}>
+          <div style={local.calendarContainer}>
+            <div style={local.calendarHeader}>
               {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((d, i) => (
-                <div key={d} style={{textAlign:'center', padding:'12px', fontSize:'12px', fontWeight:'bold', color: i === 0 || i === 6 ? '#ef4444' : '#64748b'}}>{d}</div>
+                <div key={d} style={{...local.calendarHeaderCell, color: i === 0 || i === 6 ? '#ef4444' : 'var(--text-muted)'}}>{d}</div>
               ))}
             </div>
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'white'}}>
-              {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`empty-${i}`} style={{background: '#fcfcfc', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9'}} />)}
+            <div style={local.calendarDays}>
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`empty-${i}`} style={local.calendarCellEmpty} />)}
               {daysArray.map(day => {
                 const dateStr = `${monthKey}-${String(day).padStart(2, '0')}`;
                 const dateObj = new Date(dateStr + 'T12:00:00');
                 const weekDay = dateObj.getDay();
                 const holiday = isHoliday(dateStr);
                 const info = dayStatus[day];
-                let bg = 'white'; let color = '#334155';
-                if (holiday) { bg = '#fef2f2'; color = '#dc2626'; }
-                else if (weekDay === 0) { bg = '#fff1f2'; color = '#ef4444'; }
-                else if (weekDay === 6) { bg = '#fff7ed'; color = '#c2410c'; }
+                
+                let bg = 'var(--bg-card)'; 
+                let color = 'var(--text-main)';
+                if (holiday) { bg = 'var(--bg-danger-light)'; color = '#dc2626'; }
+                else if (weekDay === 0) { bg = 'var(--bg-danger-light)'; color = '#ef4444'; }
+                else if (weekDay === 6) { bg = 'rgba(245, 158, 11, 0.1)'; color = '#c2410c'; }
+
                 return (
-                  <div key={day} onClick={() => handleDayClick(dateStr)} style={{background: bg, color: color, minHeight: '100px', padding: '8px', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', cursor: 'pointer', transition: '0.2s', position: 'relative'}} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = bg}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}><span style={{fontWeight: 'bold', fontSize: '14px'}}>{day}</span>{weekDay === 0 && <span style={{fontSize: '9px', fontWeight:'bold', opacity:0.7}}>DOM</span>}</div>
-                    {holiday && <div style={{marginTop: '4px', fontSize: '10px', background: '#fee2e2', color: '#b91c1c', padding: '2px 4px', borderRadius: '4px', fontWeight: 'bold', display:'flex', justifyContent:'space-between', alignItems:'center'}}>{holiday.name}<button onClick={(e) => deleteHoliday(e, holiday.id)} style={{border:'none', background:'none', cursor:'pointer', color:'#b91c1c'}}><X size={10}/></button></div>}
-                    {info && <div style={{marginTop: '5px'}}><div style={{fontSize: '9px', fontWeight: 'bold', color: info.type === 'ferias' ? '#2563eb' : '#ef4444'}}>{info.type === 'ferias' ? 'FÉRIAS' : 'FALTA'}</div>{info.status === 'loja_fechada' ? <div style={{background:'#ef4444', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>FECHADA</div> : info.status === 'pendente' ? <div style={{background:'#f59e0b', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>PENDENTE</div> : <div style={{background:'#10b981', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>SUB: {getFloaterName(info.status)}</div>}</div>}
+                  <div key={day} onClick={() => handleDayClick(dateStr)} style={{...local.calendarCell, background: bg, color: color}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                      <span style={{fontWeight: '900', fontSize: '14px'}}>{day}</span>
+                      {weekDay === 0 && <span style={{fontSize: '9px', fontWeight:'bold', opacity:0.7}}>DOM</span>}
+                    </div>
+                    {holiday && (
+                      <div style={local.holidayBadge}>
+                        {holiday.name}
+                        <button onClick={(e) => deleteHoliday(e, holiday.id)} style={{border:'none', background:'none', cursor:'pointer', color:'#b91c1c'}}><X size={10}/></button>
+                      </div>
+                    )}
+                    {info && (
+                      <div style={{marginTop: '5px'}}>
+                        <div style={{fontSize: '9px', fontWeight: 'bold', color: info.type === 'ferias' ? 'var(--text-brand)' : '#ef4444'}}>
+                          {info.type === 'ferias' ? 'FÉRIAS' : 'FALTA'}
+                        </div>
+                        {info.status === 'loja_fechada' ? (
+                          <div style={{background:'#ef4444', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>FECHADA</div>
+                        ) : info.status === 'pendente' ? (
+                          <div style={{background:'#f59e0b', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>PENDENTE</div>
+                        ) : (
+                          <div style={{background:'#10b981', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>SUB: {getFloaterName(info.status)}</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -351,10 +373,26 @@ export default function FaltasSupervisor({ userData }) {
           </div>
         )}
         {holidayModal.open && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.modalBox}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}><h3 style={{fontSize:'18px', fontWeight:'bold', color:'#334155'}}>Adicionar Feriado</h3><button onClick={() => setHolidayModal({...holidayModal, open: false})} style={{border:'none', background:'none', cursor:'pointer'}}><X size={20}/></button></div>
-              <form onSubmit={saveHoliday} style={{display:'flex', flexDirection:'column', gap:'15px'}}><div><label style={styles.label}>Nome do Feriado</label><input placeholder="Ex: Aniversário da Cidade" value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} style={styles.input} required autoFocus /></div><div><label style={styles.label}>Tipo</label><select style={styles.input} value={newHolidayType} onChange={e => setNewHolidayType(e.target.value)}><option value="municipal">Municipal (Só esta loja)</option><option value="company">Empresa (Todas)</option></select></div><button style={styles.btnPrimary}>Salvar</button></form>
+          <div style={global.modalOverlay}>
+            <div style={global.modalBox}>
+              <div style={global.modalHeader}>
+                <h3 style={global.modalTitle}>Adicionar Feriado</h3>
+                <button onClick={() => setHolidayModal({...holidayModal, open: false})} style={global.closeBtn}><X size={20}/></button>
+              </div>
+              <form onSubmit={saveHoliday} style={global.form}>
+                <div style={global.field}>
+                  <label style={global.label}>Nome do Feriado</label>
+                  <input placeholder="Ex: Aniversário da Cidade" value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} style={global.input} required autoFocus />
+                </div>
+                <div style={global.field}>
+                  <label style={global.label}>Tipo</label>
+                  <select style={global.select} value={newHolidayType} onChange={e => setNewHolidayType(e.target.value)}>
+                    <option value="municipal">Municipal (Só esta loja)</option>
+                    <option value="company">Empresa (Todas as Lojas)</option>
+                  </select>
+                </div>
+                <button style={global.btnPrimary}>Salvar Feriado</button>
+              </form>
             </div>
           </div>
         )}
@@ -362,7 +400,6 @@ export default function FaltasSupervisor({ userData }) {
     );
   };
 
-  // 3. COMPONENTE DE SELEÇÃO EM MASSA (Reutilizado)
   const CoverageManager = ({ startDate, endDate, coverageMap, onChange, floaters }) => {
     const [selectedDates, setSelectedDates] = useState([]);
     const [selectedFloater, setSelectedFloater] = useState('');
@@ -386,26 +423,26 @@ export default function FaltasSupervisor({ userData }) {
     };
 
     return (
-      <div style={{marginTop: '20px', background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-          <h4 style={{fontWeight:'bold', color:'#334155', display:'flex', gap:'8px', alignItems:'center'}}>
-            <Grid size={18} /> Definir Cobertura
+      <div style={local.coveragePanel}>
+        <div style={local.coverageHeader}>
+          <h4 style={{fontWeight:'bold', color:'var(--text-main)', display:'flex', gap:'8px', alignItems:'center'}}>
+            <Grid size={18} /> Definir Cobertura em Massa
           </h4>
           <div style={{display:'flex', gap:'8px'}}>
-            <button type="button" onClick={selectAll} style={styles.btnSmallAction}>Todos</button>
-            <button type="button" onClick={deselectAll} style={styles.btnSmallCancel}>Limpar</button>
+            <button type="button" onClick={selectAll} style={local.btnSmallAction}>Todos</button>
+            <button type="button" onClick={deselectAll} style={local.btnSmallCancel}>Limpar</button>
           </div>
         </div>
         <div style={{display:'flex', gap:'10px', marginBottom:'20px', alignItems:'center'}}>
-          <User size={16} color="#94a3b8" />
-          <select style={{flex: 1, padding:'8px', border:'1px solid #cbd5e1', borderRadius:'8px', outline:'none', fontSize:'13px'}} value={selectedFloater} onChange={(e) => setSelectedFloater(e.target.value)}>
+          <User size={16} color="var(--text-muted)" />
+          <select style={{...(global.select || {}), padding:'8px'}} value={selectedFloater} onChange={(e) => setSelectedFloater(e.target.value)}>
             <option value="">Quem vai cobrir os dias marcados?</option>
             <option value="loja_fechada">🚫 LOJA FECHADA</option>
             {floaters.map(f => <option key={f.id} value={f.id}>{f.name} ({f.cityId || 'Volante'})</option>)}
           </select>
-          <button type="button" onClick={applyCoverage} style={styles.btnApply}>Aplicar</button>
+          <button type="button" onClick={applyCoverage} style={local.btnApply}>Aplicar</button>
         </div>
-        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px'}}>
+        <div style={local.coverageGrid}>
           {dates.map(date => {
             const isSelected = selectedDates.includes(date);
             const assignedId = coverageMap[date];
@@ -413,19 +450,19 @@ export default function FaltasSupervisor({ userData }) {
             const dateObj = new Date(date + 'T12:00:00');
             return (
               <div key={date} onClick={() => toggleDate(date)} style={{
-                  border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                  background: isSelected ? '#eff6ff' : 'white',
-                  borderRadius: '12px', padding: '10px', cursor: 'pointer', position: 'relative'
+                  border: isSelected ? '2px solid var(--text-brand)' : '1px solid var(--border)',
+                  background: isSelected ? 'var(--bg-primary-light)' : 'var(--bg-card)',
+                  ...local.coverageItem
                 }}>
-                <div style={{fontSize:'12px', color:'#64748b', marginBottom:'4px', fontWeight:'bold'}}>{dateObj.getDate()}/{dateObj.getMonth()+1}</div>
+                <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'4px', fontWeight:'bold'}}>{dateObj.getDate()}/{dateObj.getMonth()+1}</div>
                 {assignedId ? (
-                  <div style={{fontSize:'10px', fontWeight:'bold', color: isClosed ? '#ef4444' : '#059669', background: isClosed ? '#fef2f2' : '#ecfdf5', padding: '3px 6px', borderRadius: '4px', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                  <div style={{fontSize:'10px', fontWeight:'bold', color: isClosed ? '#ef4444' : '#059669', background: isClosed ? 'var(--bg-danger-light)' : 'var(--bg-success-light)', padding: '3px 6px', borderRadius: '4px', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                     {isClosed ? 'FECHADA' : getFloaterName(assignedId)}
                   </div>
                 ) : (
-                  <div style={{fontSize:'10px', color:'#f59e0b', background:'#fff7ed', padding:'3px', borderRadius:'4px', textAlign:'center'}}>Pendente</div>
+                  <div style={{fontSize:'10px', color:'#f59e0b', background:'#fff7ed', padding:'3px', borderRadius:'4px', textAlign:'center', fontWeight: 'bold'}}>Pendente</div>
                 )}
-                {isSelected && <div style={{position:'absolute', top:'-6px', right:'-6px', background:'#2563eb', color:'white', borderRadius:'50%', padding:'2px', border:'2px solid white'}}><Check size={10}/></div>}
+                {isSelected && <div style={{position:'absolute', top:'-6px', right:'-6px', background:'var(--text-brand)', color:'white', borderRadius:'50%', padding:'2px', border:'2px solid var(--bg-card)'}}><Check size={10}/></div>}
               </div>
             )
           })}
@@ -434,7 +471,6 @@ export default function FaltasSupervisor({ userData }) {
     );
   };
 
-  // --- HANDLERS ---
   const saveFalta = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -451,7 +487,7 @@ export default function FaltasSupervisor({ userData }) {
       setFaltaForm({ storeId: '', attendantId: '', startDate: '', endDate: '', isFullDay: true, startTime: '', endTime: '', reason: '', obs: '', coverageMap: {} });
       setFileName(null);
       fetchAbsences();
-      setActiveTab('gestao'); // Vai para a aba de gestão automaticamente
+      setActiveTab('gestao'); 
     } catch (err) { alert("Erro: " + err.message); }
     setLoading(false);
   };
@@ -476,69 +512,77 @@ export default function FaltasSupervisor({ userData }) {
     setLoading(false);
   };
 
-  // --- RENDER ---
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.iconHeader}><UserX size={24} color="white"/></div>
+    <div style={{...(global.container || {}), maxWidth: '900px'}}>
+      <div style={global.header}>
+        <div style={{...(global.iconHeader || {}), background: 'var(--text-brand)'}}><UserX size={28} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Gestão de Ausências</h1>
-          <p style={styles.subtitle}>Faltas, Atestados e Escala</p>
+          <h1 style={global.title}>Gestão de Ausências</h1>
+          <p style={global.subtitle}>Faltas, Atestados e Escala.</p>
         </div>
       </div>
 
-      <div style={styles.tabs}>
-        <button onClick={() => setActiveTab('gestao')} style={activeTab === 'gestao' ? styles.tabActive : styles.tab}>
-          <Briefcase size={18} /> Gestão de Cobertura
+      <div style={local.tabs}>
+        <button onClick={() => setActiveTab('gestao')} style={activeTab === 'gestao' ? local.tabActive : local.tab}>
+          <Briefcase size={16} /> Gestão de Cobertura
         </button>
-        <button onClick={() => setActiveTab('escala')} style={activeTab === 'escala' ? styles.tabActive : styles.tab}>
-          <LayoutGrid size={18} /> Calendário de Escala
+        <button onClick={() => setActiveTab('escala')} style={activeTab === 'escala' ? local.tabActive : local.tab}>
+          <LayoutGrid size={16} /> Calendário de Escala
         </button>
-        <button onClick={() => setActiveTab('faltas')} style={activeTab === 'faltas' ? styles.tabActive : styles.tab}>
-          <AlertTriangle size={18} /> Nova Falta
+        <button onClick={() => setActiveTab('faltas')} style={activeTab === 'faltas' ? local.tabActive : local.tab}>
+          <AlertTriangle size={16} /> Nova Falta
         </button>
-        <button onClick={() => setActiveTab('ferias')} style={activeTab === 'ferias' ? styles.tabActive : styles.tab}>
-          <CalendarDays size={18} /> Agendar Férias
+        <button onClick={() => setActiveTab('ferias')} style={activeTab === 'ferias' ? local.tabActive : local.tab}>
+          <CalendarDays size={16} /> Agendar Férias
         </button>
       </div>
 
-      <div style={styles.content}>
+      <div style={local.content}>
         
-        {/* ABA: GESTÃO DE COBERTURA (NOVA) */}
         {activeTab === 'gestao' && <GestaoView />}
-
-        {/* ABA: ESCALA GERAL */}
         {activeTab === 'escala' && <EscalaView />}
 
-        {/* ABA: NOVA FALTA */}
         {activeTab === 'faltas' && (
           <div style={{animation:'fadeIn 0.3s'}}>
-            <form onSubmit={saveFalta} style={styles.formGrid}>
-              <div style={styles.section}>
-                <h3 style={styles.sectionTitle}>1. Dados da Falta</h3>
-                <div style={styles.row}>
-                  <div style={styles.field}>
-                    <label style={styles.label}>Loja</label>
-                    <select style={styles.input} value={faltaForm.storeId} onChange={(e) => handleStoreChange(e, 'falta')} required>
+            <form onSubmit={saveFalta} style={global.form}>
+              <div style={local.section}>
+                <h3 style={global.sectionTitle}>1. Dados da Falta</h3>
+                <div style={local.row}>
+                  <div style={global.field}>
+                    <label style={global.label}>Loja</label>
+                    <select style={global.select} value={faltaForm.storeId} onChange={(e) => handleStoreChange(e, 'falta')} required>
                       <option value="">Selecione...</option>
                       {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
-                  <div style={styles.field}>
-                    <label style={styles.label}>Atendente</label>
-                    <select style={styles.input} value={faltaForm.attendantId} onChange={e => setFaltaForm({...faltaForm, attendantId: e.target.value})} required disabled={!faltaForm.storeId}>
+                  <div style={global.field}>
+                    <label style={global.label}>Atendente</label>
+                    <select style={global.select} value={faltaForm.attendantId} onChange={e => setFaltaForm({...faltaForm, attendantId: e.target.value})} required disabled={!faltaForm.storeId}>
                       <option value="">Selecione...</option>
                       {attendants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
                 </div>
-                <div style={styles.row}>
-                  <div style={styles.field}><label style={styles.label}>Motivo</label><select style={styles.input} value={faltaForm.reason} onChange={e => setFaltaForm({...faltaForm, reason: e.target.value})} required><option value="">Selecione...</option><option value="Atestado">Atestado Médico</option><option value="Injustificada">Falta Injustificada</option><option value="Pessoal">Problema Pessoal</option></select></div>
-                  <div style={styles.field}><label style={styles.label}>Período</label><div style={{display:'flex', gap:'5px'}}><input type="date" style={styles.input} value={faltaForm.startDate} onChange={e => setFaltaForm({...faltaForm, startDate: e.target.value})} required /><input type="date" style={styles.input} value={faltaForm.endDate} onChange={e => setFaltaForm({...faltaForm, endDate: e.target.value})} required /></div></div>
+                <div style={local.row}>
+                  <div style={global.field}>
+                    <label style={global.label}>Motivo</label>
+                    <select style={global.select} value={faltaForm.reason} onChange={e => setFaltaForm({...faltaForm, reason: e.target.value})} required>
+                      <option value="">Selecione...</option>
+                      <option value="Atestado">Atestado Médico</option>
+                      <option value="Injustificada">Falta Injustificada</option>
+                      <option value="Pessoal">Problema Pessoal</option>
+                    </select>
+                  </div>
+                  <div style={global.field}>
+                    <label style={global.label}>Período</label>
+                    <div style={{display:'flex', gap:'10px'}}>
+                      <input type="date" style={global.input} value={faltaForm.startDate} onChange={e => setFaltaForm({...faltaForm, startDate: e.target.value})} required />
+                      <input type="date" style={global.input} value={faltaForm.endDate} onChange={e => setFaltaForm({...faltaForm, endDate: e.target.value})} required />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* COBERTURA OBRIGATÓRIA */}
               <CoverageManager 
                 startDate={faltaForm.startDate} 
                 endDate={faltaForm.endDate} 
@@ -547,33 +591,54 @@ export default function FaltasSupervisor({ userData }) {
                 floaters={floaters} 
               />
 
-              <div style={styles.section}>
-                 <h3 style={styles.sectionTitle}>3. Anexos</h3>
-                 <label htmlFor="file-upload" style={styles.uploadBox}>
+              <div style={local.section}>
+                 <h3 style={global.sectionTitle}>Anexos</h3>
+                 <label htmlFor="file-upload" style={local.uploadBox}>
                    <input id="file-upload" type="file" style={{display: 'none'}} onChange={handleFileChange} />
-                   <UploadCloud size={24} color="#94a3b8" />
-                   <span style={{fontSize: '13px', color: '#64748b', marginTop: '5px'}}>{fileName ? `Arquivo: ${fileName}` : "Anexar Comprovante"}</span>
+                   <UploadCloud size={24} color="var(--text-muted)" />
+                   <span style={{fontSize: '13px', color: 'var(--text-muted)', marginTop: '5px', fontWeight: 'bold'}}>{fileName ? `Arquivo: ${fileName}` : "Anexar Comprovante"}</span>
                  </label>
-                 <textarea style={{...styles.input, height:'80px', marginTop:'15px'}} placeholder="Observações..." value={faltaForm.obs} onChange={e => setFaltaForm({...faltaForm, obs: e.target.value})} />
+                 <textarea style={{...(global.textarea || {}), marginTop:'15px'}} placeholder="Observações adicionais..." value={faltaForm.obs} onChange={e => setFaltaForm({...faltaForm, obs: e.target.value})} />
               </div>
 
-              <button type="submit" style={styles.btnPrimary} disabled={loading}>{loading ? 'Salvando...' : 'Registrar Falta'}</button>
+              <button type="submit" style={{...(global.btnPrimary || {}), background: 'var(--text-brand)'}} disabled={loading}>{loading ? 'Salvando...' : 'Registrar Falta'}</button>
             </form>
           </div>
         )}
 
-        {/* === ABA DE FÉRIAS === */}
         {activeTab === 'ferias' && (
-          <form onSubmit={saveFerias} style={styles.formGrid}>
-            <div style={styles.infoBox}><Briefcase size={20} color="#059669" /><p>Programar com <strong>30 dias de antecedência</strong>.</p></div>
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Dados das Férias</h3>
-              <div style={styles.row}>
-                <div style={styles.field}><label style={styles.label}>Loja</label><select style={styles.input} value={feriasForm.storeId} onChange={(e) => handleStoreChange(e, 'ferias')} required><option value="">Selecione...</option>{stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                <div style={styles.field}><label style={styles.label}>Atendente</label><select style={styles.input} value={feriasForm.attendantId} onChange={e => setFeriasForm({...feriasForm, attendantId: e.target.value})} required disabled={!feriasForm.storeId}><option value="">Selecione...</option>{attendants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          <form onSubmit={saveFerias} style={global.form}>
+            <div style={local.infoBox}>
+              <Briefcase size={20} color="#10b981" />
+              <p style={{margin:0}}>As férias devem ser programadas com <strong>30 dias de antecedência</strong>.</p>
+            </div>
+            
+            <div style={local.section}>
+              <h3 style={global.sectionTitle}>Dados das Férias</h3>
+              <div style={local.row}>
+                <div style={global.field}>
+                  <label style={global.label}>Loja</label>
+                  <select style={global.select} value={feriasForm.storeId} onChange={(e) => handleStoreChange(e, 'ferias')} required>
+                    <option value="">Selecione...</option>
+                    {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div style={global.field}>
+                  <label style={global.label}>Atendente</label>
+                  <select style={global.select} value={feriasForm.attendantId} onChange={e => setFeriasForm({...feriasForm, attendantId: e.target.value})} required disabled={!feriasForm.storeId}>
+                    <option value="">Selecione...</option>
+                    {attendants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
               </div>
-              <div style={styles.row}>
-                <div style={styles.field}><label style={styles.label}>Período</label><div style={{display:'flex', gap:'5px'}}><input type="date" style={styles.input} value={feriasForm.startDate} onChange={e => setFeriasForm({...feriasForm, startDate: e.target.value})} required /><input type="date" style={styles.input} value={feriasForm.endDate} onChange={e => setFeriasForm({...feriasForm, endDate: e.target.value})} required /></div></div>
+              <div style={local.row}>
+                <div style={global.field}>
+                  <label style={global.label}>Período</label>
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <input type="date" style={global.input} value={feriasForm.startDate} onChange={e => setFeriasForm({...feriasForm, startDate: e.target.value})} required />
+                    <input type="date" style={global.input} value={feriasForm.endDate} onChange={e => setFeriasForm({...feriasForm, endDate: e.target.value})} required />
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -585,7 +650,7 @@ export default function FaltasSupervisor({ userData }) {
               floaters={floaters} 
             />
 
-            <button type="submit" style={{...styles.btnPrimary, background: '#059669'}} disabled={loading}>{loading ? 'Salvando...' : 'Agendar Férias'}</button>
+            <button type="submit" style={{...(global.btnPrimary || {}), background: '#10b981'}} disabled={loading}>{loading ? 'Salvando...' : 'Agendar Férias'}</button>
           </form>
         )}
 
@@ -594,33 +659,35 @@ export default function FaltasSupervisor({ userData }) {
   );
 }
 
-// --- ESTILOS ---
-const styles = {
-  container: { padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' },
-  iconHeader: { width: '45px', height: '45px', borderRadius: '12px', background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(234, 88, 12, 0.2)' },
-  title: { fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: 0 },
-  subtitle: { fontSize: '14px', color: '#64748b', margin: 0 },
-  tabs: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '1px' },
-  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent' },
-  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#ea580c', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid #ea580c' },
-  content: { background: 'white', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' },
-  formGrid: { display: 'flex', flexDirection: 'column', gap: '30px' },
-  section: { padding: '20px', border: '1px solid #f1f5f9', borderRadius: '16px', background: '#fcfdfe' },
-  sectionTitle: { fontSize: '14px', fontWeight: '800', color: '#334155', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' },
-  field: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  label: { fontSize: '13px', fontWeight: '600', color: '#475569' },
-  input: { padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', color: '#1e293b', width: '100%', boxSizing: 'border-box' },
-  inputSmall: { padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '13px', width: '100%' },
-  uploadBox: { border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'white', transition: '0.2s' },
-  btnPrimary: { padding: '16px', borderRadius: '14px', background: '#ea580c', color: 'white', border: 'none', fontWeight: '800', cursor: 'pointer', fontSize: '16px', marginTop: '10px', width: '100%' },
-  infoBox: { background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '15px', borderRadius: '12px', display: 'flex', gap: '15px', alignItems: 'center', fontSize: '13px', color: '#065f46' },
-  absenceCard: { background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  btnSmallAction: { background: '#eff6ff', color: '#2563eb', border: '1px solid #dbeafe', padding: '5px 10px', borderRadius: '6px', cursor:'pointer', fontSize:'12px' },
-  btnSmallCancel: { background: 'white', color: '#64748b', border: '1px solid #e2e8f0', padding: '5px 10px', borderRadius: '6px', cursor:'pointer', fontSize:'12px' },
-  btnApply: { background: '#2563eb', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(5px)' },
-  modalBox: { backgroundColor: 'white', padding: '32px', borderRadius: '28px', maxWidth: '400px', width: '90%', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s ease-out' },
-  card: { background: 'white', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }
+// ESTILOS LOCAIS
+const local = {
+  tabs: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', overflowX: 'auto' },
+  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent', whiteSpace: 'nowrap', transition: '0.2s' },
+  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-brand)', cursor: 'pointer', fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid var(--text-brand)', whiteSpace: 'nowrap', transition: '0.2s' },
+  
+  content: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
+  
+  infoBox: { background: 'var(--bg-success-light)', border: '1px solid var(--border-success)', padding: '15px 20px', borderRadius: '12px', display: 'flex', gap: '15px', alignItems: 'center', fontSize: '14px', color: '#10b981' },
+  section: { padding: '25px', border: '1px solid var(--border)', borderRadius: '16px', background: 'var(--bg-panel)' },
+  row: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' },
+  
+  uploadBox: { border: '2px dashed var(--border)', borderRadius: '16px', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--bg-app)', transition: '0.2s' },
+  
+  calendarContainer: { border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' },
+  calendarHeader: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' },
+  calendarHeaderCell: { textAlign: 'center', padding: '12px', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  calendarDays: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-card)' },
+  calendarCellEmpty: { background: 'var(--bg-app)', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)' },
+  calendarCell: { minHeight: '100px', padding: '10px', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', cursor: 'pointer', transition: '0.2s', position: 'relative' },
+  
+  holidayBadge: { marginTop: '8px', fontSize: '10px', background: 'var(--bg-danger-light)', color: '#ef4444', padding: '4px 6px', borderRadius: '6px', fontWeight: 'bold', display:'flex', justifyContent:'space-between', alignItems:'center', border: '1px solid var(--border-danger)' },
+  
+  coveragePanel: { marginTop: '20px', background: 'var(--bg-app)', padding: '25px', borderRadius: '20px', border: '1px solid var(--border)' },
+  coverageHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap: 'wrap', gap: '10px' },
+  coverageGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '15px' },
+  coverageItem: { borderRadius: '14px', padding: '12px', cursor: 'pointer', position: 'relative', transition: 'all 0.2s' },
+  
+  btnSmallAction: { background: 'var(--bg-primary-light)', color: 'var(--text-brand)', border: '1px solid var(--text-brand)', padding: '6px 12px', borderRadius: '8px', cursor:'pointer', fontSize:'12px', fontWeight: 'bold', transition: '0.2s' },
+  btnSmallCancel: { background: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: '8px', cursor:'pointer', fontSize:'12px', fontWeight: 'bold', transition: '0.2s' },
+  btnApply: { background: 'var(--text-brand)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', transition: 'transform 0.2s' },
 };

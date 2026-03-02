@@ -6,6 +6,8 @@ import {
   Wifi, Tv, Package, X, CheckCircle, AlertCircle, Filter, Tag, Eraser, Layers
 } from 'lucide-react';
 
+import { styles as global } from '../styles/globalStyles';
+
 export default function GestaoProdutos() {
   const [produtos, setProdutos] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -35,7 +37,6 @@ export default function GestaoProdutos() {
     try {
       const snap = await getDocs(query(collection(db, "product_categories"), orderBy("name")));
       if (snap.empty) {
-        // Popula as categorias padrão na primeira vez
         const defaultCats = ['Plano de Internet', 'SVA', 'Equipamento', 'Serviço Adicional'];
         for (const cat of defaultCats) {
             await addDoc(collection(db, "product_categories"), { name: cat });
@@ -128,16 +129,13 @@ export default function GestaoProdutos() {
 
   const handleDeleteProduct = async (id) => {
     try {
-      // 1. Verifica se existem vendas atreladas a este produto
       const q = query(collection(db, "leads"), where("productId", "==", id));
       const snap = await getDocs(q);
 
       if (!snap.empty) {
-        // Alerta de Alto Risco
         const confirmRisk = window.confirm(`⚠️ ALERTA DE INTEGRIDADE: Este serviço possui ${snap.size} venda(s) vinculada(s) no sistema!\n\nExcluí-lo permanentemente pode afetar o histórico de relatórios passados e comissões.\n\nDeseja continuar com a exclusão mesmo assim? (Recomendamos apenas INATIVAR o produto)`);
         if (!confirmRisk) return;
       } else {
-        // Confirmação normal
         const confirmNormal = window.confirm("Tem certeza que deseja excluir este serviço do catálogo?");
         if (!confirmNormal) return;
       }
@@ -171,7 +169,7 @@ export default function GestaoProdutos() {
 
   const getIconForCategory = (catName) => {
     const name = catName?.toLowerCase() || '';
-    if (name.includes('internet') || name.includes('plano')) return <Wifi size={24} color="#2563eb" />;
+    if (name.includes('internet') || name.includes('plano')) return <Wifi size={24} color="var(--text-brand)" />;
     if (name.includes('sva') || name.includes('tv')) return <Tv size={24} color="#ea580c" />;
     if (name.includes('equipamento') || name.includes('roteador')) return <Package size={24} color="#10b981" />;
     return <Tag size={24} color="#7c3aed" />;
@@ -179,10 +177,10 @@ export default function GestaoProdutos() {
 
   const getColorForCategory = (catName) => {
     const name = catName?.toLowerCase() || '';
-    if (name.includes('internet') || name.includes('plano')) return '#eff6ff';
-    if (name.includes('sva') || name.includes('tv')) return '#fff7ed';
-    if (name.includes('equipamento') || name.includes('roteador')) return '#ecfdf5';
-    return '#f3e8ff';
+    if (name.includes('internet') || name.includes('plano')) return 'var(--bg-primary-light)';
+    if (name.includes('sva') || name.includes('tv')) return 'rgba(234, 88, 12, 0.1)';
+    if (name.includes('equipamento') || name.includes('roteador')) return 'var(--bg-success-light)';
+    return 'rgba(124, 58, 237, 0.1)';
   };
 
   // --- GERENCIADOR DE CATEGORIAS ---
@@ -218,30 +216,30 @@ export default function GestaoProdutos() {
     };
 
     return (
-      <div style={styles.modalOverlay}>
-        <div style={styles.modalBox}>
-          <div style={styles.modalHeader}>
-            <h3 style={styles.modalTitle}>Catálogo de Categorias</h3>
-            <button onClick={() => setShowCategoryModal(false)} style={styles.closeBtn}><X size={20}/></button>
+      <div style={global.modalOverlay}>
+        <div style={global.modalBox}>
+          <div style={global.modalHeader}>
+            <h3 style={global.modalTitle}>Catálogo de Categorias</h3>
+            <button onClick={() => setShowCategoryModal(false)} style={global.closeBtn}><X size={20}/></button>
           </div>
           
           <form onSubmit={handleSaveCat} style={{display:'flex', gap:'10px', marginBottom:'25px'}}>
-            <input style={styles.input} placeholder="Nome da Categoria..." value={catName} onChange={e=>setCatName(e.target.value)} required autoFocus />
-            <button style={{...styles.btnPrimary, width:'auto'}}>{editingCat ? 'Salvar' : 'Adicionar'}</button>
-            {editingCat && <button type="button" onClick={()=>{setEditingCat(null); setCatName('');}} style={styles.btnCancel}>Cancelar</button>}
+            <input style={global.input} placeholder="Nome da Categoria..." value={catName} onChange={e=>setCatName(e.target.value)} required autoFocus />
+            <button style={{...(global.btnPrimary || {}), width:'auto'}}>{editingCat ? 'Salvar' : 'Adicionar'}</button>
+            {editingCat && <button type="button" onClick={()=>{setEditingCat(null); setCatName('');}} style={global.btnSecondary}>Cancelar</button>}
           </form>
 
           <div style={{maxHeight:'300px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'10px'}}>
             {categorias.map(c => (
-              <div key={c.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #e2e8f0'}}>
-                <span style={{fontWeight:'bold', color:'#334155'}}>{c.name}</span>
+              <div key={c.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px', background:'var(--bg-panel)', borderRadius:'10px', border:'1px solid var(--border)'}}>
+                <span style={{fontWeight:'bold', color:'var(--text-main)'}}>{c.name}</span>
                 <div style={{display:'flex', gap:'5px'}}>
-                  <button onClick={()=>{setEditingCat(c); setCatName(c.name);}} style={styles.actionBtnIcon} title="Editar"><Edit size={14} color="#3b82f6"/></button>
-                  <button onClick={()=>handleDeleteCategory(c.id)} style={styles.actionBtnIcon} title="Excluir"><Trash2 size={14} color="#ef4444"/></button>
+                  <button onClick={()=>{setEditingCat(c); setCatName(c.name);}} style={global.iconBtn} title="Editar"><Edit size={14} color="var(--text-brand)"/></button>
+                  <button onClick={()=>handleDeleteCategory(c.id)} style={global.iconBtn} title="Excluir"><Trash2 size={14} color="#ef4444"/></button>
                 </div>
               </div>
             ))}
-            {categorias.length === 0 && <p style={styles.emptyState}>Nenhuma categoria criada.</p>}
+            {categorias.length === 0 && <p style={global.emptyState}>Nenhuma categoria criada.</p>}
           </div>
         </div>
       </div>
@@ -249,90 +247,88 @@ export default function GestaoProdutos() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{...(global.container || {}), maxWidth: '1200px'}}>
       
-      <div style={styles.header}>
-        <div style={styles.iconHeader}>
-          <ShoppingBag size={28} color="white"/>
-        </div>
+      <div style={global.header}>
+        <div style={{...(global.iconHeader || {}), background: '#ea580c'}}><ShoppingBag size={28} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Produtos & Serviços</h1>
-          <p style={styles.subtitle}>Gerencie o catálogo de ofertas da Oquei Telecom.</p>
+          <h1 style={global.title}>Produtos & Serviços</h1>
+          <p style={global.subtitle}>Gerencie o catálogo de ofertas da Oquei Telecom.</p>
         </div>
       </div>
 
-      <div style={styles.toolbar}>
+      <div style={global.toolbar}>
         <div style={{display: 'flex', gap: '15px', flexWrap: 'wrap', flex: 1}}>
-          <div style={styles.searchBox}>
-            <Search size={18} color="#94a3b8" />
+          <div style={global.searchBox}>
+            <Search size={18} color="var(--text-muted)" />
             <input 
-              style={styles.searchInput} 
+              style={global.searchInput} 
               placeholder="Buscar produto pelo nome..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
           
-          <div style={styles.filterBox}>
-            <Filter size={18} color="#64748b" />
-            <select style={styles.selectFilter} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-card)', padding: '12px 15px', borderRadius: '14px', border: '1px solid var(--border)'}}>
+            <Filter size={18} color="var(--text-muted)" />
+            <select style={{border: 'none', background: 'transparent', outline: 'none', fontSize: '14px', color: 'var(--text-main)', fontWeight: 'bold', cursor: 'pointer'}} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
               <option value="all">Todas as Categorias</option>
               {categorias.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
 
           {(searchTerm !== '' || filterCategory !== 'all') && (
-            <button onClick={clearFilters} style={styles.btnClear}>
+            <button onClick={clearFilters} style={{background: 'var(--bg-danger-light)', color: '#ef4444', border: '1px solid var(--border-danger)', padding: '12px 16px', borderRadius: '14px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'}}>
               <Eraser size={16} /> Limpar Filtros
             </button>
           )}
         </div>
 
         <div style={{display: 'flex', gap: '10px'}}>
-          <button onClick={() => setShowCategoryModal(true)} style={styles.btnSecondary}>
+          <button onClick={() => setShowCategoryModal(true)} style={global.btnSecondary}>
             <Layers size={18} /> Categorias
           </button>
-          <button onClick={() => openModal()} style={styles.btnAdd}>
+          <button onClick={() => openModal()} style={{...(global.btnPrimary || {}), background: '#ea580c'}}>
             <Plus size={18} /> Novo Serviço
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div style={{padding: '50px', textAlign: 'center', color: '#94a3b8'}}>Carregando catálogo...</div>
+        <div style={{padding: '50px', textAlign: 'center', color: 'var(--text-muted)'}}>Carregando catálogo...</div>
       ) : (
-        <div style={styles.grid}>
+        <div style={global.gridCards}>
           {filteredProducts.map(prod => (
-            <div key={prod.id} style={{...styles.card, opacity: prod.active === false ? 0.6 : 1}}>
+            <div key={prod.id} style={{...(global.card || {}), display: 'flex', flexDirection: 'column', opacity: prod.active === false ? 0.6 : 1}}>
               
-              <div style={styles.cardTop}>
-                <div style={{...styles.iconWrapper, background: getColorForCategory(prod.categoryName)}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px'}}>
+                <div style={{padding: '12px', borderRadius: '14px', background: getColorForCategory(prod.categoryName)}}>
                   {getIconForCategory(prod.categoryName)}
                 </div>
                 <div style={{display:'flex', gap:'5px'}}>
-                   <button onClick={() => openModal(prod)} style={styles.actionBtnIcon} title="Editar">
-                     <Edit size={16} color="#3b82f6"/>
+                   <button onClick={() => openModal(prod)} style={global.iconBtn} title="Editar">
+                     <Edit size={16} color="var(--text-brand)"/>
                    </button>
-                   <button onClick={() => handleDeleteProduct(prod.id)} style={styles.actionBtnIcon} title="Excluir">
+                   <button onClick={() => handleDeleteProduct(prod.id)} style={global.iconBtn} title="Excluir">
                      <Trash2 size={16} color="#ef4444"/>
                    </button>
                 </div>
               </div>
               
-              <div style={styles.cardContent}>
-                <span style={styles.typeBadge}>{prod.categoryName}</span>
-                <h3 style={styles.prodName}>{prod.name}</h3>
-                <p style={styles.prodDesc}>{prod.description || 'Sem descrição cadastrada.'}</p>
+              <div style={{flex: 1, marginBottom: '20px'}}>
+                <span style={{fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'block'}}>{prod.categoryName}</span>
+                <h3 style={{fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 10px 0'}}>{prod.name}</h3>
+                <p style={{fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0}}>{prod.description || 'Sem descrição cadastrada.'}</p>
               </div>
               
-              <div style={styles.cardFooter}>
-                <div style={styles.priceTag}>R$ {Number(prod.price).toFixed(2)}</div>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '20px', borderTop: '1px solid var(--border)'}}>
+                <div style={{fontSize: '20px', fontWeight: '900', color: '#10b981'}}>R$ {Number(prod.price).toFixed(2)}</div>
                 <button 
                   onClick={() => toggleActiveStatus(prod.id, prod.active)}
                   style={{
-                    ...styles.statusBtn,
-                    background: prod.active !== false ? '#ecfdf5' : '#f1f5f9',
-                    color: prod.active !== false ? '#10b981' : '#64748b'
+                    border: 'none', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+                    background: prod.active !== false ? 'var(--bg-success-light)' : 'var(--bg-panel)',
+                    color: prod.active !== false ? '#10b981' : 'var(--text-muted)'
                   }}
                 >
                   {prod.active !== false ? <CheckCircle size={14}/> : <AlertCircle size={14}/>}
@@ -343,27 +339,25 @@ export default function GestaoProdutos() {
             </div>
           ))}
           {filteredProducts.length === 0 && (
-            <div style={styles.emptyState}>Nenhum produto encontrado.</div>
+            <div style={{gridColumn: '1 / -1', ...global.emptyState}}>Nenhum produto encontrado.</div>
           )}
         </div>
       )}
 
-      {showCategoryModal && <CategoryManager />}
-
       {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>{editingId ? 'Editar Serviço' : 'Novo Item do Catálogo'}</h3>
-              <button onClick={closeModal} style={styles.closeBtn}><X size={24} /></button>
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <h3 style={global.modalTitle}>{editingId ? 'Editar Serviço' : 'Novo Item do Catálogo'}</h3>
+              <button onClick={closeModal} style={global.closeBtn}><X size={24} /></button>
             </div>
 
-            <form onSubmit={handleSaveProduct} style={styles.form}>
+            <form onSubmit={handleSaveProduct} style={global.form}>
               
-              <div style={styles.field}>
-                <label style={styles.label}>Nome do Produto/Serviço</label>
+              <div style={global.field}>
+                <label style={global.label}>Nome do Produto/Serviço</label>
                 <input 
-                  style={styles.input} 
+                  style={global.input} 
                   placeholder="Ex: Plano 600 Mega" 
                   value={form.name} 
                   onChange={e => setForm({...form, name: e.target.value})} 
@@ -372,17 +366,17 @@ export default function GestaoProdutos() {
                 />
               </div>
 
-              <div style={styles.row}>
-                <div style={styles.field}>
-                  <label style={styles.label}>Categoria</label>
-                  <select style={styles.select} value={form.categoryId} onChange={e => setForm({...form, categoryId: e.target.value})} required>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+                <div style={global.field}>
+                  <label style={global.label}>Categoria</label>
+                  <select style={global.select} value={form.categoryId} onChange={e => setForm({...form, categoryId: e.target.value})} required>
                     {categorias.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-                <div style={styles.field}>
-                  <label style={styles.label}>Valor da mensalidade (R$)</label>
+                <div style={global.field}>
+                  <label style={global.label}>Valor da mensalidade (R$)</label>
                   <input 
-                    style={styles.input} 
+                    style={global.input} 
                     type="number" 
                     step="0.01" 
                     placeholder="0.00" 
@@ -393,29 +387,29 @@ export default function GestaoProdutos() {
                 </div>
               </div>
 
-              <div style={styles.field}>
-                <label style={styles.label}>Descrição (Informativo para Vendas)</label>
+              <div style={global.field}>
+                <label style={global.label}>Descrição (Informativo para Vendas)</label>
                 <textarea 
-                  style={styles.textarea} 
+                  style={global.textarea} 
                   placeholder="Detalhes sobre o plano, benefícios, regras de fidelidade..." 
                   value={form.description} 
                   onChange={e => setForm({...form, description: e.target.value})} 
                 />
               </div>
 
-              <div style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'10px', padding:'15px', background:'#f8fafc', borderRadius:'12px'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'10px', padding:'15px', background:'var(--bg-panel)', borderRadius:'12px', border: '1px solid var(--border)'}}>
                 <input 
                   type="checkbox" 
                   checked={form.active} 
                   onChange={e => setForm({...form, active: e.target.checked})} 
-                  style={{width:'18px', height:'18px', cursor:'pointer', accentColor: '#2563eb'}}
+                  style={{width:'18px', height:'18px', cursor:'pointer', accentColor: 'var(--text-brand)'}}
                 />
-                <span style={{fontSize:'14px', fontWeight:'bold', color:'#334155'}}>Produto Ativo no Catálogo</span>
+                <span style={{fontSize:'14px', fontWeight:'bold', color:'var(--text-main)'}}>Produto Ativo no Catálogo</span>
               </div>
 
               <div style={{display: 'flex', gap: '15px', marginTop: '15px'}}>
-                <button type="button" onClick={closeModal} style={styles.btnCancel}>Cancelar</button>
-                <button type="submit" style={styles.btnSave} disabled={isSaving}>
+                <button type="button" onClick={closeModal} style={{...(global.btnSecondary || {}), flex: 1}}>Cancelar</button>
+                <button type="submit" style={{...(global.btnPrimary || {}), background: '#ea580c', flex: 2}} disabled={isSaving}>
                   {isSaving ? 'Salvando...' : 'Salvar no Catálogo'}
                 </button>
               </div>
@@ -428,57 +422,3 @@ export default function GestaoProdutos() {
     </div>
   );
 }
-
-const styles = {
-  container: { animation: 'fadeIn 0.4s ease-out' },
-  
-  header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '35px' },
-  iconHeader: { width: '56px', height: '56px', borderRadius: '16px', background: '#ea580c', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(234, 88, 12, 0.2)' },
-  title: { fontSize: '28px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '15px', color: '#64748b', margin: '5px 0 0 0' },
-  
-  toolbar: { display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap', alignItems: 'center' },
-  searchBox: { flex: 1, minWidth: '250px', display: 'flex', alignItems: 'center', gap: '12px', background: 'white', padding: '12px 20px', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' },
-  searchInput: { border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '14px', color: '#1e293b' },
-  filterBox: { display: 'flex', alignItems: 'center', gap: '10px', background: 'white', padding: '12px 15px', borderRadius: '14px', border: '1px solid #e2e8f0' },
-  selectFilter: { border: 'none', background: 'transparent', outline: 'none', fontSize: '14px', color: '#334155', fontWeight: 'bold', cursor: 'pointer' },
-  
-  btnClear: { background: '#fef2f2', color: '#ef4444', border: '1px solid #fee2e2', padding: '12px 16px', borderRadius: '14px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
-  btnSecondary: { background: 'white', color: '#1e293b', border: '1px solid #e2e8f0', padding: '12px 20px', borderRadius: '14px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  btnAdd: { background: '#ea580c', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '14px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(234,88,12,0.2)', transition: 'transform 0.2s' },
-
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  card: { background: 'white', borderRadius: '24px', padding: '25px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', transition: 'all 0.2s' },
-  cardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
-  iconWrapper: { padding: '12px', borderRadius: '14px' },
-  actionBtnIcon: { background: '#f8fafc', border: '1px solid #f1f5f9', padding: '8px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  
-  cardContent: { flex: 1, marginBottom: '20px' },
-  typeBadge: { fontSize: '10px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'block' },
-  prodName: { fontSize: '18px', fontWeight: '800', color: '#1e293b', margin: '0 0 10px 0' },
-  prodDesc: { fontSize: '13px', color: '#64748b', lineHeight: '1.5', margin: 0 },
-  
-  cardFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '20px', borderTop: '1px solid #f1f5f9' },
-  priceTag: { fontSize: '20px', fontWeight: '900', color: '#059669' },
-  statusBtn: { border: 'none', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' },
-
-  emptyState: { gridColumn: '1 / -1', padding: '60px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', background: 'white', borderRadius: '24px', border: '1px dashed #cbd5e1' },
-
-  // MODAL
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modalBox: { background: 'white', padding: '35px', borderRadius: '28px', width: '90%', maxWidth: '550px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-  modalTitle: { fontSize: '22px', fontWeight: '900', color: '#1e293b', margin: 0 },
-  closeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' },
-  
-  form: { display: 'flex', flexDirection: 'column', gap: '18px' },
-  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
-  field: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  label: { fontSize: '13px', fontWeight: '800', color: '#475569' },
-  input: { padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', color: '#1e293b', background: '#f8fafc', width: '100%', boxSizing: 'border-box' },
-  select: { padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', color: '#1e293b', background: '#f8fafc', cursor: 'pointer', width: '100%', boxSizing: 'border-box' },
-  textarea: { padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', color: '#1e293b', background: '#f8fafc', minHeight: '100px', resize: 'vertical', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' },
-  
-  btnPrimary: { padding: '14px 20px', borderRadius: '14px', background: '#ea580c', color: 'white', border: 'none', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.2)', flex: 2 },
-  btnCancel: { padding: '14px 20px', borderRadius: '14px', background: '#f1f5f9', color: '#64748b', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', flex: 1 }
-};

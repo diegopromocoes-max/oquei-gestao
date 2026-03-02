@@ -1,74 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, getDocs, addDoc, serverTimestamp, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { 
   MapPin, Truck, Clock, CheckCircle, 
-  Info, Megaphone, Phone, Trash2, Plus, X, Calendar, User
+  Info, Plus, X, Layout, Globe, Navigation, Calendar
 } from 'lucide-react';
+
+import { styles as global } from '../styles/globalStyles';
+
+// Coordenadas de segurança (Fallback) caso a cidade ainda não tenha Lat/Lon cadastrada na Estrutura
+const FALLBACK_COORDS = {
+  'São José do Rio Preto': { lat: -20.8113, lon: -49.3758 },
+  'Bady Bassitt': { lat: -20.9175, lon: -49.3786 },
+  'Novo Horizonte': { lat: -21.4688, lon: -49.2197 },
+  'Novo Horizonte / Cedral': { lat: -21.4688, lon: -49.2197 },
+  'Cedral': { lat: -20.9022, lon: -49.2683 },
+  'Borborema': { lat: -21.6192, lon: -49.0736 },
+  'Sales': { lat: -21.3403, lon: -49.4852 },
+  'Nova Granada': { lat: -20.5333, lon: -49.3142 },
+  'Urupês': { lat: -21.2014, lon: -49.2908 },
+  'Potirendaba': { lat: -21.0416, lon: -49.3756 },
+  'Neves Paulista': { lat: -20.8466, lon: -49.4827 },
+};
 
 export default function JapaSupervisor({ userData }) {
   const [loading, setLoading] = useState(true);
   const [actions, setActions] = useState([]);
+  const [citiesData, setCitiesData] = useState([]);
+  
+  // Modais
   const [showModal, setShowModal] = useState(false);
-  const [showPlanningModal, setShowPlanningModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false); // Modal para atualizar cronograma
   
-  // Estado para controlar a posição da van (animação)
+  const [viewMode, setViewMode] = useState('map'); // 'roadmap' | 'map'
   const [vanPosition, setVanPosition] = useState(0);
+  const [selectedAction, setSelectedAction] = useState(null); // Para o mapa
   
-  // Estado do Formulário
+  // Form para Solicitação Avulsa
   const [form, setForm] = useState({
     title: '', date: '', time: '09:00', city: userData?.cityId || '',
     location: '', description: '', type: 'Panfletagem'
   });
 
-  // Cronograma Fevereiro 2026 (Mockado conforme solicitado)
+  // Form para Atualização do Cronograma (Marketing)
+  const [updateForm, setUpdateForm] = useState({
+    date: '', city: '', activity: 'Ação Comercial', 
+    useCustomCoords: false, customLat: '', customLon: ''
+  });
+
   const MOCK_SCHEDULE = [
-    { id: 1, date: '2026-02-02', city: 'Novo Horizonte / Cedral', location: 'NH Manhã / Cedral Tarde', activity: 'Ação Comercial', time: 'Integral' },
+    { id: 1, date: '2026-02-02', city: 'Novo Horizonte', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
     { id: 2, date: '2026-02-06', city: 'Borborema', location: 'Porta da Loja', activity: 'Ação Porta de Loja', time: 'Comercial' },
-    { id: 3, date: '2026-02-07', city: 'Borborema', location: 'Centro', activity: 'Inauguração 19H', time: '19:00' },
-    { id: 4, date: '2026-02-08', city: 'Borborema', location: 'Centro', activity: 'Festa São João', time: '09:00' },
-    { id: 5, date: '2026-02-13', city: 'Bady Bassitt', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
-    { id: 6, date: '2026-02-14', city: 'Borborema', location: 'Loja Oficial', activity: 'Inauguração da Loja', time: 'Integral' },
-    { id: 7, date: '2026-02-16', city: 'Sales', location: 'Praça', activity: 'Ação de Vendas', time: 'Integral' },
-    { id: 8, date: '2026-02-20', city: 'Nova Granada', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
-    { id: 9, date: '2026-02-21', city: 'Urupês', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
-    { id: 10, date: '2026-02-25', city: 'São José do Rio Preto', location: 'Rota da Moda', activity: 'Evento Empresas (Fechado)', time: 'Integral' },
-    { id: 11, date: '2026-02-26', city: 'Potirendaba', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
-    { id: 12, date: '2026-02-27', city: 'Neves Paulista', location: 'Centro', activity: 'Ação Comercial', time: 'Integral' },
+    { id: 3, date: '2026-02-07', city: 'Bady Bassitt', location: 'Praça Matriz', activity: 'Inauguração', time: '19:00' },
+    { id: 4, date: '2026-02-15', city: 'Nova Granada', location: 'Centro', activity: 'Panfletagem', time: 'Integral' },
+    { id: 5, date: '2026-02-20', city: 'São José do Rio Preto', location: 'Avenida', activity: 'Carro de Som', time: 'Integral' },
   ];
 
-  // --- CARREGAMENTO ---
   useEffect(() => {
-    fetchActions();
+    fetchData();
   }, []);
 
-  const fetchActions = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
+      // Busca Cidades para ter a Lat/Lon e Endereço
+      const snapCities = await getDocs(collection(db, "cities"));
+      const cData = snapCities.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCitiesData(cData);
+
+      // Busca Ações do Japa
       const q = query(collection(db, "marketing_actions")); 
       const snap = await getDocs(q);
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
-      let finalData = [];
-      if (list.length === 0) {
-        finalData = MOCK_SCHEDULE;
-      } else {
-        finalData = list.sort((a, b) => new Date(a.date) - new Date(b.date));
-      }
-      
+      let finalData = list.length === 0 ? MOCK_SCHEDULE : list.sort((a, b) => new Date(a.date) - new Date(b.date));
       setActions(finalData);
       
-      // Calcular posição da Van (Onde ela deve parar)
+      // Controla posição da Van na Lista Vertical
       const today = new Date().toISOString().split('T')[0];
       const todayIndex = finalData.findIndex(a => a.date >= today);
-      
-      // Se achou evento futuro/hoje, para nele. Se não, vai pro final.
       const targetIndex = todayIndex !== -1 ? todayIndex : finalData.length - 1;
-      
-      // Pequeno delay para a animação acontecer
-      setTimeout(() => {
-        setVanPosition(targetIndex * 120); // 120px é a altura estimada de cada card no mapa
-      }, 500);
+      setTimeout(() => setVanPosition(targetIndex * 120), 500);
 
     } catch (err) { console.error(err); }
     setLoading(false);
@@ -81,7 +93,18 @@ export default function JapaSupervisor({ userData }) {
     return 'future';
   };
 
-  // --- HANDLERS ---
+  // Quando a cidade muda no formulário, tenta auto-preencher o endereço da loja
+  const handleCityChange = (e) => {
+    const selectedCityName = e.target.value;
+    const cityDbInfo = citiesData.find(c => c.name === selectedCityName);
+    
+    setForm(prev => ({
+      ...prev, 
+      city: selectedCityName,
+      location: cityDbInfo?.address ? `Loja Oquei: ${cityDbInfo.address}` : prev.location
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -97,206 +120,466 @@ export default function JapaSupervisor({ userData }) {
       alert("Solicitação enviada para o Japa!");
       setShowModal(false);
       setForm({ ...form, title: '', location: '', description: '' });
-      fetchActions();
+      fetchData();
     } catch (err) { alert("Erro: " + err.message); }
+    setLoading(false);
+  };
+
+  const handleUpdateSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const payload = {
+        title: updateForm.activity,
+        activity: updateForm.activity,
+        date: updateForm.date,
+        time: '09:00', // Padrão
+        city: updateForm.city,
+        location: updateForm.useCustomCoords ? 'Local Externo Específico' : 'Loja Oficial',
+        requesterId: auth.currentUser.uid,
+        requesterName: userData.name,
+        clusterId: userData?.clusterId || 'Geral',
+        status: 'Agendado', // Entra como confirmada (inserida pelo marketing)
+        type: 'Cronograma Oficial',
+        createdAt: serverTimestamp()
+      };
+
+      if (updateForm.useCustomCoords) {
+        payload.lat = updateForm.customLat;
+        payload.lon = updateForm.customLon;
+      }
+
+      await addDoc(collection(db, "marketing_actions"), payload);
+      alert("Ação adicionada com sucesso ao Cronograma!");
+      setShowUpdateModal(false);
+      setUpdateForm({ date: '', city: '', activity: 'Ação Comercial', useCustomCoords: false, customLat: '', customLon: '' });
+      fetchData();
+    } catch (err) { alert("Erro ao atualizar: " + err.message); }
     setLoading(false);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm("Cancelar esta solicitação?")) {
       await deleteDoc(doc(db, "marketing_actions", id));
-      fetchActions();
+      fetchData();
     }
   };
 
-  return (
-    <div style={styles.container}>
+  // --- COMPONENTE MAPA GEOGRÁFICO (SATÉLITE REAL) ---
+  const GeographicMap = () => {
+    // 1. Preparar os pontos com coordenadas reais
+    const mapPoints = actions.map(act => {
+      const cityDb = citiesData.find(c => c.name.toLowerCase() === act.city.toLowerCase());
       
-      {/* CABEÇALHO */}
-      <div style={styles.header}>
-        <div style={styles.iconHeader}><Truck size={32} color="white"/></div>
+      // Prioridade: Coordenadas customizadas da ação > Coordenadas da Loja no BD > Fallback
+      let lat = act.lat ? parseFloat(act.lat) : (cityDb?.lat ? parseFloat(cityDb.lat) : null);
+      let lon = act.lon ? parseFloat(act.lon) : (cityDb?.lon ? parseFloat(cityDb.lon) : null);
+
+      if (!lat || !lon) {
+        const fallback = FALLBACK_COORDS[act.city];
+        if (fallback) {
+          lat = fallback.lat;
+          lon = fallback.lon;
+        } else {
+          lat = -20.8113; lon = -49.3758; // Rio Preto
+        }
+      }
+      return { ...act, lat, lon, status: getStatus(act.date) };
+    });
+
+    if (mapPoints.length === 0) return <div style={global.emptyState}>Nenhuma rota definida para o mapa.</div>;
+
+    // 2. Construir o documento HTML com a biblioteca Leaflet injetada
+    // Usamos imagens de Satélite de Alta Resolução da Esri com Nomes das Cidades (CartoDB)
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+        <style>
+          body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background: #0f172a; }
+          #map { height: 100vh; width: 100vw; background: #0f172a; }
+          
+          /* Estilos dos Pinos */
+          .pin-past { background: #94a3b8; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+          .pin-future { background: #3b82f6; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+          .pin-van { background: #ea580c; width: 36px; height: 36px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; font-size: 18px; position: relative; }
+          
+          /* Animação de pulso para a Van */
+          .pin-van::before { content: ''; position: absolute; top: -6px; left: -6px; right: -6px; bottom: -6px; border-radius: 50%; border: 3px solid #ea580c; animation: pulse 1.5s infinite; }
+          @keyframes pulse { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+          
+          /* Estilos dos Popups (Modo Escuro) */
+          .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.95); color: white; border-radius: 12px; border: 1px solid #334155; backdrop-filter: blur(5px); padding: 5px; }
+          .leaflet-popup-tip { background: rgba(15, 23, 42, 0.95); }
+          .leaflet-popup-content { margin: 10px 15px; }
+          .popup-title { font-size: 16px; font-weight: 900; margin: 0 0 5px 0; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; }
+          .popup-desc { font-size: 13px; margin: 0 0 8px 0; color: #f8fafc; font-weight: bold; }
+          .popup-date { font-size: 11px; color: #94a3b8; display: block; border-top: 1px solid #334155; padding-top: 8px; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          // Inicializa o mapa
+          const map = L.map('map', { zoomControl: false }).setView([-20.8113, -49.3758], 10);
+          L.control.zoom({ position: 'bottomleft' }).addTo(map);
+          
+          // 1. Camada de Satélite de Alta Resolução (Esri)
+          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+              maxZoom: 18,
+              attribution: 'Satélite &copy; Esri'
+          }).addTo(map);
+
+          // 2. Camada de Texto (Nomes de Cidades e Ruas por cima do satélite)
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+              maxZoom: 18,
+              opacity: 0.9
+          }).addTo(map);
+
+          // Importa os dados injetados pelo React
+          const points = ${JSON.stringify(mapPoints)};
+          const pastPoints = [];
+          const futurePoints = [];
+          
+          // Descobre onde separar o passado do futuro
+          let splitIndex = points.findIndex(p => p.status === 'today' || p.status === 'future');
+          if (splitIndex === -1) splitIndex = points.length;
+
+          // Adiciona os marcadores
+          points.forEach((p, idx) => {
+            if (idx <= splitIndex) pastPoints.push([p.lat, p.lon]);
+            if (idx >= splitIndex) futurePoints.push([p.lat, p.lon]);
+            
+            let iconClass = 'pin-future';
+            let htmlContent = '';
+            
+            if (p.status === 'past') iconClass = 'pin-past';
+            if (p.status === 'today') { 
+              iconClass = 'pin-van'; 
+              htmlContent = '🚐'; 
+            }
+
+            const icon = L.divIcon({
+              className: 'custom-div-icon',
+              html: '<div class="' + iconClass + '">' + htmlContent + '</div>',
+              iconSize: p.status === 'today' ? [36, 36] : [20, 20],
+              iconAnchor: p.status === 'today' ? [18, 18] : [10, 10],
+              popupAnchor: [0, -10]
+            });
+
+            const marker = L.marker([p.lat, p.lon], { icon }).addTo(map);
+            
+            // Formatar Data
+            const parts = p.date.split('-');
+            const dateFmt = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : p.date;
+            
+            // Criar Popup
+            const popupHtml = '<h4 class="popup-title">' + p.city + '</h4>' +
+                              '<p class="popup-desc">' + (p.activity || p.title) + '</p>' +
+                              '<span class="popup-date">📅 Agendado para: ' + dateFmt + '</span>';
+            
+            marker.bindPopup(popupHtml);
+            
+            // Abre o popup automaticamente se for hoje
+            if (p.status === 'today') {
+              setTimeout(() => marker.openPopup(), 500);
+            }
+          });
+
+          // Desenha a linha de trajeto (Cinza pontilhada para o passado, Azul sólida para o futuro)
+          if (pastPoints.length > 1) {
+            L.polyline(pastPoints, { color: '#94a3b8', weight: 4, dashArray: '8, 8', opacity: 0.8 }).addTo(map);
+          }
+          if (futurePoints.length > 1) {
+            L.polyline(futurePoints, { color: '#3b82f6', weight: 5, opacity: 0.9 }).addTo(map);
+          }
+
+          // Ajusta o zoom automaticamente para mostrar todos os pontos
+          if (points.length > 0) {
+            const bounds = L.latLngBounds(points.map(p => [p.lat, p.lon]));
+            map.fitBounds(bounds, { padding: [50, 50] });
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    return (
+      <div style={{position: 'relative', width: '100%', height: '600px', background: 'var(--bg-app)', borderRadius: '24px', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)'}}>
+        
+        {/* Iframe que roda o mapa de satélite independentemente do React */}
+        <iframe 
+          title="Mapa de Satélite"
+          srcDoc={htmlContent}
+          style={{ width: '100%', height: '100%', border: 'none' }}
+        />
+
+        {/* Legenda Flutuante (Overlay) */}
+        <div style={{position: 'absolute', bottom: '20px', right: '20px', background: 'var(--bg-card)', padding: '15px 20px', borderRadius: '16px', border: '1px solid var(--border)', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 10}}>
+          <h4 style={{margin: '0 0 12px 0', fontSize: '13px', color: 'var(--text-main)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Legenda do Trajeto</h4>
+          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
+             <div style={{width:'12px', height:'12px', borderRadius:'50%', background:'#94a3b8', border:'2px solid white'}}></div>
+             <span style={{fontSize:'13px', color:'var(--text-muted)', fontWeight: 'bold'}}>Rota Concluída</span>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
+             <div style={{width:'14px', height:'14px', borderRadius:'50%', background:'#ea580c', border:'2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px'}}>🚐</div>
+             <span style={{fontSize:'13px', color:'var(--text-main)', fontWeight:'900'}}>Japa Está Aqui</span>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+             <div style={{width:'12px', height:'12px', borderRadius:'50%', background:'#3b82f6', border:'2px solid white'}}></div>
+             <span style={{fontSize:'13px', color:'var(--text-main)', fontWeight: 'bold'}}>Próximas Paradas</span>
+          </div>
+        </div>
+
+      </div>
+    );
+  };
+
+  const RoadmapView = () => (
+    <div style={local.mapContainer}>
+      <div style={local.roadLine}></div>
+      <div style={{...local.vanActor, transform: `translateY(${vanPosition}px)`}}>
+        <div style={local.vanPulse}></div>
+        <div style={local.vanBody}><Truck size={20} color="white" /></div>
+        <div style={local.vanLabel}>Japa Aqui</div>
+      </div>
+
+      <div style={local.stopsContainer}>
+        {actions.map((item) => {
+          const status = getStatus(item.date);
+          const dateObj = new Date(item.date + 'T12:00:00');
+
+          return (
+            <div key={item.id} style={local.stopRow}>
+              <div style={local.dateSide}>
+                <span style={{...local.dayNum, color: status === 'past' ? 'var(--text-muted)' : 'var(--text-brand)'}}>
+                  {dateObj.getDate()}
+                </span>
+                <span style={local.monthName}>
+                  {dateObj.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
+                </span>
+              </div>
+
+              <div style={local.pinWrapper}>
+                 <div style={{
+                   ...local.pinDot, 
+                   background: status === 'past' ? 'var(--border)' : status === 'today' ? 'var(--text-brand)' : 'var(--bg-card)',
+                   border: status === 'future' ? '4px solid var(--text-brand)' : 'none'
+                 }}>
+                   {status === 'past' && <CheckCircle size={12} color="white"/>}
+                 </div>
+              </div>
+
+              <div style={{
+                ...local.cityCard,
+                opacity: status === 'past' ? 0.6 : 1,
+                borderColor: status === 'today' ? 'var(--text-brand)' : 'var(--border)',
+                boxShadow: status === 'today' ? 'var(--shadow-sm)' : 'none'
+              }}>
+                <h3 style={local.cityName}>
+                  <MapPin size={16} style={{marginRight:'5px', color:'#ef4444'}}/>
+                  {item.city}
+                </h3>
+                <p style={local.activityText}>{item.activity || item.title}</p>
+                <div style={local.metaRow}>
+                  <span><Clock size={12}/> {item.time}</span>
+                  <span>•</span>
+                  <span>{item.location}</span>
+                </div>
+                
+                {item.requesterId === auth.currentUser?.uid && (
+                  <button onClick={() => handleDelete(item.id)} style={local.deleteLink}>Cancelar</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{...global.container, maxWidth: '1000px'}}>
+      
+      <style>
+        {`
+          @keyframes dash { to { stroke-dashoffset: -100; } }
+          @keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
+        `}
+      </style>
+
+      <div style={global.header}>
+        <div style={global.iconHeader}><Truck size={32} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Rota do Japa</h1>
-          <p style={styles.subtitle}>Acompanhe onde a Van da Oquei está passando!</p>
+          <h1 style={global.title}>Rota do Japa</h1>
+          <p style={global.subtitle}>Acompanhe a van e solicite ações para a sua loja.</p>
         </div>
       </div>
 
-      {/* AVISO IMPORTANTE */}
-      <div style={styles.noticeBox}>
-        <div style={styles.noticeIcon}><Info size={24} color="#1e40af"/></div>
+      <div style={local.noticeBox}>
+        <div style={local.noticeIcon}><Info size={24} color="var(--text-brand)"/></div>
         <div>
-          <h3 style={styles.noticeTitle}>Alterações de Rota</h3>
-          <p style={styles.noticeText}>
-            Para alterar datas ou incluir sua cidade na rota, fale com a <strong>Raine (Marketing)</strong>.
+          <h3 style={local.noticeTitle}>Gestão de Rota</h3>
+          <p style={local.noticeText}>
+            O mapa abaixo mostra o trajeto programado. Para adicionar sua loja, crie uma solicitação!
           </p>
         </div>
       </div>
 
-      <div style={styles.content}>
+      <div style={local.content}>
         
-        {/* BARRA DE COMANDOS */}
-        <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'20px'}}>
-           <button onClick={() => setShowModal(true)} style={styles.fabBtn}>
-             <Plus size={18} style={{marginRight:'8px'}} /> Solicitar Ação
-           </button>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', flexWrap: 'wrap', gap: '15px'}}>
+           <div style={local.toggleContainer}>
+             <button onClick={() => setViewMode('map')} style={viewMode === 'map' ? local.toggleBtnActive : local.toggleBtn}>
+               <Globe size={16}/> Mapa Satélite
+             </button>
+             <button onClick={() => setViewMode('roadmap')} style={viewMode === 'roadmap' ? local.toggleBtnActive : local.toggleBtn}>
+               <Layout size={16}/> Lista Vertical
+             </button>
+           </div>
+           <div style={{display: 'flex', gap: '10px'}}>
+             <button onClick={() => setShowUpdateModal(true)} style={{...global.btnSecondary}}>
+               <Calendar size={18} /> Atualizar Ações do Mês
+             </button>
+             <button onClick={() => setShowModal(true)} style={{...global.btnPrimary, background: 'var(--text-brand)'}}>
+               <Plus size={18} /> Solicitar Ação
+             </button>
+           </div>
         </div>
 
-        {/* MAPA / ROADMAP */}
-        <div style={styles.mapContainer}>
-          
-          {/* ESTRADA (LINHA CENTRAL) */}
-          <div style={styles.roadLine}></div>
-
-          {/* VAN ANIMADA */}
-          <div style={{...styles.vanActor, transform: `translateY(${vanPosition}px)`}}>
-            <div style={styles.vanPulse}></div>
-            <div style={styles.vanBody}><Truck size={20} color="white" /></div>
-            <div style={styles.vanLabel}>Japa Aqui</div>
-          </div>
-
-          {/* PARADAS (EVENTOS) */}
-          <div style={styles.stopsContainer}>
-            {actions.map((item, index) => {
-              const status = getStatus(item.date);
-              const dateObj = new Date(item.date + 'T12:00:00');
-
-              return (
-                <div key={item.id} style={styles.stopRow}>
-                  
-                  {/* DATA (ESQUERDA) */}
-                  <div style={styles.dateSide}>
-                    <span style={{...styles.dayNum, color: status === 'past' ? '#94a3b8' : '#1e3a8a'}}>
-                      {dateObj.getDate()}
-                    </span>
-                    <span style={styles.monthName}>
-                      {dateObj.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* ALFINETE (CENTRO) */}
-                  <div style={styles.pinWrapper}>
-                     <div style={{
-                       ...styles.pinDot, 
-                       background: status === 'past' ? '#cbd5e1' : status === 'today' ? '#2563eb' : 'white',
-                       border: status === 'future' ? '4px solid #2563eb' : 'none'
-                     }}>
-                       {status === 'past' && <CheckCircle size={12} color="white"/>}
-                     </div>
-                  </div>
-
-                  {/* CARD DA CIDADE (DIREITA) */}
-                  <div style={{
-                    ...styles.cityCard,
-                    opacity: status === 'past' ? 0.6 : 1,
-                    borderColor: status === 'today' ? '#2563eb' : '#e2e8f0',
-                    boxShadow: status === 'today' ? '0 4px 12px rgba(37,99,235,0.15)' : 'none'
-                  }}>
-                    <h3 style={styles.cityName}>
-                      <MapPin size={16} style={{marginRight:'5px', color:'#ef4444'}}/>
-                      {item.city}
-                    </h3>
-                    <p style={styles.activityText}>{item.activity}</p>
-                    <div style={styles.metaRow}>
-                      <span><Clock size={12}/> {item.time}</span>
-                      <span>•</span>
-                      <span>{item.location}</span>
-                    </div>
-                    
-                    {item.requesterId === auth.currentUser?.uid && (
-                      <button onClick={() => handleDelete(item.id)} style={styles.deleteLink}>Cancelar</button>
-                    )}
-                  </div>
-
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {viewMode === 'roadmap' ? <RoadmapView /> : <GeographicMap />}
 
       </div>
 
-      {/* MODAL DE SOLICITAÇÃO */}
-      {showModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
-              <h3 style={{fontSize:'20px', fontWeight:'bold', color:'#1e293b'}}>Chamar o Japa</h3>
-              <button onClick={() => setShowModal(false)} style={styles.btnClose}><X size={24}/></button>
+      {/* MODAL DE ATUALIZAÇÃO DO CRONOGRAMA OFICIAL */}
+      {showUpdateModal && (
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <h3 style={global.modalTitle}>Atualizar Cronograma</h3>
+              <button onClick={() => setShowUpdateModal(false)} style={global.closeBtn}><X size={24}/></button>
             </div>
-            
-            <form onSubmit={handleSubmit} style={styles.form}>
-              <div><label style={styles.label}>O que vamos fazer?</label><input style={styles.input} placeholder="Ex: Panfletagem na Praça" value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}><div><label style={styles.label}>Tipo de Ação</label><select style={styles.input} value={form.type} onChange={e => setForm({...form, type: e.target.value})}><option>Panfletagem</option><option>Carro de Som</option><option>Porta de Loja</option><option>Evento na Cidade</option><option>Inauguração</option></select></div><div><label style={styles.label}>Data Sugerida</label><input type="date" style={styles.input} value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div></div>
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}><div><label style={styles.label}>Cidade</label><input style={styles.input} value={form.city} onChange={e => setForm({...form, city: e.target.value})} placeholder="Cidade da ação" required /></div><div><label style={styles.label}>Horário Início</label><input type="time" style={styles.input} value={form.time} onChange={e => setForm({...form, time: e.target.value})} required /></div></div>
-              <div><label style={styles.label}>Local Específico</label><input style={styles.input} placeholder="Ex: Em frente ao Banco Bradesco" value={form.location} onChange={e => setForm({...form, location: e.target.value})} required /></div>
-              <div><label style={styles.label}>Detalhes / Observações</label><textarea style={{...styles.input, height:'80px', resize:'none'}} placeholder="Descreva a estratégia ou necessidade..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
-              <button type="submit" style={styles.btnSubmit} disabled={loading}>{loading ? 'Enviando...' : 'Enviar Pedido'}</button>
+            <form onSubmit={handleUpdateSubmit} style={global.form}>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                 <div style={global.field}>
+                    <label style={global.label}>Data</label>
+                    <input type="date" style={global.input} value={updateForm.date} onChange={e => setUpdateForm({...updateForm, date: e.target.value})} required />
+                 </div>
+                 <div style={global.field}>
+                    <label style={global.label}>Cidade</label>
+                    <select style={global.select} value={updateForm.city} onChange={e => setUpdateForm({...updateForm, city: e.target.value})} required>
+                       <option value="">Selecione...</option>
+                       {citiesData.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                 </div>
+              </div>
+              <div style={global.field}>
+                 <label style={global.label}>Ação / Atividade</label>
+                 <input style={global.input} placeholder="Ex: Ação Comercial na Praça" value={updateForm.activity} onChange={e => setUpdateForm({...updateForm, activity: e.target.value})} required />
+              </div>
+
+              <div style={{marginTop:'10px', padding:'15px', background:'var(--bg-panel)', borderRadius:'12px', border: '1px solid var(--border)'}}>
+                 <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontWeight:'bold', color:'var(--text-main)', fontSize:'14px'}}>
+                   <input type="checkbox" checked={updateForm.useCustomCoords} onChange={e => setUpdateForm({...updateForm, useCustomCoords: e.target.checked})} style={{width:'18px', height:'18px', accentColor: 'var(--text-brand)'}} />
+                   Ação fora da loja? (Novas coordenadas)
+                 </label>
+                 {updateForm.useCustomCoords && (
+                   <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginTop:'15px'}}>
+                     <div style={global.field}>
+                       <label style={global.label}>Latitude</label>
+                       <input style={global.input} placeholder="-20.8123" value={updateForm.customLat} onChange={e => setUpdateForm({...updateForm, customLat: e.target.value})} required />
+                     </div>
+                     <div style={global.field}>
+                       <label style={global.label}>Longitude</label>
+                       <input style={global.input} placeholder="-49.3211" value={updateForm.customLon} onChange={e => setUpdateForm({...updateForm, customLon: e.target.value})} required />
+                     </div>
+                   </div>
+                 )}
+              </div>
+
+              <button type="submit" style={{...global.btnPrimary, background: 'var(--text-brand)', marginTop: '10px'}} disabled={loading}>
+                {loading ? 'A Guardar...' : 'Adicionar ao Cronograma'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* MODAL DE SOLICITAÇÃO AVULSA */}
+      {showModal && (
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <h3 style={global.modalTitle}>Chamar o Japa</h3>
+              <button onClick={() => setShowModal(false)} style={global.closeBtn}><X size={24}/></button>
+            </div>
+            
+            <form onSubmit={handleSubmit} style={global.form}>
+              <div style={global.field}><label style={global.label}>O que vamos fazer?</label><input style={global.input} placeholder="Ex: Panfletagem na Praça" value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}><div style={global.field}><label style={global.label}>Tipo de Ação</label><select style={global.select} value={form.type} onChange={e => setForm({...form, type: e.target.value})}><option>Panfletagem</option><option>Carro de Som</option><option>Porta de Loja</option><option>Evento</option><option>Inauguração</option></select></div><div style={global.field}><label style={global.label}>Data Sugerida</label><input type="date" style={global.input} value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div></div>
+              
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                <div style={global.field}>
+                  <label style={global.label}>Cidade</label>
+                  <select style={global.select} value={form.city} onChange={handleCityChange} required>
+                    <option value="">Selecione...</option>
+                    {citiesData.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div style={global.field}>
+                  <label style={global.label}>Horário Início</label>
+                  <input type="time" style={global.input} value={form.time} onChange={e => setForm({...form, time: e.target.value})} required />
+                </div>
+              </div>
+              
+              <div style={global.field}>
+                <label style={global.label}>Local Específico</label>
+                <div style={{fontSize: '11px', color: 'var(--text-muted)', marginBottom: '5px'}}>
+                  Preenchemos automaticamente com o endereço da loja. Pode alterar se a ação for noutro local (ex: Praça Matriz).
+                </div>
+                <input style={global.input} placeholder="Ex: Em frente à Matriz" value={form.location} onChange={e => setForm({...form, location: e.target.value})} required />
+              </div>
+              
+              <div style={global.field}><label style={global.label}>Detalhes (Opcional)</label><textarea style={{...global.textarea, minHeight:'80px'}} placeholder="Descreva a estratégia..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
+              <button type="submit" style={{...global.btnPrimary, background: 'var(--text-brand)'}} disabled={loading}>{loading ? 'Enviando...' : 'Enviar Pedido'}</button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// --- ESTILOS INLINE (PREMIUM) ---
-const styles = {
-  container: { padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
-  header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' },
-  iconHeader: { width: '60px', height: '60px', borderRadius: '16px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.25)' },
-  title: { fontSize: '28px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '15px', color: '#64748b', margin: '5px 0 0 0' },
-
-  noticeBox: { background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '16px', padding: '20px', marginBottom: '40px', display: 'flex', gap: '20px', alignItems: 'center' },
-  noticeIcon: { background: '#dbeafe', padding: '12px', borderRadius: '50%' },
-  noticeTitle: { fontSize: '16px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '5px', marginTop: 0 },
-  noticeText: { fontSize: '14px', color: '#1e40af', lineHeight: '1.5', margin: 0 },
-
+const local = {
+  noticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', marginBottom: '30px', display: 'flex', gap: '20px', alignItems: 'center' },
+  noticeIcon: { background: 'var(--bg-card)', padding: '12px', borderRadius: '50%' },
+  noticeTitle: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-brand)', marginBottom: '5px', marginTop: 0 },
+  noticeText: { fontSize: '14px', color: 'var(--text-main)', margin: 0 },
   content: { position: 'relative' },
-  
-  // ROADMAP
-  mapContainer: { position: 'relative', marginTop: '20px' },
-  roadLine: { position: 'absolute', left: '70px', top: '20px', bottom: '20px', width: '4px', background: '#e2e8f0', borderRadius: '2px', zIndex: 0 },
-  
-  // VAN ANIMATION
+  toggleContainer: { background: 'var(--bg-panel)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', border: '1px solid var(--border)' },
+  toggleBtn: { background: 'transparent', border: 'none', color: 'var(--text-muted)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
+  toggleBtnActive: { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' },
+  mapContainer: { position: 'relative', marginTop: '20px', animation: 'fadeIn 0.3s' },
+  roadLine: { position: 'absolute', left: '70px', top: '20px', bottom: '20px', width: '4px', background: 'var(--border)', borderRadius: '2px', zIndex: 0 },
   vanActor: { position: 'absolute', left: '52px', top: '0', zIndex: 10, transition: 'transform 1s cubic-bezier(0.25, 1, 0.5, 1)', display:'flex', alignItems:'center' },
-  vanBody: { width: '40px', height: '40px', background: '#2563eb', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)', position:'relative', zIndex:2 },
-  vanPulse: { position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', border: '2px solid #2563eb', animation: 'ping 1.5s infinite', zIndex:1 },
-  vanLabel: { position: 'absolute', left: '50px', background: '#2563eb', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', whiteSpace:'nowrap' },
-
+  vanBody: { width: '40px', height: '40px', background: 'var(--text-brand)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)', position:'relative', zIndex:2 },
+  vanPulse: { position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', border: '2px solid var(--text-brand)', animation: 'ping 1.5s infinite', zIndex:1 },
+  vanLabel: { position: 'absolute', left: '50px', background: 'var(--text-brand)', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', whiteSpace:'nowrap' },
   stopsContainer: { display: 'flex', flexDirection: 'column', gap: '0px' },
   stopRow: { display: 'flex', alignItems: 'stretch', minHeight: '120px' },
-  
   dateSide: { width: '50px', textAlign: 'right', paddingTop: '20px', paddingRight: '20px' },
-  dayNum: { display: 'block', fontSize: '20px', fontWeight: '900', lineHeight: 1 },
-  monthName: { fontSize: '10px', fontWeight: 'bold', color: '#94a3b8' },
-
+  dayNum: { display: 'block', fontSize: '20px', fontWeight: '900', lineHeight: 1, color: 'var(--text-main)' },
+  monthName: { fontSize: '10px', fontWeight: 'bold', color: 'var(--text-muted)' },
   pinWrapper: { width: '40px', display: 'flex', justifyContent: 'center', paddingTop: '24px', position: 'relative' },
-  pinDot: { width: '16px', height: '16px', borderRadius: '50%', background: 'white', border: '4px solid #e2e8f0', zIndex: 1, display:'flex', alignItems:'center', justifyContent:'center' },
-  
-  cityCard: { flex: 1, background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', marginBottom: '20px', marginLeft: '20px', position: 'relative' },
-  cityName: { fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 5px 0', display:'flex', alignItems:'center' },
-  activityText: { fontSize: '14px', color: '#334155', fontWeight: '500' },
-  metaRow: { display: 'flex', gap: '8px', fontSize: '12px', color: '#64748b', marginTop: '10px', alignItems: 'center' },
-  deleteLink: { position: 'absolute', top: '20px', right: '20px', border: 'none', background: 'none', color: '#ef4444', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' },
-
-  fabBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center' },
-
-  // MODAL
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modal: { background: 'white', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '500px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-  btnClose: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' },
-  form: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  label: { fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '5px', display: 'block' },
-  input: { width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '14px', color: '#1e293b', boxSizing: 'border-box' },
-  btnSubmit: { padding: '16px', borderRadius: '14px', background: '#ea580c', color: 'white', border: 'none', fontWeight: '800', fontSize: '15px', cursor: 'pointer', marginTop: '10px' }
+  pinDot: { width: '16px', height: '16px', borderRadius: '50%', background: 'white', border: '4px solid var(--border)', zIndex: 1, display:'flex', alignItems:'center', justifyContent:'center' },
+  cityCard: { flex: 1, background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', padding: '20px', marginBottom: '20px', marginLeft: '20px', position: 'relative' },
+  cityName: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 5px 0', display:'flex', alignItems:'center' },
+  activityText: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500', margin: 0 },
+  metaRow: { display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px', alignItems: 'center' },
+  deleteLink: { position: 'absolute', top: '20px', right: '20px', border: 'none', background: 'none', color: '#ef4444', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }
 };
-
-// Estilos globais
-const styleSheet = document.createElement("style");
-styleSheet.innerText = `
-  @keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
-`;
-document.head.appendChild(styleSheet);

@@ -1,5 +1,62 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: #f0f2f5;
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* FORÇAR A FONTE ELEGANTE EM TODO O SISTEMA */
+* {
+  font-family: 'Manrope', sans-serif !important;
 }
+
+button {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+
+/* VARIÁVEIS GLOBAIS DO SISTEMA (MODO CLARO E ESCURO) */
+:root, [data-theme="light"] {
+  --bg-app: #f8fafc;
+  --bg-panel: #ffffff;
+  --bg-card: #ffffff;
+  --border: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-brand: #2563eb;
+  
+  --bg-badge: #f1f5f9;
+  --text-badge: #334155;
+  
+  --bg-primary-light: #eff6ff;
+  --bg-success-light: #ecfdf5;
+  --bg-danger-light: #fef2f2;
+  --border-success: #a7f3d0;
+  --border-danger: #fecaca;
+  
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] {
+  --bg-app: #020617;
+  --bg-panel: #0f172a;
+  --bg-card: #1e293b;
+  --border: #334155;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-brand: #60a5fa;
+  
+  --bg-badge: #0f172a;
+  --text-badge: #cbd5e1;
+  
+  --bg-primary-light: rgba(37, 99, 235, 0.15);
+  --bg-success-light: rgba(16, 185, 129, 0.1);
+  --bg-danger-light: rgba(239, 68, 68, 0.1);
+  --border-success: rgba(16, 185, 129, 0.2);
+  --border-danger: rgba(239, 68, 68, 0.2);
+  
+  --shadow-sm: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

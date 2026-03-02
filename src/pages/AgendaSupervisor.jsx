@@ -75,9 +75,8 @@ export default function AgendaSupervisor({ userData }) {
       location: event.location || '',
       description: event.description || ''
     });
-    // Ajusta a data selecionada para a data do evento sendo editado (caso esteja visualizando outro dia)
+    // Ajusta a data selecionada para a data do evento sendo editado
     if (event.date) {
-        // Tenta contornar problemas de fuso convertendo a string YYYY-MM-DD
         const [y, m, d] = event.date.split('-').map(Number);
         setSelectedDate(new Date(y, m - 1, d));
     }
@@ -184,8 +183,8 @@ export default function AgendaSupervisor({ userData }) {
                   onClick={() => handleDateClick(day)}
                   style={{
                     ...styles.dayCell,
-                    backgroundColor: isSelected ? '#2563eb' : isToday ? '#eff6ff' : 'transparent',
-                    color: isSelected ? 'white' : isToday ? '#2563eb' : '#334155',
+                    backgroundColor: isSelected ? 'var(--text-brand)' : isToday ? 'var(--bg-primary-light)' : 'transparent',
+                    color: isSelected ? 'white' : isToday ? 'var(--text-brand)' : 'var(--text-main)',
                     fontWeight: isSelected || isToday ? 'bold' : 'normal'
                   }}
                 >
@@ -301,7 +300,7 @@ export default function AgendaSupervisor({ userData }) {
               <div>
                 <label style={styles.label}>Local ou Link</label>
                 <div style={styles.inputIconWrapper}>
-                  {form.location.includes('http') ? <Video size={18} color="#94a3b8"/> : <MapPin size={18} color="#94a3b8"/>}
+                  {form.location.includes('http') ? <Video size={18} color="var(--text-muted)"/> : <MapPin size={18} color="var(--text-muted)"/>}
                   <input style={styles.inputIcon} placeholder="Google Meet ou Endereço" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
                 </div>
               </div>
@@ -309,7 +308,7 @@ export default function AgendaSupervisor({ userData }) {
               <div>
                 <label style={styles.label}>Anotações (Pauta/Obs)</label>
                 <div style={styles.inputIconWrapper}>
-                  <AlignLeft size={18} color="#94a3b8" style={{marginTop: '12px'}}/>
+                  <AlignLeft size={18} color="var(--text-muted)" style={{marginTop: '12px'}}/>
                   <textarea style={{...styles.inputIcon, height: '80px', resize: 'none'}} placeholder="Detalhes..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
                 </div>
               </div>
@@ -326,70 +325,70 @@ export default function AgendaSupervisor({ userData }) {
   );
 }
 
-// --- ESTILOS (CSS INLINE PREMIUM) ---
+// --- ESTILOS DINÂMICOS COM CSS VARIABLES ---
 const styles = {
   container: { padding: '20px', maxWidth: '1000px', margin: '0 auto', fontFamily: "'Inter', sans-serif" },
   header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' },
-  iconHeader: { width: '45px', height: '45px', borderRadius: '12px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)' },
-  title: { fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: 0 },
-  subtitle: { fontSize: '14px', color: '#64748b', margin: 0 },
+  iconHeader: { width: '45px', height: '45px', borderRadius: '12px', background: 'var(--text-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)' },
+  title: { fontSize: '24px', fontWeight: '800', color: 'var(--text-main)', margin: 0 },
+  subtitle: { fontSize: '14px', color: 'var(--text-muted)', margin: 0 },
 
   layoutGrid: { display: 'grid', gridTemplateColumns: '1fr 350px', gap: '30px', alignItems: 'start' },
   
   // CALENDÁRIO ESQUERDA
-  calendarCard: { background: 'white', borderRadius: '20px', padding: '25px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' },
+  calendarCard: { background: 'var(--bg-card)', borderRadius: '20px', padding: '25px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' },
   calendarHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-  monthTitle: { fontSize: '18px', fontWeight: 'bold', color: '#1e293b', textTransform: 'capitalize' },
-  navBtn: { background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '5px', cursor: 'pointer', color: '#64748b' },
+  monthTitle: { fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', textTransform: 'capitalize' },
+  navBtn: { background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '8px', padding: '5px', cursor: 'pointer', color: 'var(--text-muted)' },
   
   weekGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '10px' },
-  weekDay: { textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase' },
+  weekDay: { textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' },
   
   daysGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px' },
   dayCell: { aspectRatio: '1', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s', fontSize: '14px', position: 'relative' },
   dotsContainer: { display: 'flex', gap: '3px', marginTop: '4px' },
   
   legend: { display: 'flex', gap: '15px', marginTop: '20px', justifyContent: 'center' },
-  legendItem: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' },
+  legendItem: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' },
   dot: { width: '8px', height: '8px', borderRadius: '50%' },
 
   // DETALHES DIREITA
-  detailsCard: { background: 'white', borderRadius: '20px', padding: '25px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', height: 'fit-content', minHeight: '400px' },
-  detailsHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' },
-  detailsTitle: { fontSize: '16px', fontWeight: 'bold', color: '#1e293b', textTransform: 'capitalize' },
-  detailsSub: { fontSize: '12px', color: '#64748b' },
-  addBtn: { background: '#2563eb', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)' },
+  detailsCard: { background: 'var(--bg-card)', borderRadius: '20px', padding: '25px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', height: 'fit-content', minHeight: '400px' },
+  detailsHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '15px' },
+  detailsTitle: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)', textTransform: 'capitalize' },
+  detailsSub: { fontSize: '12px', color: 'var(--text-muted)' },
+  addBtn: { background: 'var(--text-brand)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)' },
   
   eventsList: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  eventItem: { background: '#f8fafc', borderRadius: '12px', padding: '12px', display: 'flex', gap: '12px', position: 'relative' },
-  eventTime: { fontSize: '12px', fontWeight: 'bold', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', minWidth: '60px' },
+  eventItem: { background: 'var(--bg-panel)', borderRadius: '12px', padding: '12px', display: 'flex', gap: '12px', position: 'relative', border: '1px solid var(--border)' },
+  eventTime: { fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', minWidth: '60px' },
   eventInfo: { flex: 1 },
-  eventTitle: { fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 4px 0' },
-  eventMeta: { fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-  eventDesc: { fontSize: '11px', color: '#475569', marginTop: '6px', fontStyle: 'italic', borderTop: '1px solid #e2e8f0', paddingTop: '4px' },
+  eventTitle: { fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 4px 0' },
+  eventMeta: { fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
+  eventDesc: { fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', fontStyle: 'italic', borderTop: '1px solid var(--border)', paddingTop: '4px' },
   
   actionButtons: { display: 'flex', flexDirection: 'column', gap: '5px' },
   deleteBtn: { background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px' },
-  editBtn: { background: 'transparent', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '5px' },
+  editBtn: { background: 'transparent', border: 'none', color: 'var(--text-brand)', cursor: 'pointer', padding: '5px' },
   
-  emptyState: { textAlign: 'center', color: '#94a3b8', fontSize: '13px', marginTop: '40px' },
-  linkBtn: { background: 'none', border: 'none', color: '#2563eb', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', fontSize: '12px' },
+  emptyState: { textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', marginTop: '40px' },
+  linkBtn: { background: 'none', border: 'none', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', fontSize: '12px' },
 
   // MODAL
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' },
-  modalBox: { backgroundColor: 'white', padding: '30px', borderRadius: '24px', maxWidth: '400px', width: '90%', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
+  modalBox: { backgroundColor: 'var(--bg-card)', padding: '30px', borderRadius: '24px', maxWidth: '400px', width: '90%', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', border: '1px solid var(--border)' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-  modalTitle: { fontSize: '18px', fontWeight: 'bold', color: '#1e293b' },
-  closeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' },
+  modalTitle: { fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)' },
+  closeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' },
   
   formStack: { display: 'flex', flexDirection: 'column', gap: '15px' },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
-  label: { fontSize: '12px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px', display: 'block' },
-  input: { width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '14px', boxSizing: 'border-box' },
-  inputIconWrapper: { display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '0 10px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white' },
-  inputIcon: { flex: 1, border: 'none', padding: '10px 0', outline: 'none', fontSize: '14px' },
+  label: { fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '5px', display: 'block' },
+  input: { width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', boxSizing: 'border-box', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' },
+  inputIconWrapper: { display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '0 10px', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--bg-app)' },
+  inputIcon: { flex: 1, border: 'none', padding: '10px 0', outline: 'none', fontSize: '14px', backgroundColor: 'transparent', color: 'var(--text-main)' },
   
   modalFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' },
-  dateDisplay: { fontSize: '12px', fontWeight: 'bold', color: '#64748b', display: 'flex', gap: '6px', alignItems: 'center' },
-  saveBtn: { padding: '10px 20px', borderRadius: '10px', background: '#2563eb', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer' }
+  dateDisplay: { fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'flex', gap: '6px', alignItems: 'center' },
+  saveBtn: { padding: '10px 20px', borderRadius: '10px', background: 'var(--text-brand)', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer' }
 };
