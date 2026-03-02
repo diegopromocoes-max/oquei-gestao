@@ -4,26 +4,27 @@ import { collection, query, where, updateDoc, doc, onSnapshot } from 'firebase/f
 import { 
   Calendar, Phone, X, Search, PlusCircle, 
   Quote, CheckCircle2, UserCircle, MapPin, AlertTriangle,
-  Layers, Edit2, GripVertical, Users
+  Layers, Edit2, GripVertical, Users, Trash2
 } from 'lucide-react';
 
+// IMPORTAÇÃO DOS ESTILOS GLOBAIS
 import { styles as global } from '../styles/globalStyles';
 
 export default function MeusLeads({ userData, onNavigate }) {
   const [myLeads, setMyLeads] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [updateModal, setUpdateModal] = useState(null);
+  const [updateModal, setUpdateModal] = useState(null); // Para editar status e motivo de descarte
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState(null);
   const [filterLeadType, setFilterLeadType] = useState('all');
 
-  // Estado para o Drag and Drop (Arrastar e Soltar)
+  // Estado para o Drag and Drop
   const [draggedLead, setDraggedLead] = useState(null);
 
   const quotes = [
     { text: "O sucesso é a soma de pequenos esforços repetidos dia após dia.", author: "Robert Collier" },
     { text: "Vender é ajudar o cliente a comprar o que ele realmente precisa.", author: "Oquei Telecom" },
-    { text: "Cada 'não' deixa-te mais perto do próximo 'sim'. Mantém o foco!", author: "Comercial" }
+    { text: "Cada 'não' deixa-te mais perto do próximo 'sim'.", author: "Comercial" }
   ];
 
   const randomQuote = useMemo(() => quotes[Math.floor(Math.random() * quotes.length)], []);
@@ -40,11 +41,10 @@ export default function MeusLeads({ userData, onNavigate }) {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // --- BUSCA DE LEADS COM ESCUTA ATIVA E PROTEÇÃO DE AUTH ---
+  // --- BUSCA DE LEADS COM ESCUTA ATIVA ---
   useEffect(() => {
     let unsubscribeSnapshot;
     
-    // Ouve ativamente até o Firebase confirmar a identidade do utilizador logado
     const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
         const qLeads = query(collection(db, "leads"), where("attendantId", "==", user.uid));
@@ -53,14 +53,13 @@ export default function MeusLeads({ userData, onNavigate }) {
           const leadsData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setMyLeads(leadsData);
         }, (error) => {
-          showToast("Erro de leitura: " + error.message, 'error');
+          showToast("Erro ao carregar dados do banco.", 'error');
         });
       } else {
         setMyLeads([]);
       }
     });
 
-    // Limpa os observadores quando o componente é fechado
     return () => {
       unsubscribeAuth();
       if (unsubscribeSnapshot) unsubscribeSnapshot();
@@ -79,14 +78,14 @@ export default function MeusLeads({ userData, onNavigate }) {
         fidelityMonth: updateModal.status === 'Descartado' && updateModal.discardMotive === 'Fidelidade em outro Provedor' ? updateModal.fidelityMonth : null
       });
       setUpdateModal(null);
-      showToast("Status atualizado com sucesso!");
+      showToast("Venda atualizada com sucesso!");
     } catch (err) { 
-      showToast(err.message, 'error');
+      showToast("Erro ao atualizar no banco.", 'error');
     }
   };
 
   // ==========================================
-  // LÓGICA DE DRAG AND DROP (ARRASTAR E SOLTAR)
+  // LÓGICA DE DRAG AND DROP
   // ==========================================
   const handleDragStart = (e, lead) => {
     setDraggedLead(lead);
@@ -108,8 +107,9 @@ export default function MeusLeads({ userData, onNavigate }) {
       return; 
     }
 
+    // Se for descartar, precisa do modal para o motivo
     if (newStatus === 'Descartado') {
-      setUpdateModal({ ...draggedLead, status: 'Descartado' });
+      setUpdateModal({ ...draggedLead, status: 'Descartado', discardMotive: '' });
     } else {
       try {
         await updateDoc(doc(db, "leads", draggedLead.id), { 
@@ -119,24 +119,20 @@ export default function MeusLeads({ userData, onNavigate }) {
         });
         showToast(`Movido para ${newStatus}`);
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast("Erro ao mover lead.", 'error');
       }
     }
     setDraggedLead(null);
   };
 
-  // --- FILTROS PROTEGIDOS ---
+  // --- FILTROS ---
   const filteredLeads = useMemo(() => {
     return myLeads.filter(l => {
       const matchesMonth = l.date && l.date.startsWith(selectedMonth);
-      
-      // Correção crírica: previne crash se o nome/telefone for undefined
       const safeName = l.customerName || '';
       const safePhone = l.customerPhone || '';
-      
       const matchesSearch = safeName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             safePhone.includes(searchTerm);
-                            
       const matchesType = filterLeadType === 'all' || l.leadType === filterLeadType;
       
       return matchesMonth && matchesSearch && matchesType;
@@ -155,7 +151,7 @@ export default function MeusLeads({ userData, onNavigate }) {
   ];
 
   return (
-    <div style={{ animation:'fadeIn 0.5s ease-out', paddingBottom: '40px', maxWidth: '100%', overflowX: 'hidden' }}>
+    <div style={{ animation:'fadeIn 0.5s ease-out', paddingBottom: '40px', width: '100%' }}>
       
       {/* HERO SECTION */}
       <div style={local.heroSection}>
@@ -164,7 +160,7 @@ export default function MeusLeads({ userData, onNavigate }) {
               <div style={local.userIconCircle}><UserCircle size={40} color="white"/></div>
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: '900', margin: 0, letterSpacing: '-0.02em', color: 'white' }}>{getGreeting()}, {userData?.name?.split(' ')[0] || 'Consultor'}! ✨</h2>
-                <p style={{ fontSize: '14px', color: '#cbd5e1', margin: '5px 0 0 0' }}>Arraste os cartões pelas colunas para avançar.</p>
+                <p style={{ fontSize: '14px', color: '#cbd5e1', margin: '5px 0 0 0' }}>Gere o teu funil e movimenta os cartões para atualizar.</p>
               </div>
            </div>
            
@@ -177,23 +173,23 @@ export default function MeusLeads({ userData, onNavigate }) {
 
         <div style={local.miniStatsRow}>
            <div style={local.miniStatItem}>
-              <span style={local.miniStatLabel}>Leads Visíveis</span>
+              <span style={local.miniStatLabel}>Leads Ativos</span>
               <span style={local.miniStatValue}>{totalLeads} Leads</span>
            </div>
            <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
            <div style={local.miniStatItem}>
-              <span style={local.miniStatLabel}>Vendas Fechadas</span>
+              <span style={local.miniStatLabel}>Vendas Concluídas</span>
               <span style={local.miniStatValue}><CheckCircle2 size={16} color="#10b981"/> {closedLeads}</span>
            </div>
            <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
            <div style={local.miniStatItem}>
-              <span style={local.miniStatLabel}>Sua Loja</span>
+              <span style={local.miniStatLabel}>Loja</span>
               <span style={local.miniStatValue}><MapPin size={16} color="#ef4444"/> {userData?.cityId || 'Geral'}</span>
            </div>
         </div>
       </div>
 
-      {/* HEADER DA PÁGINA */}
+      {/* HEADER DA PÁGINA COM BOTÃO NO TOPO */}
       <div style={global.header}>
         <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
           <div style={{...global.iconHeader, background: '#f59e0b'}}>
@@ -201,7 +197,7 @@ export default function MeusLeads({ userData, onNavigate }) {
           </div>
           <div>
             <h1 style={global.title}>Os Meus Leads</h1>
-            <p style={global.subtitle}>Acompanhe o funil de vendas e converta oportunidades.</p>
+            <p style={global.subtitle}>Organização visual do processo de vendas.</p>
           </div>
         </div>
         <button onClick={() => onNavigate && onNavigate('nova_venda')} style={{...global.btnPrimary, marginLeft: 'auto', background: 'var(--text-brand)'}}>
@@ -215,7 +211,7 @@ export default function MeusLeads({ userData, onNavigate }) {
           <div style={{...global.searchBox, flex: 1, minWidth: '200px'}}>
             <Search size={18} color="var(--text-muted)" />
             <input 
-              placeholder="Buscar cliente..."
+              placeholder="Buscar cliente por nome ou tel..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={global.searchInput}
@@ -235,7 +231,7 @@ export default function MeusLeads({ userData, onNavigate }) {
           <div style={local.selectWrapper}>
              <Layers size={18} color="var(--text-muted)" />
              <select style={local.selectInput} value={filterLeadType} onChange={e => setFilterLeadType(e.target.value)}>
-                <option value="all">Todos os Produtos</option>
+                <option value="all">Todos os Tipos</option>
                 <option value="Plano Novo">Plano Novo</option>
                 <option value="Migração">Migração</option>
                 <option value="SVA">SVA</option>
@@ -244,10 +240,14 @@ export default function MeusLeads({ userData, onNavigate }) {
         </div>
       </div>
 
-      {/* KANBAN BOARD */}
+      {/* KANBAN BOARD - AGORA COM TODAS AS COLUNAS */}
       <div style={local.kanbanBoard} className="hide-scrollbar">
         {KANBAN_COLUMNS.map(col => {
-          const colLeads = filteredLeads.filter(l => l.status === col.id || (!l.status && col.id === 'Novo') || (l.status === 'Em negociação' && col.id === 'Em Negociação'));
+          const colLeads = filteredLeads.filter(l => {
+             // Tratamento para status em negociação antigo (case sensitive fallback)
+             const status = l.status === 'Em negociação' ? 'Em Negociação' : l.status;
+             return (status === col.id) || (!l.status && col.id === 'Novo');
+          });
           
           return (
             <div 
@@ -257,7 +257,7 @@ export default function MeusLeads({ userData, onNavigate }) {
               onDrop={(e) => handleDrop(e, col.id)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: `2px solid ${col.color}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '900', color: 'var(--text-main)', textTransform: 'uppercase' }}>
                   <div style={{width: 10, height: 10, borderRadius: '50%', backgroundColor: col.color}} />
                   {col.label}
                 </div>
@@ -268,7 +268,7 @@ export default function MeusLeads({ userData, onNavigate }) {
 
               <div style={local.columnBody}>
                 {colLeads.length === 0 && (
-                   <div style={local.emptyColumn}>Solte um lead aqui</div>
+                   <div style={local.emptyColumn}>Solte aqui</div>
                 )}
                 
                 {colLeads.map(lead => (
@@ -279,18 +279,18 @@ export default function MeusLeads({ userData, onNavigate }) {
                     style={{...local.kanbanCard, borderLeft: `4px solid ${col.color}`, opacity: draggedLead?.id === lead.id ? 0.5 : 1}}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)' }}>{lead.date?.split('-').reverse().join('/')}</span>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)' }}>{lead.date?.split('-').reverse().join('/')}</span>
                       <div style={{display:'flex', gap:'5px'}}>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'grab', padding: '4px' }} title="Arraste para mover">
                            <GripVertical size={14} color="var(--text-muted)" />
                         </button>
-                        <button onClick={() => setUpdateModal(lead)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }} title="Editar Status">
+                        <button onClick={() => setUpdateModal(lead)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }} title="Editar">
                            <Edit2 size={14} color="var(--text-main)" />
                         </button>
                       </div>
                     </div>
                     
-                    <h4 style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 4px 0' }}>{lead.customerName || 'Sem Nome'}</h4>
+                    <h4 style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 4px 0' }}>{lead.customerName || 'Sem Nome'}</h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 12px 0', fontWeight: '600' }}>
                       <Phone size={12}/> {lead.customerPhone || 'S/ Telefone'}
                     </p>
@@ -302,7 +302,7 @@ export default function MeusLeads({ userData, onNavigate }) {
 
                     {lead.status === 'Descartado' && lead.discardMotive && (
                       <div style={{ marginTop: '8px', fontSize: '11px', color: '#ef4444', fontWeight: '800', background: 'var(--bg-danger-light)', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-danger)' }}>
-                        Motivo: {lead.discardMotive}
+                        Perda: {lead.discardMotive}
                       </div>
                     )}
                   </div>
@@ -321,13 +321,13 @@ export default function MeusLeads({ userData, onNavigate }) {
         </div>
       )}
 
-      {/* MODAL DE ATUALIZAÇÃO */}
+      {/* MODAL DE ATUALIZAÇÃO / DESCARTE */}
       {updateModal && (
         <div style={global.modalOverlay}>
           <div style={global.modalBox}>
              <div style={global.modalHeader}>
                <div>
-                 <h3 style={global.modalTitle}>Mover Lead</h3>
+                 <h3 style={global.modalTitle}>Gerir Lead</h3>
                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '5px 0 0 0', fontWeight: '600' }}>{updateModal.customerName}</p>
                </div>
                <button onClick={() => setUpdateModal(null)} style={global.closeBtn}><X size={24}/></button>
@@ -335,7 +335,7 @@ export default function MeusLeads({ userData, onNavigate }) {
              
              <form onSubmit={handleUpdate} style={global.form}>
                <div style={global.field}>
-                  <label style={global.label}>Alterar Status Para:</label>
+                  <label style={global.label}>Situação Atual:</label>
                   <select value={updateModal.status || ''} onChange={e => setUpdateModal({...updateModal, status: e.target.value, discardMotive: ''})} style={global.select}>
                     {KANBAN_COLUMNS.map(c => (
                        <option key={c.id} value={c.id}>{c.label}</option>
@@ -344,7 +344,7 @@ export default function MeusLeads({ userData, onNavigate }) {
                </div>
 
                {updateModal.status === 'Descartado' && (
-                 <div style={{ padding: '20px', background: 'var(--bg-danger-light)', borderRadius: '20px', border: '1px solid var(--border-danger)' }}>
+                 <div style={{ padding: '20px', background: 'var(--bg-danger-light)', borderRadius: '20px', border: '1px solid var(--border-danger)', marginTop: '15px' }}>
                     <div style={global.field}>
                       <label style={{...global.label, color: '#ef4444'}}>Qual o motivo da perda?</label>
                       <select value={updateModal.discardMotive || ''} onChange={e => setUpdateModal({...updateModal, discardMotive: e.target.value})} style={{...global.select, borderColor: 'var(--border-danger)'}} required>
@@ -366,9 +366,9 @@ export default function MeusLeads({ userData, onNavigate }) {
                  </div>
                )}
 
-               <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+               <div style={{ display: 'flex', gap: '12px', marginTop: '25px' }}>
                  <button type="button" onClick={() => setUpdateModal(null)} style={{...global.btnSecondary, flex: 1}}>Cancelar</button>
-                 <button type="submit" style={{...global.btnPrimary, flex: 2}}>Confirmar Alteração</button>
+                 <button type="submit" style={{...global.btnPrimary, flex: 2, background: 'var(--text-brand)'}}>Confirmar</button>
                </div>
              </form>
           </div>
@@ -397,5 +397,5 @@ const local = {
   columnBody: { display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '150px' },
   emptyColumn: { textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', padding: '20px 0', border: '2px dashed var(--border)', borderRadius: '12px' },
   
-  kanbanCard: { background: 'var(--bg-card)', padding: '16px', borderRadius: '16px', border: '1px solid var(--border)', cursor: 'grab', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.2s, box-shadow 0.2s' },
+  kanbanCard: { background: 'var(--bg-card)', padding: '16px', borderRadius: '16px', border: '1px solid var(--border)', cursor: 'grab', boxShadow: 'var(--shadow-sm)', transition: 'transform 0.2s' },
 };

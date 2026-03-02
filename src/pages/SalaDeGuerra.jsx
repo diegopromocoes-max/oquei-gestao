@@ -1,233 +1,324 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth } from '../firebase'; // Usando a sua configuração original
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, query 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
+} from 'firebase/auth';
 import {
-  TrendingUp, Flame, Zap, CalendarClock, Package, 
-  RefreshCw, ChevronRight, MapPin, Globe, Calendar, 
-  BarChart3, Target, AlertTriangle
+  TrendingUp, Flame, Zap, CalendarClock, RefreshCw, 
+  ChevronRight, MapPin, Globe, Calendar, BarChart3, 
+  Target, AlertTriangle, Users, Trophy, X, Bell, 
+  TrendingDown, ShieldAlert, Database, PlusCircle
 } from 'lucide-react';
 
-// IMPORTAÇÃO DOS ESTILOS GLOBAIS
-import { styles as global, colors } from '../styles/globalStyles';
+// IMPORTAÇÃO DO DESIGN SYSTEM (Assumindo que as variáveis estão no escopo ou via props)
+// Para garantir funcionamento, usaremos constantes internas caso o import falhe
+const colors = {
+  primary: '#2563eb',
+  success: '#10b981',
+  warning: '#f59e0b',
+  danger: '#ef4444',
+  purple: '#8b5cf6'
+};
 
-export default function SalaDeGuerra({ userData }) {
+const globalStyles = {
+  container: { padding: '30px', maxWidth: '1400px', margin: '0 auto', fontFamily: "'Manrope', sans-serif" },
+  card: { background: 'var(--bg-card)', padding: '24px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', transition: '0.3s' },
+  title: { fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', margin: 0, letterSpacing: '-0.02em' },
+  subtitle: { fontSize: '14px', color: 'var(--text-muted)', margin: '5px 0 0 0' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
+  btnPrimary: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }
+};
+
+// --- CONFIGURAÇÃO FIREBASE AMBIENTE CANVAS ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+export default function App({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [leads, setLeads] = useState([]);
-  const [myStores, setMyStores] = useState([]);
+  const [cities, setCities] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [error, setError] = useState(null);
+  
+  const [selectedStore, setSelectedStore] = useState(null);
+  const [notif, setNotif] = useState(null);
 
-  // 1. CARREGAMENTO DE DADOS COM FILTRAGEM EM MEMÓRIA (Evita erros de Permissão/Índice)
+  // 1. AUTENTICAÇÃO OBRIGATÓRIA (REGRA 3)
   useEffect(() => {
-    setLoading(true);
-
-    // Referências das coleções (Caminhos do seu Banco de Dados)
-    const citiesRef = collection(db, 'cities');
-    const leadsRef = collection(db, 'leads');
-    const holidaysRef = collection(db, 'holidays');
-
-    // Escuta Lojas
-    const unsubCities = onSnapshot(citiesRef, (snap) => {
-      let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Filtragem por cluster feita no JavaScript para máxima compatibilidade
-      if (userData?.role === 'supervisor' && userData?.clusterId) {
-        list = list.filter(s => s.clusterId === userData.clusterId);
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        setError("Erro de Autenticação: " + err.message);
       }
-      setMyStores(list);
-    }, (err) => console.error("Erro ao carregar lojas:", err));
-
-    // Escuta Leads (Busca a coleção inteira para filtrar no JS e evitar erro de índice)
-    const unsubLeads = onSnapshot(leadsRef, (snap) => {
-      const allLeads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLeads(allLeads);
-      setLoading(false);
-    }, (err) => console.error("Erro ao carregar vendas:", err));
-
-    // Escuta Feriados
-    const unsubHols = onSnapshot(holidaysRef, (snap) => {
-      setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => console.error("Erro ao carregar feriados:", err));
-
-    return () => {
-      unsubCities();
-      unsubLeads();
-      unsubHols();
     };
-  }, [selectedMonth, userData]);
+    initAuth();
+    const unsub = onAuthStateChanged(auth, setUser);
+    return () => unsub();
+  }, []);
 
-  // --- CÁLCULOS DO CALENDÁRIO COMERCIAL (DINÂMICO) ---
-  const globalCalendar = useMemo(() => {
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    let total = 0; let worked = 0;
-    const now = new Date();
+  // 2. BUSCA DE DADOS (REGRA 1 E 2)
+  useEffect(() => {
+    if (!user) return;
 
-    for (let i = 1; i <= lastDay; i++) {
-      const dateObj = new Date(year, month - 1, i);
-      const dayOfWeek = dateObj.getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Pula finais de semana
+    setLoading(true);
+    // CAMINHO RESTRITO DO CANVAS
+    const path = (coll) => collection(db, 'artifacts', appId, 'public', 'data', coll);
 
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const isHoliday = holidays.some(h => h.date === dateStr);
+    const unsubCities = onSnapshot(path('cities'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Filtragem por Cluster no JS (Regra 2)
+      const myCluster = String(userData?.clusterId || "").trim();
+      const filtered = myCluster ? data.filter(c => String(c.clusterId).trim() === myCluster) : data;
+      setCities(filtered);
+    }, (err) => setError("Permissão negada em 'cities'. Caminho: " + appId));
 
-      if (!isHoliday) {
-        total++;
-        // Define o limite do dia como final da tarde para contagem de dias passados
-        const checkDate = new Date(year, month - 1, i);
-        checkDate.setHours(23, 59, 59);
-        if (checkDate <= now) worked++;
-      }
-    }
-    return { total, worked, remaining: total - worked };
-  }, [selectedMonth, holidays]);
+    const unsubLeads = onSnapshot(path('leads'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLeads(data);
+      setLoading(false);
+    });
 
-  // --- PROCESSAMENTO DAS MÉTRICAS POR LOJA ---
-  const storeData = useMemo(() => {
-    const startPeriod = selectedMonth + "-01";
-    const endPeriod = selectedMonth + "-31";
-    
-    // Filtragem por mês em memória
-    const monthLeads = leads.filter(l => l.date >= startPeriod && l.date <= endPeriod);
+    const unsubHols = onSnapshot(path('holidays'), (snap) => {
+      setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-    return myStores.map(store => {
-      // Cruzamento flexível: aceita cityId como Nome ou como ID da cidade
-      const storeLeads = monthLeads.filter(l => l.cityId === store.name || l.cityId === store.id);
+    return () => { unsubCities(); unsubLeads(); unsubHols(); };
+  }, [user, userData, appId]);
+
+  // --- FUNÇÃO PARA CRIAR DADOS DE TESTE (SE O BANCO ESTIVER VAZIO) ---
+  const seedTestData = async () => {
+    try {
+      setLoading(true);
+      const citiesRef = collection(db, 'artifacts', appId, 'public', 'data', 'cities');
+      const leadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'leads');
       
-      let p = 0, mCount = 0, i = 0, ss = 0;
-      storeLeads.forEach(lead => {
-        const isClosed = lead.status === 'Contratado' || lead.status === 'Instalado';
-        if (isClosed && lead.leadType === 'Plano Novo') p++;
-        if (isClosed && lead.leadType === 'Migração') mCount++;
-        if (isClosed && lead.leadType === 'SVA') ss++;
-        if (lead.status === 'Instalado' && lead.leadType === 'Plano Novo') i++;
+      const cluster = userData?.clusterId || 'cluster_bady';
+      
+      // Criar Cidade
+      const cityDoc = await addDoc(citiesRef, {
+        name: "Bady Bassitt",
+        city: "Bady Bassitt",
+        clusterId: cluster,
+        goalPlanos: 60
       });
 
-      const calcProj = (val) => globalCalendar.worked > 0 ? Math.floor((val / globalCalendar.worked) * globalCalendar.total) : 0;
+      // Criar Leads de Teste (Vendas)
+      const today = new Date().toISOString().split('T')[0];
+      await addDoc(leadsRef, {
+        cityId: "Bady Bassitt",
+        customerName: "Cliente Teste 1",
+        date: today,
+        status: "Instalado",
+        leadType: "Plano Novo",
+        attendantId: user.uid,
+        attendantName: userData?.name || "Atendente Teste",
+        productName: "Fibra 600MB",
+        createdAt: { seconds: Math.floor(Date.now()/1000) }
+      });
 
-      return {
-        city: store.name,
-        planos: p, projPlanos: calcProj(p),
-        migracoes: mCount, projMigracoes: calcProj(mCount),
-        installs: i, projInstalls: calcProj(i),
-        svas: ss, projSvas: calcProj(ss),
-        totalPace: (p / (globalCalendar.worked || 1)).toFixed(1)
+      setNotif("Dados de teste gerados! O painel irá atualizar.");
+      setTimeout(() => setNotif(null), 3000);
+    } catch (err) {
+      setError("Erro ao gerar dados: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- MOTOR DE PROJEÇÕES ---
+  const calendar = useMemo(() => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    let total = 0; let worked = 0;
+    const now = new Date();
+    for (let i = 1; i <= lastDay; i++) {
+      const d = new Date(y, m - 1, i);
+      if (d.getDay() === 0 || d.getDay() === 6) continue;
+      total++;
+      if (d <= now) worked++;
+    }
+    return { total: total || 22, worked: worked || 1, remaining: Math.max(0, total - worked) };
+  }, [selectedMonth]);
+
+  const dashboardData = useMemo(() => {
+    const monthLeads = leads.filter(l => l.date?.startsWith(selectedMonth));
+
+    return cities.map(city => {
+      const cityLeads = monthLeads.filter(l => l.cityId === city.name || l.cityId === city.id);
+      const sales = cityLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
+      const installs = cityLeads.filter(l => l.status === 'Instalado').length;
+      const goal = city.goalPlanos || 30;
+      
+      const pace = sales / calendar.worked;
+      const projection = Math.floor(sales + (pace * calendar.remaining));
+      const recovery = calendar.remaining > 0 ? (Math.max(0, goal - sales) / calendar.remaining).toFixed(1) : 0;
+
+      const sellers = {};
+      cityLeads.forEach(l => {
+        if (!sellers[l.attendantId]) sellers[l.attendantId] = { name: l.attendantName, sales: 0, leads: 0 };
+        sellers[l.attendantId].leads++;
+        if (['Contratado', 'Instalado'].includes(l.status)) sellers[l.attendantId].sales++;
+      });
+
+      return { 
+        ...city, sales, installs, goal, projection, recovery, pace: pace.toFixed(1),
+        sellers: Object.values(sellers).sort((a,b) => b.sales - a.sales)
       };
-    }).sort((a, b) => b.planos - a.planos);
-  }, [leads, myStores, globalCalendar, selectedMonth]);
+    }).sort((a, b) => (b.sales / b.goal) - (a.sales / a.goal));
+  }, [cities, leads, calendar, selectedMonth]);
 
-  const clusterTotals = useMemo(() => {
-    return storeData.reduce((acc, curr) => {
-      acc.p += curr.planos; acc.pp += curr.projPlanos;
-      acc.i += curr.installs; acc.pi += curr.projInstalls;
-      return acc;
-    }, { p: 0, pp: 0, i: 0, pi: 0 });
-  }, [storeData]);
-
-  if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '400px', gap: '20px' }}>
-      <RefreshCw size={32} color="var(--text-muted)" className="animate-spin" />
-      <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 'bold' }}>Sincronizando Radar de Vendas...</span>
+  if (loading || !user) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '400px', background: '#0f172a', color: 'white' }}>
+      <RefreshCw size={40} className="animate-spin" color="#3b82f6" />
+      <p style={{ marginTop: '20px', fontWeight: 'bold' }}>Sincronizando com o Banco...</p>
     </div>
   );
 
   return (
-    <div style={global.container}>
+    <div style={{ ...globalStyles.container, background: 'transparent', minHeight: '100vh' }}>
       
-      {/* HEADER TÁTICO */}
-      <div style={global.header}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
-          <div style={{...global.iconHeader, background: colors.danger}}><Flame size={28} color="white" /></div>
+      {notif && <div style={local.toast}>{notif}</div>}
+
+      {/* HEADER */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ width: '56px', height: '56px', background: colors.danger, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Flame size={32} color="white" />
+          </div>
           <div>
-            <h1 style={global.title}>Sala de Guerra</h1>
-            <p style={global.subtitle}>Radar de Projeções (Cluster {userData?.clusterId || 'Geral'})</p>
+            <h1 style={globalStyles.title}>Sala de Guerra 2.0</h1>
+            <p style={globalStyles.subtitle}>Gestão Táctica do Cluster: <strong>{userData?.clusterId || 'Geral'}</strong></p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <div style={local.rhythmBadge}>
-             <CalendarClock size={18} color="var(--text-brand)" />
-             <div style={{display: 'flex', flexDirection: 'column'}}>
-                <span style={{fontSize: '9px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Progresso Mensal</span>
-                <span style={{fontSize: '13px', fontWeight: '800', color: 'var(--text-main)'}}>
-                   {globalCalendar.worked}/{globalCalendar.total} <span style={{fontSize: '10px', color: 'var(--text-muted)'}}>({globalCalendar.remaining} rest.)</span>
-                </span>
+        <div style={{ display: 'flex', gap: '15px' }}>
+           <div style={local.miniStat}>
+              <CalendarClock size={16} color={colors.primary} />
+              <span>{calendar.remaining} dias úteis</span>
+           </div>
+           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={local.dateInput} />
+        </div>
+      </div>
+
+      {/* ERRO DE PERMISSÃO / CONFIGURAÇÃO */}
+      {error && (
+        <div style={local.errorCard}>
+          <ShieldAlert size={24} color={colors.danger} />
+          <div>
+            <h4 style={{ margin: 0 }}>Erro de Acesso</h4>
+            <p style={{ margin: '5px 0 0 0', fontSize: '13px' }}>{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ESTADO VAZIO COM BOTÃO DE SEED */}
+      {cities.length === 0 && !error && (
+        <div style={{ ...globalStyles.card, textAlign: 'center', padding: '60px' }}>
+          <Database size={48} color="var(--border)" style={{ marginBottom: '20px' }} />
+          <h3>Nenhuma cidade encontrada no Cluster</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>
+            O seu ID de Cluster é <strong>{userData?.clusterId || 'nulo'}</strong>. <br/>
+            Não existem cidades no caminho <code>/artifacts/{appId}/public/data/cities</code> vinculadas a este ID.
+          </p>
+          <button onClick={seedTestData} style={{ ...globalStyles.btnPrimary, margin: '0 auto' }}>
+             <PlusCircle size={18} /> Gerar Cidade e Vendas de Teste
+          </button>
+        </div>
+      )}
+
+      {/* CARDS DE PERFORMANCE */}
+      <div style={globalStyles.grid}>
+        {dashboardData.map((store, idx) => {
+          const isAtRisk = store.projection < store.goal;
+          return (
+            <div key={idx} onClick={() => setSelectedStore(store)} style={{ ...globalStyles.card, borderTop: `5px solid ${isAtRisk ? colors.danger : colors.success}`, cursor: 'pointer' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>{store.name}</h3>
+                  <div style={{ padding: '4px 10px', borderRadius: '8px', background: isAtRisk ? '#ef444415' : '#10b98115', color: isAtRisk ? colors.danger : colors.success, fontSize: '12px', fontWeight: '900' }}>
+                     {Math.round((store.sales / store.goal) * 100)}%
+                  </div>
+               </div>
+
+               <div style={local.recoveryBox}>
+                  <span style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)' }}>RITMO DE RECUPERAÇÃO</span>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: isAtRisk ? colors.danger : 'var(--text-main)', marginTop: '5px' }}>
+                     {store.recovery} <small style={{ fontWeight: 'normal', fontSize: '12px' }}>vendas/dia</small>
+                  </div>
+               </div>
+
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <MiniProgress label="Vendido" current={store.sales} target={store.goal} color={colors.primary} />
+                  <MiniProgress label="Instalado" current={store.installs} target={store.sales} color={colors.success} />
+               </div>
+
+               <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Projeção: <strong>{store.projection}</strong></span>
+                  <ChevronRight size={16} />
+               </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* MODAL RAIO-X */}
+      {selectedStore && (
+        <div style={local.modalOverlay}>
+          <div style={{ ...globalStyles.card, width: '90%', maxWidth: '500px' }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <h2 style={{ margin: 0 }}>{selectedStore.name}</h2>
+                <button onClick={() => setSelectedStore(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X/></button>
+             </div>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+                   <span style={{ flex: 2 }}>CONSULTOR</span>
+                   <span style={{ flex: 1, textAlign: 'center' }}>LEADS</span>
+                   <span style={{ flex: 1, textAlign: 'right' }}>VENDAS</span>
+                </div>
+                {selectedStore.sellers.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: '14px' }}>
+                     <span style={{ flex: 2, fontWeight: 'bold' }}>{s.name}</span>
+                     <span style={{ flex: 1, textAlign: 'center' }}>{s.leads}</span>
+                     <span style={{ flex: 1, textAlign: 'right', fontWeight: '900', color: colors.primary }}>{s.sales}</span>
+                  </div>
+                ))}
              </div>
           </div>
-          <div style={global.searchBox}>
-            <Calendar size={18} color="var(--text-muted)" />
-            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={global.searchInput} />
-          </div>
         </div>
-      </div>
-
-      {/* KPIS TOTAIS DA REGIONAL */}
-      <div style={global.grid4}>
-        <ClusterCard title="Vendas (Contratos)" current={clusterTotals.p} projected={clusterTotals.pp} icon={TrendingUp} color="#3b82f6" />
-        <ClusterCard title="Instalações" current={clusterTotals.i} projected={clusterTotals.pi} icon={Zap} color="#10b981" />
-      </div>
-
-      <h3 style={{...global.sectionTitle, marginTop: '40px'}}><MapPin size={20} color="#ef4444"/> Performance por Loja</h3>
-      
-      <div style={local.citiesGrid}>
-        {storeData.map((store, idx) => (
-          <div key={idx} style={global.card}>
-            <div style={local.cityHeader}>
-              <div style={local.rank}>{idx + 1}</div>
-              <h4 style={{fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', margin: 0}}>{store.city}</h4>
-              <div style={local.pace}>{store.totalPace} v/dia</div>
-            </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-              <MetricRow label="Vendas" current={store.planos} proj={store.projPlanos} color="#3b82f6" icon={TrendingUp} />
-              <MetricRow label="Instalado" current={store.installs} proj={store.projInstalls} color="#10b981" icon={Zap} />
-              <MetricRow label="Migrações" current={store.migracoes} proj={store.projMigracoes} color="#f59e0b" icon={RefreshCw} />
-              <MetricRow label="Mix SVA" current={store.svas} proj={store.projSvas} color="#8b5cf6" icon={Package} />
-            </div>
-          </div>
-        ))}
-        {storeData.length === 0 && (
-          <div style={{...global.emptyState, gridColumn: '1 / -1'}}>Nenhuma loja ativa encontrada para este Cluster.</div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-// --- COMPONENTES AUXILIARES ---
-
-const ClusterCard = ({ title, current, projected, icon: Icon, color }) => (
-  <div style={global.card}>
-    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
-      <span style={{fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase'}}>{title}</span>
-      <Icon size={20} color={color} />
+const MiniProgress = ({ label, current, target, color }) => (
+  <div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '5px' }}>
+      <span style={{ fontWeight: 'bold', color: 'var(--text-muted)' }}>{label.toUpperCase()}</span>
+      <span style={{ fontWeight: '900' }}>{current} / {target}</span>
     </div>
-    <div style={{display: 'flex', alignItems: 'baseline', gap: '10px'}}>
-      <span style={{fontSize: '32px', fontWeight: '900', color: 'var(--text-main)'}}>{current}</span>
-      <span style={{fontSize: '14px', color: 'var(--text-muted)'}}>de {projected} (Proj)</span>
-    </div>
-    <div style={{width: '100%', height: '6px', background: 'var(--bg-app)', borderRadius: '3px', marginTop: '15px', overflow: 'hidden'}}>
-      <div style={{width: `${Math.min((current/projected)*100 || 0, 100)}%`, height: '100%', background: color, transition: '1s'}} />
-    </div>
-  </div>
-);
-
-const MetricRow = ({ label, current, proj, color, icon: Icon }) => (
-  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--bg-app)', borderRadius: '10px'}}>
-    <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-      <Icon size={14} color={color} />
-      <span style={{fontSize: '13px', fontWeight: '700', color: 'var(--text-main)'}}>{label}</span>
-    </div>
-    <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-      <span style={{fontSize: '14px', fontWeight: '800', color: 'var(--text-muted)'}}>{current}</span>
-      <ChevronRight size={12} color="var(--border)" />
-      <span style={{fontSize: '16px', fontWeight: '900', color: color}}>{proj}</span>
+    <div style={{ height: '6px', background: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.min((current/target)*100 || 0, 100)}%`, height: '100%', background: color, transition: '1s' }} />
     </div>
   </div>
 );
 
 const local = {
-  rhythmBadge: { display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '8px 16px', borderRadius: '14px', boxShadow: 'var(--shadow-sm)' },
-  citiesGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
-  cityHeader: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' },
-  rank: { width: '24px', height: '24px', borderRadius: '6px', background: 'var(--bg-panel)', color: 'var(--text-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '900' },
-  pace: { marginLeft: 'auto', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-brand)', background: 'var(--bg-primary-light)', padding: '2px 8px', borderRadius: '4px' }
+  dateInput: { background: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px', borderRadius: '12px', outline: 'none', fontWeight: 'bold' },
+  miniStat: { background: 'var(--bg-card)', padding: '10px 15px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold' },
+  errorCard: { background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', padding: '20px', borderRadius: '16px', display: 'flex', gap: '15px', marginBottom: '30px' },
+  recoveryBox: { background: 'var(--bg-app)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)', marginBottom: '25px' },
+  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  toast: { position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: 'white', padding: '15px 30px', borderRadius: '50px', fontWeight: 'bold', boxShadow: '0 10px 25px rgba(16,185,129,0.3)', zIndex: 2000 }
 };
