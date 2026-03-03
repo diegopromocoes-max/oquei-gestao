@@ -1,160 +1,91 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
+import { db, auth } from '../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
-  getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, query 
-} from 'firebase/firestore';
-import { 
-  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
-} from 'firebase/auth';
+  LineChart, Line, ResponsiveContainer, YAxis 
+} from 'recharts';
 import {
-  TrendingUp, Flame, Zap, CalendarClock, RefreshCw, 
-  ChevronRight, MapPin, Globe, Calendar, BarChart3, 
-  Target, AlertTriangle, Users, Trophy, X, Bell, 
-  TrendingDown, ShieldAlert, Database, PlusCircle
+  Flame, Zap, CalendarClock, ChevronRight, MapPin, 
+  Calendar, Target, AlertTriangle, Users, Trophy, 
+  X, Bell, TrendingDown, TrendingUp, MonitorPlay, 
+  Timer, Map, AlertOctagon, Star, Gift, Clock
 } from 'lucide-react';
 
-// IMPORTAÇÃO DO DESIGN SYSTEM (Assumindo que as variáveis estão no escopo ou via props)
-// Para garantir funcionamento, usaremos constantes internas caso o import falhe
-const colors = {
-  primary: '#2563eb',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  purple: '#8b5cf6'
-};
+// Importação do Design System
+import { styles as global, colors } from '../styles/globalStyles';
 
-const globalStyles = {
-  container: { padding: '30px', maxWidth: '1400px', margin: '0 auto', fontFamily: "'Manrope', sans-serif" },
-  card: { background: 'var(--bg-card)', padding: '24px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', transition: '0.3s' },
-  title: { fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', margin: 0, letterSpacing: '-0.02em' },
-  subtitle: { fontSize: '14px', color: 'var(--text-muted)', margin: '5px 0 0 0' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  btnPrimary: { background: '#2563eb', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }
-};
-
-// --- CONFIGURAÇÃO FIREBASE AMBIENTE CANVAS ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-export default function App({ userData }) {
+export default function SalaDeGuerra({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [leads, setLeads] = useState([]);
   const [cities, setCities] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const [error, setError] = useState(null);
   
-  const [selectedStore, setSelectedStore] = useState(null);
-  const [notif, setNotif] = useState(null);
+  // UX States
+  const [tvMode, setTvMode] = useState(false);
+  const [drillDown, setDrillDown] = useState(null);
+  const [flashSale, setFlashSale] = useState(null);
+  // NOVO: Adicionado campo 'reward' (bonificação)
+  const [sprint, setSprint] = useState({ active: false, goal: 0, current: 0, deadline: '', reward: '' });
+  const [showSprintModal, setShowSprintModal] = useState(false);
 
-  // 1. AUTENTICAÇÃO OBRIGATÓRIA (REGRA 3)
+  // 1. ESCUTA DE DADOS
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      
+      const unsubCities = onSnapshot(collection(db, 'cities'), (snap) => {
+        let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (userData?.role === 'supervisor' && userData?.clusterId) {
+          list = list.filter(c => String(c.clusterId) === String(userData.clusterId));
         }
-      } catch (err) {
-        setError("Erro de Autenticação: " + err.message);
-      }
-    };
-    initAuth();
-    const unsub = onAuthStateChanged(auth, setUser);
-    return () => unsub();
-  }, []);
-
-  // 2. BUSCA DE DADOS (REGRA 1 E 2)
-  useEffect(() => {
-    if (!user) return;
-
-    setLoading(true);
-    // CAMINHO RESTRITO DO CANVAS
-    const path = (coll) => collection(db, 'artifacts', appId, 'public', 'data', coll);
-
-    const unsubCities = onSnapshot(path('cities'), (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Filtragem por Cluster no JS (Regra 2)
-      const myCluster = String(userData?.clusterId || "").trim();
-      const filtered = myCluster ? data.filter(c => String(c.clusterId).trim() === myCluster) : data;
-      setCities(filtered);
-    }, (err) => setError("Permissão negada em 'cities'. Caminho: " + appId));
-
-    const unsubLeads = onSnapshot(path('leads'), (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLeads(data);
-      setLoading(false);
-    });
-
-    const unsubHols = onSnapshot(path('holidays'), (snap) => {
-      setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    return () => { unsubCities(); unsubLeads(); unsubHols(); };
-  }, [user, userData, appId]);
-
-  // --- FUNÇÃO PARA CRIAR DADOS DE TESTE (SE O BANCO ESTIVER VAZIO) ---
-  const seedTestData = async () => {
-    try {
-      setLoading(true);
-      const citiesRef = collection(db, 'artifacts', appId, 'public', 'data', 'cities');
-      const leadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'leads');
-      
-      const cluster = userData?.clusterId || 'cluster_bady';
-      
-      // Criar Cidade
-      const cityDoc = await addDoc(citiesRef, {
-        name: "Bady Bassitt",
-        city: "Bady Bassitt",
-        clusterId: cluster,
-        goalPlanos: 60
+        setCities(list);
       });
 
-      // Criar Leads de Teste (Vendas)
-      const today = new Date().toISOString().split('T')[0];
-      await addDoc(leadsRef, {
-        cityId: "Bady Bassitt",
-        customerName: "Cliente Teste 1",
-        date: today,
-        status: "Instalado",
-        leadType: "Plano Novo",
-        attendantId: user.uid,
-        attendantName: userData?.name || "Atendente Teste",
-        productName: "Fibra 600MB",
-        createdAt: { seconds: Math.floor(Date.now()/1000) }
+      const unsubLeads = onSnapshot(collection(db, 'leads'), (snap) => {
+        const allLeads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (leads.length > 0 && allLeads.length > leads.length) {
+          const newest = allLeads.sort((a,b) => b.createdAt?.seconds - a.createdAt?.seconds)[0];
+          if (['Contratado', 'Instalado'].includes(newest.status)) {
+            setFlashSale(`🔥 VENDA! ${newest.attendantName?.split(' ')[0]} em ${newest.cityId}!`);
+            setTimeout(() => setFlashSale(null), 5000);
+          }
+        }
+        setLeads(allLeads);
+        setLoading(false);
       });
 
-      setNotif("Dados de teste gerados! O painel irá atualizar.");
-      setTimeout(() => setNotif(null), 3000);
-    } catch (err) {
-      setError("Erro ao gerar dados: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const unsubHols = onSnapshot(collection(db, 'holidays'), (snap) => {
+        setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-  // --- MOTOR DE PROJEÇÕES ---
+      return () => { unsubCities(); unsubLeads(); unsubHols(); };
+    });
+    return () => unsubAuth();
+  }, [userData, leads.length]);
+
+  // --- MOTOR PREDITIVO ---
   const calendar = useMemo(() => {
     const [y, m] = selectedMonth.split('-').map(Number);
     const lastDay = new Date(y, m, 0).getDate();
-    let total = 0; let worked = 0;
+    let total = 0, worked = 0;
     const now = new Date();
     for (let i = 1; i <= lastDay; i++) {
       const d = new Date(y, m - 1, i);
       if (d.getDay() === 0 || d.getDay() === 6) continue;
-      total++;
-      if (d <= now) worked++;
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      if (!holidays.some(h => h.date === dateStr)) {
+        total++;
+        if (d <= now) worked++;
+      }
     }
     return { total: total || 22, worked: worked || 1, remaining: Math.max(0, total - worked) };
-  }, [selectedMonth]);
+  }, [selectedMonth, holidays]);
 
   const dashboardData = useMemo(() => {
     const monthLeads = leads.filter(l => l.date?.startsWith(selectedMonth));
+    const today = new Date().getDate();
 
     return cities.map(city => {
       const cityLeads = monthLeads.filter(l => l.cityId === city.name || l.cityId === city.id);
@@ -163,8 +94,16 @@ export default function App({ userData }) {
       const goal = city.goalPlanos || 30;
       
       const pace = sales / calendar.worked;
-      const projection = Math.floor(sales + (pace * calendar.remaining));
-      const recovery = calendar.remaining > 0 ? (Math.max(0, goal - sales) / calendar.remaining).toFixed(1) : 0;
+      const projSales = Math.floor(sales + (pace * calendar.remaining));
+      
+      const recoveryPace = calendar.remaining > 0 ? (Math.max(0, goal - sales) / calendar.remaining).toFixed(1) : 0;
+      const backlogAlert = (sales > 5 && (installs / sales) < 0.6) ? "Risco de Cancelamento: Instalação Lenta" : null;
+
+      const trendData = [
+        { day: 'D-2', v: cityLeads.filter(l => l.date.endsWith(String(today-2).padStart(2,'0')) && ['Contratado','Instalado'].includes(l.status)).length },
+        { day: 'D-1', v: cityLeads.filter(l => l.date.endsWith(String(today-1).padStart(2,'0')) && ['Contratado','Instalado'].includes(l.status)).length },
+        { day: 'H', v: cityLeads.filter(l => l.date.endsWith(String(today).padStart(2,'0')) && ['Contratado','Instalado'].includes(l.status)).length }
+      ];
 
       const sellers = {};
       cityLeads.forEach(l => {
@@ -174,126 +113,219 @@ export default function App({ userData }) {
       });
 
       return { 
-        ...city, sales, installs, goal, projection, recovery, pace: pace.toFixed(1),
+        ...city, sales, installs, goal, projSales, recoveryPace, pace: pace.toFixed(1), backlogAlert, trendData,
         sellers: Object.values(sellers).sort((a,b) => b.sales - a.sales)
       };
     }).sort((a, b) => (b.sales / b.goal) - (a.sales / a.goal));
   }, [cities, leads, calendar, selectedMonth]);
 
-  if (loading || !user) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '400px', background: '#0f172a', color: 'white' }}>
-      <RefreshCw size={40} className="animate-spin" color="#3b82f6" />
-      <p style={{ marginTop: '20px', fontWeight: 'bold' }}>Sincronizando com o Banco...</p>
+  const clusterStats = useMemo(() => {
+    let tGoal = 0, tSales = 0, tProj = 0;
+    dashboardData.forEach(c => { tGoal += c.goal; tSales += c.sales; tProj += c.projSales; });
+    return { tGoal, tSales, tProj, isAtRisk: tProj < tGoal };
+  }, [dashboardData]);
+
+  if (loading) return (
+    <div style={local.loader}>
+      <Zap size={48} className="animate-pulse" color={colors.primary} />
+      <h2 style={{ color: 'var(--text-main)', marginTop: '20px' }}>Preparando Comando Tático...</h2>
     </div>
   );
 
   return (
-    <div style={{ ...globalStyles.container, background: 'transparent', minHeight: '100vh' }}>
+    <div style={tvMode ? local.tvRoot : global.container}>
       
-      {notif && <div style={local.toast}>{notif}</div>}
+      {flashSale && <div style={local.flashToast}><Bell size={20} className="animate-bounce" /> {flashSale}</div>}
 
-      {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ width: '56px', height: '56px', background: colors.danger, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Flame size={32} color="white" />
-          </div>
-          <div>
-            <h1 style={globalStyles.title}>Sala de Guerra 2.0</h1>
-            <p style={globalStyles.subtitle}>Gestão Táctica do Cluster: <strong>{userData?.clusterId || 'Geral'}</strong></p>
-          </div>
+      {/* CABEÇALHO */}
+      <div style={local.headerWrapper}>
+        <div style={local.headerLeft}>
+           <div style={local.clusterIcon}><Target size={32} color="white"/></div>
+           <div>
+              <h1 style={local.clusterTitle}>Comando {userData?.clusterId || 'Geral'}</h1>
+              <div style={local.countdownRow}>
+                 <CalendarClock size={16} /> <span>Faltam <strong>{calendar.remaining}</strong> dias úteis</span>
+              </div>
+           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '15px' }}>
-           <div style={local.miniStat}>
-              <CalendarClock size={16} color={colors.primary} />
-              <span>{calendar.remaining} dias úteis</span>
+        <div style={local.globalProjectionBox}>
+           <div style={local.projHeader}>
+              <span>PROJEÇÃO GLOBAL DO CLUSTER</span>
+              <span style={{ color: clusterStats.isAtRisk ? colors.danger : colors.success }}>
+                {clusterStats.isAtRisk ? 'ABAIXO DA META' : 'META ATINGIDA'}
+              </span>
            </div>
-           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={local.dateInput} />
+           <div style={local.projMain}>
+              <div style={local.projValues}>
+                 <strong style={{ color: clusterStats.isAtRisk ? colors.danger : colors.success }}>{clusterStats.tProj}</strong>
+                 <small>/ {clusterStats.tGoal}</small>
+              </div>
+              <div style={local.globalProgress}>
+                 <div style={{ ...local.progressBar, width: `${Math.min((clusterStats.tProj / (clusterStats.tGoal || 1)) * 100, 100)}%`, background: clusterStats.isAtRisk ? colors.danger : colors.success }} />
+              </div>
+           </div>
+        </div>
+
+        <div style={local.headerActions}>
+           <button onClick={() => setShowSprintModal(true)} style={local.btnSprint}><Timer size={18}/> Sprint</button>
+           <button onClick={() => setTvMode(!tvMode)} style={local.btnTV}><MonitorPlay size={18}/> TV</button>
         </div>
       </div>
 
-      {/* ERRO DE PERMISSÃO / CONFIGURAÇÃO */}
-      {error && (
-        <div style={local.errorCard}>
-          <ShieldAlert size={24} color={colors.danger} />
-          <div>
-            <h4 style={{ margin: 0 }}>Erro de Acesso</h4>
-            <p style={{ margin: '5px 0 0 0', fontSize: '13px' }}>{error}</p>
-          </div>
+      {/* SPRINT BANNER COM PREMIAÇÃO */}
+      {sprint.active && (
+        <div style={local.sprintBanner}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '15px', borderRadius: '50%' }}>
+                 <Timer size={36} className="animate-pulse" color="white" />
+              </div>
+              <div>
+                <strong style={{ fontSize: '24px', letterSpacing: '0.05em', textTransform: 'uppercase', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                  SPRINT ATIVO: {sprint.goal} VENDAS
+                </strong>
+                <div style={{ display: 'flex', gap: '20px', marginTop: '8px', fontSize: '14px', fontWeight: 'bold' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.9 }}>
+                    <Clock size={16}/> Até às {sprint.deadline}
+                  </span>
+                  {sprint.reward && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fef08a', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                      <Gift size={16}/> Bónus: {sprint.reward}
+                    </span>
+                  )}
+                </div>
+              </div>
+           </div>
+           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ fontSize: '42px', fontWeight: '900', lineHeight: '1', textShadow: '0 2px 5px rgba(0,0,0,0.3)' }}>
+                 {clusterStats.tSales} <span style={{fontSize:'20px', opacity:0.7}}>/ {sprint.goal}</span>
+              </div>
+              <button onClick={() => setSprint({...sprint, active: false})} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', marginTop: '10px', cursor: 'pointer' }}>Encerrar Sprint</button>
+           </div>
         </div>
       )}
 
-      {/* ESTADO VAZIO COM BOTÃO DE SEED */}
-      {cities.length === 0 && !error && (
-        <div style={{ ...globalStyles.card, textAlign: 'center', padding: '60px' }}>
-          <Database size={48} color="var(--border)" style={{ marginBottom: '20px' }} />
-          <h3>Nenhuma cidade encontrada no Cluster</h3>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '30px' }}>
-            O seu ID de Cluster é <strong>{userData?.clusterId || 'nulo'}</strong>. <br/>
-            Não existem cidades no caminho <code>/artifacts/{appId}/public/data/cities</code> vinculadas a este ID.
-          </p>
-          <button onClick={seedTestData} style={{ ...globalStyles.btnPrimary, margin: '0 auto' }}>
-             <PlusCircle size={18} /> Gerar Cidade e Vendas de Teste
-          </button>
-        </div>
-      )}
-
-      {/* CARDS DE PERFORMANCE */}
-      <div style={globalStyles.grid}>
+      {/* GRID DE CIDADES */}
+      <div style={tvMode ? local.tvGrid : local.grid}>
         {dashboardData.map((store, idx) => {
-          const isAtRisk = store.projection < store.goal;
+          const isAtRisk = store.projSales < store.goal;
+          const statusColor = isAtRisk ? colors.danger : colors.success;
+
           return (
-            <div key={idx} onClick={() => setSelectedStore(store)} style={{ ...globalStyles.card, borderTop: `5px solid ${isAtRisk ? colors.danger : colors.success}`, cursor: 'pointer' }}>
-               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>{store.name}</h3>
-                  <div style={{ padding: '4px 10px', borderRadius: '8px', background: isAtRisk ? '#ef444415' : '#10b98115', color: isAtRisk ? colors.danger : colors.success, fontSize: '12px', fontWeight: '900' }}>
-                     {Math.round((store.sales / store.goal) * 100)}%
+            <div key={idx} style={{ ...global.card, borderTop: `8px solid ${statusColor}`, transition: '0.3s' }}>
+              <div style={local.cardHeader}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: tvMode?'24px':'18px', fontWeight: '900', color: tvMode?'white':'var(--text-main)' }}>{store.name}</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                    Tendência 3 Dias: 
+                    <div style={{ width: '50px', height: '15px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={store.trendData}>
+                          <Line type="monotone" dataKey="v" stroke={statusColor} strokeWidth={2} dot={false} />
+                          <YAxis domain={['dataMin', 'dataMax']} hide />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-               </div>
+                </div>
+                <div style={{ background: store.isAtRisk ? '#ef444420' : '#10b98120', color: store.isAtRisk ? colors.danger : colors.success, padding: '8px 12px', borderRadius: '10px', fontWeight: '900', fontSize: tvMode?'20px':'14px' }}>
+                   {Math.round((store.sales / (store.goal || 1)) * 100)}%
+                </div>
+              </div>
 
-               <div style={local.recoveryBox}>
-                  <span style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)' }}>RITMO DE RECUPERAÇÃO</span>
-                  <div style={{ fontSize: '24px', fontWeight: '900', color: isAtRisk ? colors.danger : 'var(--text-main)', marginTop: '5px' }}>
-                     {store.recovery} <small style={{ fontWeight: 'normal', fontSize: '12px' }}>vendas/dia</small>
-                  </div>
-               </div>
+              <div style={local.projCardBox}>
+                 <span style={local.miniLabel}>PROJEÇÃO DE FECHO</span>
+                 <div style={{ fontSize: tvMode?'48px':'36px', fontWeight: '900', color: statusColor, lineHeight: '1' }}>
+                    {store.projSales} <span style={{ fontSize: '16px', color: 'var(--text-muted)' }}>/ {store.goal}</span>
+                 </div>
+                 
+                 {isAtRisk ? (
+                   <div style={local.recoveryText}>
+                     <AlertTriangle size={14}/> Ritmo necessário: <strong>{store.recoveryPace}/dia</strong>
+                   </div>
+                 ) : (
+                   <div style={local.successText}>
+                     <Trophy size={14}/> Meta garantida no ritmo atual!
+                   </div>
+                 )}
+              </div>
 
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                  <MiniProgress label="Vendido" current={store.sales} target={store.goal} color={colors.primary} />
-                  <MiniProgress label="Instalado" current={store.installs} target={store.sales} color={colors.success} />
-               </div>
+              {store.backlogAlert && (
+                 <div style={local.backlogAlert}><AlertOctagon size={16}/> {store.backlogAlert}</div>
+              )}
 
-               <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Projeção: <strong>{store.projection}</strong></span>
-                  <ChevronRight size={16} />
-               </div>
+              {!tvMode && (
+                <div style={local.cardActions}>
+                  <button onClick={() => setDrillDown(store)} style={local.btnAction}><Users size={16}/> Raio-X</button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* MODAL RAIO-X */}
-      {selectedStore && (
-        <div style={local.modalOverlay}>
-          <div style={{ ...globalStyles.card, width: '90%', maxWidth: '500px' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0 }}>{selectedStore.name}</h2>
-                <button onClick={() => setSelectedStore(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X/></button>
-             </div>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
-                   <span style={{ flex: 2 }}>CONSULTOR</span>
-                   <span style={{ flex: 1, textAlign: 'center' }}>LEADS</span>
-                   <span style={{ flex: 1, textAlign: 'right' }}>VENDAS</span>
-                </div>
-                {selectedStore.sellers.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: '14px' }}>
-                     <span style={{ flex: 2, fontWeight: 'bold' }}>{s.name}</span>
-                     <span style={{ flex: 1, textAlign: 'center' }}>{s.leads}</span>
-                     <span style={{ flex: 1, textAlign: 'right', fontWeight: '900', color: colors.primary }}>{s.sales}</span>
-                  </div>
-                ))}
+      {/* MODAL DRILL-DOWN (RAIO-X) */}
+      {drillDown && (
+        <div style={global.modalOverlay}>
+          <div style={{ ...global.modalBox, maxWidth: '600px', background: 'var(--bg-card)' }}>
+            <div style={global.modalHeader}>
+              <h3 style={{...global.modalTitle, color: 'var(--text-main)'}}>Equipa: {drillDown.name}</h3>
+              <button onClick={() => setDrillDown(null)} style={{color: 'var(--text-main)', background:'none', border:'none'}}><X/></button>
+            </div>
+            <div style={local.table}>
+               <div style={local.th}><span>CONSULTOR</span><span>VENDAS</span><span>CONV.</span></div>
+               {drillDown.sellers.map((s, i) => (
+                 <div key={i} style={local.tr}>
+                    <span style={{ fontWeight: '800', color: 'var(--text-main)', display:'flex', gap:8, alignItems: 'center' }}>
+                       {i===0 && <Star size={16} color="#f59e0b" fill="#f59e0b"/>} {s.name}
+                    </span>
+                    <span style={{ fontWeight: '900', color: colors.primary, fontSize: '16px' }}>{s.sales}</span>
+                    <span style={{ fontWeight: 'bold', color: colors.success }}>{((s.sales/s.leads)*100 || 0).toFixed(0)}%</span>
+                 </div>
+               ))}
+               {drillDown.sellers.length === 0 && <p style={{textAlign:'center', color:'var(--text-muted)', padding:'20px'}}>Sem vendas registadas nesta unidade.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SPRINT (COM BÓNUS) */}
+      {showSprintModal && (
+        <div style={global.modalOverlay}>
+          <div style={{...global.modalBox, background: 'var(--bg-card)'}}>
+             <h3 style={{...global.modalTitle, color: 'var(--text-main)'}}>Lançar Sprint Relâmpago</h3>
+             <p style={{...global.subtitle, marginBottom: '20px'}}>Incentive a equipa com uma meta de curto prazo.</p>
+             
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                 <div style={local.field}>
+                   <label style={local.label}>Meta de Vendas</label>
+                   <input type="number" value={sprint.goal} onChange={e => setSprint({...sprint, goal: e.target.value})} style={local.input} />
+                 </div>
+                 <div style={local.field}>
+                   <label style={local.label}>Horário Limite</label>
+                   <input type="time" value={sprint.deadline} onChange={e => setSprint({...sprint, deadline: e.target.value})} style={local.input} />
+                 </div>
+               </div>
+               
+               {/* NOVO CAMPO DE PREMIAÇÃO */}
+               <div style={local.field}>
+                 <label style={local.label}><Gift size={14} style={{verticalAlign: 'middle', marginRight: '5px'}}/> Bonificação / Prémio</label>
+                 <input 
+                   type="text" 
+                   placeholder="Ex: Rodízio de Pizzas, Vale R$ 100..." 
+                   value={sprint.reward} 
+                   onChange={e => setSprint({...sprint, reward: e.target.value})} 
+                   style={local.input} 
+                 />
+               </div>
+
+               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                 <button onClick={() => setShowSprintModal(false)} style={{ flex: 1, padding: '15px', borderRadius: '12px', background: 'var(--bg-panel)', color: 'var(--text-main)', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Cancelar</button>
+                 <button onClick={() => { setSprint({...sprint, active: true}); setShowSprintModal(false); }} style={{ flex: 2, background: '#f59e0b', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: '900', cursor: 'pointer' }}>
+                   ATIVAR SPRINT
+                 </button>
+               </div>
              </div>
           </div>
         </div>
@@ -302,23 +334,59 @@ export default function App({ userData }) {
   );
 }
 
-const MiniProgress = ({ label, current, target, color }) => (
-  <div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '5px' }}>
-      <span style={{ fontWeight: 'bold', color: 'var(--text-muted)' }}>{label.toUpperCase()}</span>
-      <span style={{ fontWeight: '900' }}>{current} / {target}</span>
-    </div>
-    <div style={{ height: '6px', background: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden' }}>
-      <div style={{ width: `${Math.min((current/target)*100 || 0, 100)}%`, height: '100%', background: color, transition: '1s' }} />
-    </div>
-  </div>
-);
-
 const local = {
-  dateInput: { background: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px', borderRadius: '12px', outline: 'none', fontWeight: 'bold' },
-  miniStat: { background: 'var(--bg-card)', padding: '10px 15px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold' },
-  errorCard: { background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', padding: '20px', borderRadius: '16px', display: 'flex', gap: '15px', marginBottom: '30px' },
-  recoveryBox: { background: 'var(--bg-app)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)', marginBottom: '25px' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  toast: { position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: 'white', padding: '15px 30px', borderRadius: '50px', fontWeight: 'bold', boxShadow: '0 10px 25px rgba(16,185,129,0.3)', zIndex: 2000 }
+  loader: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' },
+  headerWrapper: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '40px', gap: '30px', flexWrap: 'wrap' },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '20px' },
+  clusterIcon: { width: '64px', height: '64px', background: 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  clusterTitle: { fontSize: '32px', fontWeight: '900', color: 'var(--text-main)', margin: 0 },
+  countdownRow: { display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' },
+  
+  globalProjectionBox: { flex: 1, minWidth: '350px', background: 'var(--bg-panel)', padding: '20px 25px', borderRadius: '24px', border: '1px solid var(--border)' },
+  projHeader: { display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '900', letterSpacing: '0.05em', marginBottom: '12px', color: 'var(--text-muted)' },
+  projValues: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' },
+  globalProgress: { width: '100%', height: '12px', background: 'var(--bg-app)', borderRadius: '6px', overflow: 'hidden' },
+  progressBar: { height: '100%', transition: '1s ease-in-out' },
+  
+  headerActions: { display: 'flex', gap: '12px' },
+  btnSprint: { background: '#f59e0b', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', gap: '8px', boxShadow: '0 4px 15px rgba(245,158,11,0.3)' },
+  btnTV: { background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '12px 20px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', gap: '8px' },
+
+  // Estilo renovado para o Banner do Sprint
+  sprintBanner: { background: 'linear-gradient(90deg, #b91c1c 0%, #ef4444 100%)', padding: '25px 40px', borderRadius: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', color: 'white', boxShadow: '0 15px 35px rgba(239,68,68,0.4)', border: '2px solid #fca5a5' },
+  flashToast: { position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', background: colors.primary, color: 'white', padding: '15px 30px', borderRadius: '50px', fontWeight: '900', zIndex: 10000, display: 'flex', gap: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
+  
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
+  sparklineBox: { width: '60px', height: '20px', marginTop: '5px' },
+  statusBadge: { padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: '900' },
+  projCardBox: { background: 'var(--bg-app)', padding: '20px', borderRadius: '18px', border: '1px solid var(--border)', marginBottom: '15px', textAlign: 'center' },
+  miniLabel: { fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', display: 'block', marginBottom: '5px', letterSpacing: '0.05em' },
+  recoveryText: { color: colors.danger, fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px' },
+  successText: { color: colors.success, fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px' },
+  backlogAlert: { background: '#f59e0b15', color: '#f59e0b', padding: '10px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', display: 'flex', gap: '8px', marginBottom: '15px' },
+  
+  cardActions: { display: 'flex', gap: '10px', marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid var(--border)' },
+  btnAction: { width: '100%', background: 'var(--bg-panel)', border: '1px solid var(--border)', padding: '12px', borderRadius: '10px', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px', transition: '0.2s' },
+
+  field: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  label: { fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' },
+  input: { background: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '14px', borderRadius: '12px', outline: 'none', fontSize: '15px', fontWeight: 'bold' },
+
+  table: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' },
+  th: { display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', padding: '0 10px' },
+  tr: { display: 'flex', justifyContent: 'space-between', padding: '15px 10px', borderBottom: '1px solid var(--border)', alignItems: 'center' }
 };
+
+// Injetar animações CSS na página
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    @keyframes bounceIn {
+      0% { transform: translate(-50%, -100%); opacity: 0; }
+      60% { transform: translate(-50%, 10%); opacity: 1; }
+      100% { transform: translate(-50%, 0); }
+    }
+  `;
+  document.head.appendChild(style);
+}

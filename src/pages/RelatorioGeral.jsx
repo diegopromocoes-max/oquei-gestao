@@ -1,126 +1,120 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  query 
-} from 'firebase/firestore';
-import { 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area 
+  AreaChart, Area, PieChart, Pie, Cell 
 } from 'recharts';
 import { 
-  TrendingUp, Download, Calendar, BarChart3, 
-  PieChart as PieIcon, LineChart as LineIcon,
-  ArrowUpRight, ArrowDownRight, Globe, Users, Target,
-  User, Award, Zap, Search, MapPin, RefreshCw, FileText
+  TrendingUp, Download, Calendar, BarChart3, PieChart as PieIcon, 
+  LineChart as LineIcon, Globe, Users, Target, User, Award, Zap, 
+  Search, MapPin, RefreshCw, ShieldAlert, Database, ChevronRight
 } from 'lucide-react';
 
-// IMPORTAÇÃO DOS ESTILOS GLOBAIS
+// IMPORTAÇÃO DO DESIGN SYSTEM
 import { styles as global, colors } from '../styles/globalStyles';
-
-// CONFIGURAÇÃO DE AMBIENTE (Sandbox vs Produção)
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 export default function RelatoriosBI({ userData }) {
   const [activeView, setActiveView] = useState('global');
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState(true);
+  
+  // Dados do Firebase
   const [leads, setLeads] = useState([]);
   const [attendants, setAttendants] = useState([]);
   const [selectedAttendantId, setSelectedAttendantId] = useState('');
-  const [user, setUser] = useState(null);
+  
+  // Diagnóstico
+  const [errorLog, setErrorLog] = useState(null);
 
-  // 1. REGRA 3 - Autenticação Obrigatória antes de qualquer Query
+  // 1. ESCUTA DE DADOS BLINDADA (Sem filtros complexos no backend)
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (!auth.currentUser) {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      
+      setLoading(true);
+
+      // Assumindo estrutura local na raiz (leads, users)
+      const leadsRef = collection(db, 'leads');
+      const usersRef = collection(db, 'users');
+
+      const unsubLeads = onSnapshot(leadsRef, (snap) => {
+        setLeads(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (err) => {
+        console.error("BI Erro Leads:", err);
+        setErrorLog("Sem permissão para ler 'leads'.");
+      });
+
+      const unsubUsers = onSnapshot(usersRef, (snap) => {
+        const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        let filtered = allUsers.filter(u => u.role === 'attendant');
+        const myCluster = String(userData?.clusterId || userData?.cluster || "").trim();
+
+        if (myCluster && userData?.role === 'supervisor') {
+          filtered = filtered.filter(u => {
+            const uCluster = String(u.clusterId || u.cluster || u.regionalId || "").trim();
+            return uCluster === myCluster;
+          });
         }
-      } catch (err) {
-        console.error("BI: Falha na autenticação silenciosa", err);
-      }
-    };
-    initAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+        // Diagnóstico se não encontrar ninguém
+        if (filtered.length === 0 && allUsers.length > 0 && myCluster) {
+           setErrorLog(`Nenhum atendente encontrado para o cluster '${myCluster}'. Total de utilizadores na DB: ${allUsers.length}`);
+           setAttendants(allUsers.filter(u => u.role === 'attendant')); // Fallback: mostra todos
+        } else {
+           setErrorLog(null);
+           setAttendants(filtered);
+        }
+        
+        setLoading(false);
+      }, (err) => {
+        console.error("BI Erro Users:", err);
+        setErrorLog("Sem permissão para ler 'users'.");
+        setLoading(false);
+      });
+
+      return () => { unsubLeads(); unsubUsers(); };
     });
-    return () => unsubscribe();
-  }, []);
+    return () => unsubAuth();
+  }, [userData]);
 
-  // 2. REGRA 1 e 2 - Caminhos Seguros e Filtragem em Memória (JS)
-  useEffect(() => {
-    if (!user) return; // Só busca se houver user logado (Regra 3)
-
-    setLoading(true);
-
-    // NOTA PARA PRODUÇÃO: Se estiver no PC da empresa com DB real, 
-    // os caminhos abaixo devem ser apenas 'leads' e 'users'.
-    // Para o Preview funcionar, usamos o prefixo mandatório artifacts:
-    const leadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'leads');
-    const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
-
-    // Escuta Leads em Tempo Real (Regra 2 - Sem filtros complexos no Firebase)
-    const unsubLeads = onSnapshot(leadsRef, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      console.log("BI: Leads carregados do banco:", docs.length);
-      setLeads(docs);
-      setLoading(false);
-    }, (err) => {
-      console.error("BI: Erro de permissão em Leads. Verifique o caminho no Firestore.", err);
-      setLoading(false);
-    });
-
-    // Escuta Usuários para popular filtro de Atendentes
-    const unsubUsers = onSnapshot(usersRef, (snap) => {
-      const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      // Filtragem por Cluster no JavaScript (Regra 2)
-      let list = allUsers.filter(u => u.role === 'attendant');
-      
-      if (userData?.role === 'supervisor' && userData?.clusterId) {
-        list = list.filter(att => {
-          const attCluster = att.clusterId || att.cluster || att.regionalId;
-          return String(attCluster) === String(userData.clusterId);
-        });
-      }
-      
-      console.log("BI: Atendentes filtrados para o supervisor:", list.length);
-      setAttendants(list);
-    }, (err) => console.error("BI: Erro de permissão em Usuários.", err));
-
-    return () => {
-      unsubLeads();
-      unsubUsers();
-    };
-  }, [user, userData]);
-
-  // --- PROCESSAMENTO DE DADOS (Business Intelligence Logic) ---
+  // --- PROCESSAMENTO DE DADOS (BI) ---
   const currentMonthLeads = useMemo(() => {
     return leads.filter(l => l.date && l.date.startsWith(selectedMonth));
   }, [leads, selectedMonth]);
 
+  // View Global: KPIs
   const globalStats = useMemo(() => {
-    const total = currentMonthLeads.length;
-    const sales = currentMonthLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
-    const installed = currentMonthLeads.filter(l => l.status === 'Instalado').length;
-    const conversion = total > 0 ? ((sales / total) * 100).toFixed(1) : 0;
-    return { total, sales, installed, conversion };
-  }, [currentMonthLeads]);
+    // Filtra apenas leads que pertencem aos atendentes do cluster atual
+    const validAttendantIds = attendants.map(a => a.id);
+    const clusterLeads = currentMonthLeads.filter(l => validAttendantIds.includes(l.attendantId));
 
+    const total = clusterLeads.length;
+    const sales = clusterLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
+    const installed = clusterLeads.filter(l => l.status === 'Instalado').length;
+    const conversion = total > 0 ? ((sales / total) * 100).toFixed(1) : 0;
+    
+    return { total, sales, installed, conversion, clusterLeads };
+  }, [currentMonthLeads, attendants]);
+
+  // View Global: Ranking de Cidades
+  const storeRanking = useMemo(() => {
+    const stores = {};
+    globalStats.clusterLeads.forEach(l => {
+       const city = l.cityId || 'Sem Unidade';
+       if (!stores[city]) stores[city] = { name: city, leads: 0, sales: 0 };
+       stores[city].leads++;
+       if (['Contratado', 'Instalado'].includes(l.status)) stores[city].sales++;
+    });
+    return Object.values(stores).sort((a,b) => b.sales - a.sales);
+  }, [globalStats.clusterLeads]);
+
+  // View Atendente: Relatório Individual
   const attendantReport = useMemo(() => {
     if (!selectedAttendantId) return null;
+    
     const attLeads = currentMonthLeads.filter(l => l.attendantId === selectedAttendantId);
     const attUser = attendants.find(a => a.id === selectedAttendantId);
 
@@ -128,12 +122,15 @@ export default function RelatoriosBI({ userData }) {
     const sales = attLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
     const conv = total > 0 ? ((sales / total) * 100).toFixed(1) : 0;
 
+    // Mix de Produtos
     const products = {};
     attLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).forEach(l => {
-      products[l.productName] = (products[l.productName] || 0) + 1;
+      const prodName = l.productName || 'Outro';
+      products[prodName] = (products[prodName] || 0) + 1;
     });
     const mixChart = Object.entries(products).map(([name, value]) => ({ name, value }));
 
+    // Histórico Diário
     const dailyMap = {};
     attLeads.forEach(l => {
       const day = l.date.split('-')[2];
@@ -145,15 +142,16 @@ export default function RelatoriosBI({ userData }) {
 
     return { 
       name: attUser?.name || 'Colaborador', 
-      store: attUser?.cityId || 'N/A',
+      store: attUser?.cityId || 'Unidade não definida',
       total, sales, conv, mixChart, dailyChart 
     };
   }, [selectedAttendantId, currentMonthLeads, attendants]);
 
-  if (loading || !user) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '400px', gap: '20px' }}>
-      <RefreshCw size={32} color="var(--text-brand)" className="animate-spin" />
-      <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 'bold' }}>CONECTANDO AO BANCO DE DADOS...</span>
+
+  if (loading) return (
+    <div style={local.loader}>
+      <RefreshCw size={48} className="animate-spin" color={colors.primary} />
+      <h3 style={{ color: 'var(--text-muted)', marginTop: '20px' }}>CONSOLIDANDO DADOS ESTRATÉGICOS...</h3>
     </div>
   );
 
@@ -161,85 +159,111 @@ export default function RelatoriosBI({ userData }) {
     <div style={global.container}>
       
       {/* HEADER BI */}
-      <div style={global.header}>
+      <div style={local.headerWrapper}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ ...global.iconHeader, background: colors.primary }}>
-            <BarChart3 size={28} color="white" />
+          <div style={{ ...global.iconHeader, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)' }}>
+            <BarChart3 size={32} color="white" />
           </div>
           <div>
             <h1 style={global.title}>Business Intelligence</h1>
-            <p style={global.subtitle}>Relatórios Consolidados de Performance.</p>
+            <p style={global.subtitle}>Relatórios de Performance (Cluster {userData?.clusterId || 'Geral'})</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={local.toggleGroup}>
             <button onClick={() => setActiveView('global')} style={activeView === 'global' ? local.toggleBtnActive : local.toggleBtn}>Visão Global</button>
             <button onClick={() => setActiveView('atendente')} style={activeView === 'atendente' ? local.toggleBtnActive : local.toggleBtn}>Por Atendente</button>
           </div>
-          <div style={global.searchBox}>
-            <Calendar size={18} color="var(--text-muted)" />
-            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={global.searchInput} />
-          </div>
+          <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={local.input} />
         </div>
       </div>
 
-      {activeView === 'global' ? (
-        <div style={{ animation: 'fadeIn 0.4s' }}>
-          <div style={{ ...global.grid4, marginBottom: '30px' }}>
+      {/* PAINEL DE DIAGNÓSTICO */}
+      {errorLog && (
+        <div style={local.alertBox}>
+          <ShieldAlert size={20} />
+          <div>
+            <strong>Aviso do Sistema:</strong> {errorLog}
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          VIEW: GLOBAL (RANKINGS E KPIS DO CLUSTER)
+          ========================================== */}
+      {activeView === 'global' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4">
+          
+          <div style={local.grid4}>
             <KpiCard title="Leads Captados" value={globalStats.total} icon={Users} color={colors.primary} />
             <KpiCard title="Vendas Brutas" value={globalStats.sales} icon={TrendingUp} color={colors.success} />
             <KpiCard title="Instalados" value={globalStats.installed} icon={Zap} color="#f59e0b" />
-            <KpiCard title="Conversão" value={`${globalStats.conversion}%`} icon={Target} color="#8b5cf6" />
+            <KpiCard title="Conv. Média" value={`${globalStats.conversion}%`} icon={Target} color="#8b5cf6" />
           </div>
 
-          <div style={global.card}>
-            <h3 style={local.cardTitle}><Globe size={18} color={colors.primary}/> Performance por Unidade (Cluster {userData?.clusterId || 'Geral'})</h3>
-            <div style={{ overflowX: 'auto', marginTop: '20px' }}>
+          <div style={{ ...global.card, marginTop: '30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+               <h3 style={{ ...local.cardTitle, margin: 0 }}><Globe size={18} color={colors.primary}/> Ranking de Lojas (Cluster)</h3>
+               <button style={local.btnOutline}><Download size={14}/> Exportar CSV</button>
+            </div>
+            
+            <div style={{ overflowX: 'auto' }}>
               <table style={local.table}>
                 <thead>
                   <tr style={local.thRow}>
-                    <th style={local.th}>Unidade</th>
-                    <th style={local.th}>Leads</th>
-                    <th style={local.th}>Vendas</th>
-                    <th style={local.th}>Conversão</th>
+                    <th style={local.th}>Unidade / Loja</th>
+                    <th style={local.th} style={{textAlign:'center'}}>Leads</th>
+                    <th style={local.th} style={{textAlign:'center'}}>Vendas</th>
+                    <th style={local.th} style={{textAlign:'right'}}>Conversão</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from(new Set(currentMonthLeads.map(l => l.cityId))).map(storeName => {
-                    const storeLeads = currentMonthLeads.filter(l => l.cityId === storeName);
-                    const salesCount = storeLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
-                    const rate = storeLeads.length > 0 ? ((salesCount / storeLeads.length) * 100).toFixed(1) : 0;
+                  {storeRanking.map((store, idx) => {
+                    const conv = store.leads > 0 ? ((store.sales / store.leads) * 100).toFixed(1) : 0;
                     return (
-                      <tr key={storeName} style={local.tr}>
-                        <td style={local.td}><strong>{storeName}</strong></td>
-                        <td style={local.td}>{storeLeads.length}</td>
-                        <td style={local.td}>{salesCount}</td>
-                        <td style={local.td}>{rate}%</td>
+                      <tr key={idx} style={local.tr}>
+                        <td style={{ ...local.td, fontWeight: '800' }}>{store.name}</td>
+                        <td style={{ ...local.td, textAlign: 'center', color: 'var(--text-muted)' }}>{store.leads}</td>
+                        <td style={{ ...local.td, textAlign: 'center', fontWeight: '900', color: colors.primary }}>{store.sales}</td>
+                        <td style={{ ...local.td, textAlign: 'right' }}>
+                          <span style={{ padding: '4px 8px', background: conv >= 15 ? '#10b98115' : '#ef444415', color: conv >= 15 ? colors.success : colors.danger, borderRadius: '6px', fontWeight: '900' }}>
+                             {conv}%
+                          </span>
+                        </td>
                       </tr>
                     );
                   })}
-                  {currentMonthLeads.length === 0 && <tr><td colSpan="4" style={{padding: '30px', textAlign:'center', color:'var(--text-muted)'}}>Nenhum dado encontrado para este mês.</td></tr>}
+                  {storeRanking.length === 0 && (
+                    <tr><td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum dado de vendas encontrado neste mês para o seu cluster.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
-      ) : (
-        <div style={{ animation: 'fadeIn 0.4s' }}>
-          <div style={{ ...global.card, marginBottom: '30px', borderStyle: 'dashed' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: '12px' }}><Search size={24} color="var(--text-brand)"/></div>
-                <div style={{ flex: 1 }}>
-                   <label style={global.label}>Análise Individual - Atendentes do Cluster {userData?.clusterId}:</label>
+      )}
+
+
+      {/* ==========================================
+          VIEW: POR ATENDENTE (RAIO-X INDIVIDUAL)
+          ========================================== */}
+      {activeView === 'atendente' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4">
+          
+          <div style={{ ...global.card, marginBottom: '30px', border: `1px solid ${colors.primary}40`, background: 'var(--bg-panel)' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: '12px' }}><Search size={24} color={colors.primary}/></div>
+                <div style={{ flex: 1, minWidth: '250px' }}>
+                   <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtrar Relatório por Atendente</label>
                    <select 
-                     style={{ ...global.select, marginTop: '8px' }} 
+                     style={{ ...local.input, width: '100%', marginTop: '8px' }} 
                      value={selectedAttendantId} 
                      onChange={e => setSelectedAttendantId(e.target.value)}
                    >
-                     <option value="">Selecione um colaborador ({attendants.length} ativos)</option>
+                     <option value="">Selecione um consultor ({attendants.length} ativos)...</option>
                      {attendants.map(att => (
-                       <option key={att.id} value={att.id}>{att.name} ({att.cityId || 'Sem Loja'})</option>
+                       <option key={att.id} value={att.id}>{att.name} ({att.cityId || 'Sem Unidade'})</option>
                      ))}
                    </select>
                 </div>
@@ -249,110 +273,146 @@ export default function RelatoriosBI({ userData }) {
           {!selectedAttendantId ? (
             <div style={global.emptyState}>
               <User size={48} color="var(--border)" style={{ marginBottom: '15px' }} />
-              <p>Selecione um atendente para ver o raio-x de performance.</p>
+              <h3 style={{ margin: '0 0 5px 0', color: 'var(--text-main)' }}>Selecione um Atendente</h3>
+              <p style={{ margin: 0 }}>Escolha um consultor no menu acima para gerar o relatório individual.</p>
             </div>
           ) : attendantReport && (
-            <div style={{ animation: 'fadeInUp 0.4s ease-out' }}>
+            <div className="animate-in slide-in-from-bottom-4">
+               
+               {/* HERO DO ATENDENTE */}
                <div style={local.profileHero}>
                   <div style={local.avatarLarge}>{attendantReport.name?.[0]}</div>
                   <div>
-                    <h2 style={{ ...global.title, color: 'white' }}>{attendantReport.name}</h2>
-                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px', marginTop: '4px' }}>
-                      <MapPin size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }}/> {attendantReport.store} • Consultor de Vendas
+                    <h2 style={{ fontSize: '28px', fontWeight: '900', color: 'white', margin: 0 }}>{attendantReport.name}</h2>
+                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px', margin: '5px 0 0 0', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <MapPin size={16}/> {attendantReport.store} • Consultor de Vendas
                     </p>
                   </div>
                   <div style={{ marginLeft: 'auto' }}>
-                    <div style={local.badgeAward}><Award size={14}/> Top Performance</div>
+                    <div style={local.badgeAward}><Award size={16}/> Em Avaliação</div>
                   </div>
                </div>
 
-               <div style={{ ...global.grid4, marginBottom: '30px' }}>
-                  <KpiCard title="Leads" value={attendantReport.total} icon={Users} color={colors.primary} />
-                  <KpiCard title="Vendas" value={attendantReport.sales} icon={TrendingUp} color={colors.success} />
-                  <KpiCard title="Conversão" value={`${attendantReport.conv}%`} icon={Target} color="#f59e0b" />
-                  <KpiCard title="Vendas/Dia" value={(attendantReport.sales / 22).toFixed(1)} icon={Zap} color="#8b5cf6" />
+               {/* KPIS INDIVIDUAIS */}
+               <div style={{ ...local.grid4, marginBottom: '30px' }}>
+                  <KpiCard title="Leads Tratados" value={attendantReport.total} icon={Users} color={colors.primary} />
+                  <KpiCard title="Vendas Fechadas" value={attendantReport.sales} icon={TrendingUp} color={colors.success} />
+                  <KpiCard title="Taxa Conversão" value={`${attendantReport.conv}%`} icon={Target} color="#f59e0b" />
+                  <KpiCard title="Produtividade" value={Math.min(100, Math.round(attendantReport.sales * 5))} icon={Zap} color="#8b5cf6" />
                </div>
 
-               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', flexWrap: 'wrap' }}>
+               <div style={local.chartsGrid}>
+                  
+                  {/* GRÁFICO DIÁRIO */}
                   <div style={global.card}>
-                    <h3 style={local.cardTitle}><LineIcon size={18} color={colors.primary}/> Produtividade Diária (Contratos)</h3>
-                    <div style={{ height: '300px', marginTop: '25px' }}>
+                    <h3 style={local.cardTitle}><LineIcon size={18} color={colors.primary}/> Evolução de Fechamentos (Diário)</h3>
+                    <div style={{ height: '280px', marginTop: '25px' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={attendantReport.dailyChart}>
                           <defs>
-                            <linearGradient id="colorBI" x1="0" y1="0" x2="0" y2="1">
+                            <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3}/>
                               <stop offset="95%" stopColor={colors.primary} stopOpacity={0}/>
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                          <XAxis dataKey="day" tick={{fill: 'var(--text-muted)', fontSize: 10}} axisLine={false} tickLine={false} />
-                          <YAxis tick={{fill: 'var(--text-muted)', fontSize: 10}} axisLine={false} tickLine={false} />
-                          <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }} />
-                          <Area type="monotone" dataKey="vendas" stroke={colors.primary} strokeWidth={3} fill="url(#colorBI)" />
+                          <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 11}} />
+                          <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 11}} />
+                          <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-main)' }} />
+                          <Area type="monotone" dataKey="vendas" stroke={colors.primary} strokeWidth={3} fillOpacity={1} fill="url(#colorV)" name="Vendas" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
+                  {/* GRÁFICO MIX DE PRODUTOS */}
                   <div style={global.card}>
-                    <h3 style={local.cardTitle}><PieIcon size={18} color="#8b5cf6"/> Mix de Produtos</h3>
-                    <div style={{ height: '240px', marginTop: '20px' }}>
+                    <h3 style={local.cardTitle}><PieIcon size={18} color="#8b5cf6"/> Mix de Produtos (Vendas)</h3>
+                    <div style={{ height: '220px', marginTop: '20px' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={attendantReport.mixChart.length > 0 ? attendantReport.mixChart : [{ name: 'Sem Vendas', value: 1 }]}
-                            cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value"
+                            cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={5} dataKey="value"
                           >
                             {attendantReport.mixChart.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={[colors.primary, colors.success, '#f59e0b', '#8b5cf6'][index % 4]} />
                             ))}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }}/>
                         </PieChart>
                       </ResponsiveContainer>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+                        {attendantReport.mixChart.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '5px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>{p.name}</span>
+                            <strong style={{ color: 'var(--text-main)' }}>{p.value} un.</strong>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-               </div>
-               
-               <div style={{ display:'flex', gap:'15px', marginTop:'30px' }}>
-                  <button style={{ ...global.btnSecondary, flex: 1 }}><FileText size={18}/> Ver Histórico de Feedbacks</button>
-                  <button style={{ ...global.btnPrimary, flex: 1, background: colors.primary }}><Download size={18}/> Exportar Relatório PDF</button>
+
                </div>
             </div>
           )}
         </div>
       )}
+
     </div>
   );
 }
 
-// --- AUXILIARES ---
+// --- SUB-COMPONENTES ---
 const KpiCard = ({ title, value, icon: Icon, color }) => (
-  <div style={global.card}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-      <div>
-        <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{title}</span>
-        <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--text-main)', marginTop: '5px' }}>{value}</div>
-      </div>
-      <div style={{ padding: '12px', borderRadius: '12px', background: `${color}15`, color: color }}>
-        <Icon size={22} />
-      </div>
+  <div style={{ ...global.card, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div>
+      <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
+      <div style={{ fontSize: '36px', fontWeight: '900', color: 'var(--text-main)', marginTop: '5px', lineHeight: '1' }}>{value}</div>
+    </div>
+    <div style={{ padding: '12px', borderRadius: '12px', background: `${color}15`, color: color }}>
+      <Icon size={24} />
     </div>
   </div>
 );
 
+// --- ESTILOS LOCAIS ---
 const local = {
-  toggleGroup: { background: 'var(--bg-panel)', padding: '4px', borderRadius: '12px', display: 'flex', border: '1px solid var(--border)' },
-  toggleBtn: { padding: '8px 16px', border: 'none', background: 'transparent', borderRadius: '8px', fontSize: '13px', fontWeight: '700', color: 'var(--text-muted)', cursor: 'pointer', transition: '0.2s' },
-  toggleBtnActive: { padding: '8px 16px', border: 'none', background: 'var(--bg-card)', borderRadius: '8px', fontSize: '13px', fontWeight: '800', color: 'var(--text-brand)', cursor: 'pointer' },
-  cardTitle: { margin: 0, fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  thRow: { borderBottom: '1px solid var(--border)' },
-  th: { textAlign: 'left', padding: '15px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  tr: { borderBottom: '1px solid var(--border)' },
-  td: { padding: '15px', fontSize: '14px', color: 'var(--text-main)' },
-  profileHero: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '30px', borderRadius: '24px', marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '25px', border: '1px solid rgba(255,255,255,0.05)' },
-  avatarLarge: { width: '70px', height: '70px', borderRadius: '22px', background: 'var(--text-brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: '900' },
-  badgeAward: { background: '#f59e0b15', color: '#f59e0b', padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }
+  loader: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-app)' },
+  headerWrapper: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '30px', gap: '20px', flexWrap: 'wrap' },
+  
+  toggleGroup: { background: 'var(--bg-panel)', padding: '5px', borderRadius: '14px', display: 'flex', border: '1px solid var(--border)' },
+  toggleBtn: { padding: '10px 20px', border: 'none', background: 'transparent', borderRadius: '10px', fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)', cursor: 'pointer', transition: '0.2s' },
+  toggleBtnActive: { padding: '10px 20px', border: 'none', background: 'var(--bg-card)', borderRadius: '10px', fontSize: '13px', fontWeight: '900', color: 'var(--text-brand)', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' },
+  
+  // FIX: Cores seguras para inputs em modo escuro/claro
+  input: { background: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px 15px', borderRadius: '12px', outline: 'none', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' },
+  btnOutline: { background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
+  
+  alertBox: { background: '#f59e0b15', border: '1px solid #f59e0b40', color: '#f59e0b', padding: '15px 20px', borderRadius: '12px', display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '30px', fontSize: '13px' },
+  
+  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' },
+  chartsGrid: { display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '25px', alignItems: 'start' },
+  
+  cardTitle: { margin: 0, fontSize: '15px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' },
+  
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
+  thRow: { borderBottom: '2px solid var(--border)' },
+  th: { padding: '15px 10px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '0.05em' },
+  tr: { borderBottom: '1px solid var(--border)', transition: 'background 0.2s', ':hover': { background: 'var(--bg-panel)' } },
+  td: { padding: '15px 10px', fontSize: '14px', color: 'var(--text-main)' },
+
+  profileHero: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '30px', borderRadius: '24px', marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.05)' },
+  avatarLarge: { width: '80px', height: '80px', borderRadius: '24px', background: colors.primary, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', fontWeight: '900', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.4)' },
+  badgeAward: { background: 'rgba(245, 158, 11, 0.2)', color: '#fcd34d', padding: '8px 16px', borderRadius: '12px', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid rgba(245, 158, 11, 0.3)' }
 };
+
+// CSS auxiliar
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    @media (max-width: 1024px) { .chartsGrid { grid-template-columns: 1fr !important; } }
+  `;
+  document.head.appendChild(style);
+}
