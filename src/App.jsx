@@ -9,6 +9,7 @@ import PainelCoordenador from './pages/PainelCoordenador';
 import PainelSupervisor from './pages/PainelSupervisor';
 import CRMAtendente from './pages/CRMAtendente';
 
+
 export default function App() {
 const [user, setUser] = useState(null);
 const [userData, setUserData] = useState(null);

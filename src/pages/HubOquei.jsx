@@ -1,341 +1,340 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { db, auth } from '../firebase';
+import { collection, onSnapshot, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
-  Activity, TrendingDown, TrendingUp, Target, Crosshair, Users, 
-  X, Calendar, UploadCloud, Zap, Lightbulb, Share2, Headset, 
-  ShieldAlert, AlertTriangle, Layers, Trophy, Medal, Map, 
-  ShieldCheck, Flame, ChevronRight, BarChart3, Info, MapPin, Smartphone
+  Activity, TrendingDown, TrendingUp, Target, MapPin, 
+  Plus, Crosshair, Users, X, CheckCircle, PieChart, 
+  Share2, ShieldAlert, AlertTriangle, Headset, Briefcase, 
+  BarChart3, Store, Calendar as CalendarIcon, UploadCloud, Zap, 
+  Lightbulb, Sliders, GripVertical, AlertOctagon, Info, ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 
-// ============================================================================
-// --- MOCKS PARA AMBIENTE DE DESENVOLVIMENTO (CANVAS) ---
-// Nota: No seu projeto real, as funções abaixo devem ler dados do Firestore
-// das coleções 'leads', 'city_metrics' e 'action_plans'.
-// ============================================================================
+import { styles as global, colors } from '../styles/globalStyles';
 
-const HubOquei = ({ userData }) => {
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('radar');
-  
-  // Estados para dados simulados
-  const [cityMetrics, setCityMetrics] = useState([]);
-  const [selectedCity, setSelectedCity] = useState(null);
+// --- COMPONENTE: INTELIGÊNCIA S&OP ---
+const InteligenciaView = ({ processedData }) => {
+  const [simCityId, setSimCityId] = useState('');
+  const [simGrowthPerc, setSimGrowthPerc] = useState(2.0); 
+  const [simChurnPerc, setSimChurnPerc] = useState(1.5); 
 
-  // --- CARREGAMENTO DE DADOS (SIMULAÇÃO) ---
   useEffect(() => {
-    setLoading(true);
-    // Simula tempo de resposta do Firebase
-    setTimeout(() => {
-      setCityMetrics([
-        { 
-          id: 'bady', city: 'Bady Bassitt', hps: 5000, baseStart: 1200, targetNetAdds: 50,
-          channels: { loja: 25, pap: 15, digital: 5, b2b: 5 },
-          cancelReasons: { concorrencia: 8, tecnico: 5, mudanca: 4, financeiro: 3, outros: 0 },
-          histAvgGrowth: 2.1, histAvgChurn: 1.2
-        },
-        { 
-          id: 'borb', city: 'Borborema', hps: 3500, baseStart: 850, targetNetAdds: 20,
-          channels: { loja: 10, pap: 5, digital: 2, b2b: 0 },
-          cancelReasons: { concorrencia: 15, tecnico: 5, mudanca: 2, financeiro: 3, outros: 0 },
-          histAvgGrowth: 1.5, histAvgChurn: 2.4
-        },
-        { 
-          id: 'nova', city: 'Nova Granada', hps: 4200, baseStart: 950, targetNetAdds: 30,
-          channels: { loja: 20, pap: 10, digital: 8, b2b: 2 },
-          cancelReasons: { concorrencia: 5, tecnico: 2, mudanca: 5, financeiro: 3, outros: 0 },
-          histAvgGrowth: 1.8, histAvgChurn: 1.1
-        }
-      ]);
-      setLoading(false);
-    }, 800);
-  }, [selectedMonth]);
+    if (processedData.length > 0 && !simCityId) {
+      setSimCityId(processedData[0].id);
+    }
+  }, [processedData]);
 
-  // --- MOTOR DE CÁLCULO BI ---
-  const processedData = useMemo(() => {
-    return cityMetrics.map(city => {
-      const totalSales = Object.values(city.channels).reduce((a, b) => a + b, 0);
-      const cancelations = Object.values(city.cancelReasons).reduce((a, b) => a + b, 0);
-      const netAdds = totalSales - cancelations;
-      const currentBase = city.baseStart + netAdds;
-      const churnRate = ((cancelations / city.baseStart) * 100).toFixed(1);
-      const penetration = ((currentBase / city.hps) * 100).toFixed(1);
-      
-      let health = 'green';
-      if (netAdds < 0) health = 'red'; 
-      else if (netAdds < city.targetNetAdds) health = 'yellow'; 
+  const selectedCityData = processedData.find(c => c.id === simCityId);
+  let targetNetAdds = 0, projectedChurnVol = 0, requiredGrossAdds = 0;
+  let distLoja = 0, distPap = 0, distCentral = 0, distB2b = 0;
+  
+  if (selectedCityData) {
+    const base = selectedCityData.currentBase;
+    targetNetAdds = Math.ceil(base * (simGrowthPerc / 100));
+    projectedChurnVol = Math.ceil(base * (simChurnPerc / 100));
+    requiredGrossAdds = targetNetAdds + projectedChurnVol;
 
-      return { ...city, totalSales, cancelations, netAdds, currentBase, churnRate, penetration, health };
-    });
-  }, [cityMetrics]);
+    const hist = selectedCityData.channels;
+    const histTotal = (hist.loja || 0) + (hist.pap || 0) + (hist.central || 0) + (hist.b2b || 0);
 
-  // --- COMPONENTES DAS ABAS ---
-
-  const RadarView = () => (
-    <div style={styles.tabContent}>
-      <h3 style={styles.sectionTitle}><Crosshair size={20} color="#3b82f6"/> Radar de Performance (Real-Time)</h3>
-      <div style={styles.grid2}>
-        {processedData.map(city => (
-          <div key={city.id} onClick={() => setSelectedCity(city)} style={{...styles.cityCard, borderColor: selectedCity?.id === city.id ? '#3b82f6' : '#1e293b'}}>
-            <div style={styles.cityCardHeader}>
-              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                <div style={{...styles.statusDot, background: city.health === 'green' ? '#10b981' : city.health === 'yellow' ? '#f59e0b' : '#ef4444'}} />
-                <span style={styles.cityName}>{city.city}</span>
-              </div>
-              <span style={styles.badge}>{city.penetration}% Share</span>
-            </div>
-            <div style={styles.cardKpiGrid}>
-               <div style={styles.kpiBox}><span>Net Adds</span><strong style={{color: city.netAdds >= 0 ? '#10b981' : '#ef4444'}}>{city.netAdds > 0 ? '+' : ''}{city.netAdds}</strong></div>
-               <div style={styles.kpiBox}><span>Churn</span><strong>{city.churnRate}%</strong></div>
-               <div style={styles.kpiBox}><span>Base</span><strong>{city.currentBase}</strong></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const AlertasView = () => (
-    <div style={styles.tabContent}>
-      <h3 style={styles.sectionTitle}><ShieldAlert size={20} color="#ef4444"/> Alertas de Integridade</h3>
-      <div style={styles.alertList}>
-        {processedData.filter(c => c.netAdds < 0).map(city => (
-          <div key={city.id} style={styles.alertCard}>
-            <div style={styles.alertIcon}><Flame size={24} color="#ef4444"/></div>
-            <div style={{flex: 1}}>
-              <h4 style={styles.alertTitle}>SANGRAMENTO: {city.city}</h4>
-              <p style={styles.alertText}>Alerta crítico! O volume de cancelamentos ({city.cancelations}) está a superar as novas vendas ({city.totalSales}).</p>
-            </div>
-            <button style={styles.btnPrescrever}>Prescrever Ação</button>
-          </div>
-        ))}
-        {processedData.filter(c => c.netAdds < 0).length === 0 && (
-          <div style={styles.emptyState}>Nenhum alerta crítico de sangramento ativo.</div>
-        )}
-      </div>
-    </div>
-  );
-
-  const SafrasView = () => (
-    <div style={styles.tabContent}>
-      <h3 style={styles.sectionTitle}><Layers size={20} color="#8b5cf6"/> Análise de Safras (Cohort)</h3>
-      <p style={styles.tabSubText}>Monitorização da retenção por mês de entrada do cliente.</p>
-      <div style={styles.tableCard}>
-        <table style={styles.table}>
-          <thead>
-            <tr style={styles.thRow}>
-              <th style={styles.th}>Mês de Entrada</th>
-              <th style={styles.th}>Base Original</th>
-              <th style={styles.th}>Churn 30 dias</th>
-              <th style={styles.th}>Churn 90 dias</th>
-              <th style={styles.th}>Score Qualidade</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { mes: 'Out/24', base: 450, c30: '0.8%', c90: '1.5%', score: 'Excelente' },
-              { mes: 'Nov/24', base: 510, c30: '1.2%', c90: '3.4%', score: 'Crítico' },
-              { mes: 'Dez/24', base: 680, c30: '0.5%', c90: '1.1%', score: 'Excelente' },
-              { mes: 'Jan/25', base: 420, c30: '2.1%', c90: '---', score: 'Alerta' },
-            ].map((s, i) => (
-              <tr key={i} style={styles.tr}>
-                <td style={styles.td}><strong>{s.mes}</strong></td>
-                <td style={styles.td}>{s.base} clientes</td>
-                <td style={styles.td}>{s.c30}</td>
-                <td style={{...styles.td, color: s.score === 'Crítico' ? '#ef4444' : '#10b981', fontWeight:'bold'}}>{s.c90}</td>
-                <td style={styles.td}>
-                   <span style={{
-                     padding:'4px 10px', borderRadius:'6px', fontSize:'10px', fontWeight:'bold',
-                     background: s.score === 'Excelente' ? '#ecfdf5' : s.score === 'Alerta' ? '#fffbeb' : '#fef2f2',
-                     color: s.score === 'Excelente' ? '#059669' : s.score === 'Alerta' ? '#d97706' : '#dc2626'
-                   }}>{s.score}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  const GeoView = () => (
-    <div style={styles.tabContent}>
-      <h3 style={styles.sectionTitle}><Map size={20} color="#059669"/> Zonas de Calor (Geomarketing)</h3>
-      <div style={styles.geoGrid}>
-        <div style={styles.mapSimulator}>
-           <div style={{...styles.heatCircle, top:'25%', left:'35%', width:'140px', height:'140px', background:'rgba(16,185,129,0.2)', border:'2px solid #10b981'}}><span style={styles.heatText}>Domínio Central</span></div>
-           <div style={{...styles.heatCircle, top:'60%', left:'55%', width:'100px', height:'100px', background:'rgba(245,158,11,0.2)', border:'2px solid #f59e0b'}}><span style={styles.heatText}>Expansão Sul</span></div>
-           <div style={{...styles.heatCircle, top:'45%', left:'15%', width:'80px', height:'80px', background:'rgba(239,68,68,0.2)', border:'2px solid #ef4444'}}><span style={styles.heatText}>Concorrência Ativa</span></div>
-           <div style={{position:'absolute', bottom:'20px', right:'20px', color:'#64748b', fontSize:'11px'}}>Radar Geo HubOquei</div>
-        </div>
-        <div style={styles.geoLegend}>
-           <h4 style={styles.subTitle}>Dominância por Bairro</h4>
-           {[
-             { name: 'Centro', density: 92, status: 'dominado' },
-             { name: 'Parque Industrial', density: 38, status: 'oportunidade' },
-             { name: 'Residencial II', density: 12, status: 'vulneravel' }
-           ].map((item, i) => (
-             <div key={i} style={styles.geoItem}>
-                <div style={{flex: 1}}>
-                  <span style={styles.geoName}>{item.name}</span>
-                  <div style={styles.geoBarBg}><div style={{...styles.geoBarFill, width: item.density + '%', background: item.status === 'dominado' ? '#10b981' : item.status === 'oportunidade' ? '#f59e0b' : '#ef4444'}} /></div>
-                </div>
-                <span style={styles.geoPerc}>{item.density}%</span>
-             </div>
-           ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const ClubeElite = () => (
-    <div style={styles.tabContent}>
-      <h3 style={styles.sectionTitle}><Trophy size={20} color="#f59e0b"/> Clube de Elite (Gamificação)</h3>
-      <div style={styles.grid2}>
-         <div style={styles.gamingCard}>
-            <h4 style={styles.subTitle}>Missões Ativas</h4>
-            <div style={styles.missionRow}>
-               <div style={styles.missionInfo}><Zap size={18} color="#3b82f6"/> <span>Meta Regional: 45% de Penetração</span></div>
-               <span style={styles.missionProgress}>82%</span>
-            </div>
-            <div style={styles.missionRow}>
-               <div style={styles.missionInfo}><ShieldCheck size={18} color="#10b981"/> <span>Meta Retenção: Churn abaixo de 1.2%</span></div>
-               <span style={styles.missionProgress}>Em curso</span>
-            </div>
-         </div>
-         <div style={styles.gamingCard}>
-            <h4 style={styles.subTitle}>Vendedores Diamante</h4>
-            <div style={styles.badgeGrid}>
-               <div style={styles.badgeItem}>
-                  <div style={{...styles.badgeIcon, background: '#10b981'}}><ShieldCheck size={24} color="white"/></div>
-                  <span style={styles.badgeLabel}>Escudo Retenção</span>
-                  <small style={styles.badgeOwner}>Mariana Silva</small>
-               </div>
-               <div style={styles.badgeItem}>
-                  <div style={{...styles.badgeIcon, background: '#f59e0b'}}><Trophy size={24} color="white"/></div>
-                  <span style={styles.badgeLabel}>Líder de Conversão</span>
-                  <small style={styles.badgeOwner}>João Pedro</small>
-               </div>
-            </div>
-         </div>
-      </div>
-    </div>
-  );
-
-  if (loading) {
-    return (
-      <div style={styles.loadingContainer}>
-        <Activity size={48} color="#3b82f6" style={{animation:'pulse 1.5s infinite'}} />
-        <h2 style={{color:'white', marginTop:'20px'}}>Iniciando HubOquei Inteligência...</h2>
-      </div>
-    );
+    if (histTotal > 0) {
+      distLoja = Math.round(requiredGrossAdds * (hist.loja / histTotal));
+      distPap = Math.round(requiredGrossAdds * (hist.pap / histTotal));
+      distCentral = Math.round(requiredGrossAdds * (hist.central / histTotal));
+      distB2b = requiredGrossAdds - (distLoja + distPap + distCentral); 
+    }
   }
 
   return (
-    <div style={styles.pageContainer}>
-      
-      {/* HEADER HUB */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.iconBox}><Zap size={32} color="#00f2fe" fill="#00f2fe" /></div>
-          <div>
-            <h1 style={styles.title}>HubOquei</h1>
-            <p style={styles.subtitle}>Núcleo de Inteligência Comercial Proativa</p>
-          </div>
+    <div className="animated-view">
+      <div style={{display:'flex', gap:'30px', flexWrap:'wrap'}}>
+        <div style={{...global.card, flex:1, minWidth:'300px'}}>
+           <h3 style={{fontSize:'16px', fontWeight:'900', marginBottom:'20px', display:'flex', alignItems:'center', gap:'10px'}}><Sliders size={20} color={colors.primary}/> Parâmetros da Cidade</h3>
+           <div style={global.field}><label style={global.label}>Cidade</label>
+             <select style={global.select} value={simCityId} onChange={e => setSimCityId(e.target.value)}>
+               {processedData.map(c => <option key={c.id} value={c.id}>{c.city}</option>)}
+             </select>
+           </div>
+           <div style={global.field}><label style={global.label}>Meta Crescimento: <strong>{simGrowthPerc}%</strong></label>
+             <input type="range" min="-2" max="10" step="0.1" value={simGrowthPerc} onChange={e => setSimGrowthPerc(parseFloat(e.target.value))} style={local.rangeInput} />
+           </div>
+           <div style={global.field}><label style={global.label}>Trava de Churn: <strong>{simChurnPerc}%</strong></label>
+             <input type="range" min="0" max="5" step="0.1" value={simChurnPerc} onChange={e => setSimChurnPerc(parseFloat(e.target.value))} style={local.rangeInput} />
+           </div>
         </div>
-        <div style={styles.headerRight}>
-           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={styles.monthInput} />
+        <div style={{flex:1.5, minWidth:'400px', display:'flex', flexDirection:'column', gap:'20px'}}>
+           {selectedCityData && (
+             <div style={global.card}>
+                <h4 style={{margin:'0 0 15px 0', fontSize:'15px', color:'var(--text-muted)'}}>SLA DE VENDAS (MENSAL)</h4>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                   <div style={local.slaBox}><Store size={18} color={colors.success}/> <div><span>Lojas</span><strong>{distLoja}</strong></div></div>
+                   <div style={local.slaBox}><MapPin size={18} color={colors.warning}/> <div><span>PAP</span><strong>{distPap}</strong></div></div>
+                   <div style={local.slaBox}><Headset size={18} color={colors.primary}/> <div><span>Central</span><strong>{distCentral}</strong></div></div>
+                   <div style={local.slaBox}><Briefcase size={18} color={colors.purple}/> <div><span>B2B</span><strong>{distB2b}</strong></div></div>
+                </div>
+             </div>
+           )}
         </div>
       </div>
-
-      {/* NAVEGAÇÃO HUB */}
-      <div style={styles.navBar}>
-        <button onClick={() => setActiveTab('radar')} style={activeTab === 'radar' ? styles.navBtnActive : styles.navBtn}><Crosshair size={18}/> Radar</button>
-        <button onClick={() => setActiveTab('alertas')} style={activeTab === 'alertas' ? styles.navBtnActive : styles.navBtn}><ShieldAlert size={18}/> Alertas</button>
-        <button onClick={() => setActiveTab('safras')} style={activeTab === 'safras' ? styles.navBtnActive : styles.navBtn}><Layers size={18}/> Safras</button>
-        <button onClick={() => setActiveTab('geo')} style={activeTab === 'geo' ? styles.navBtnActive : styles.navBtn}><Map size={18}/> Geo</button>
-        <button onClick={() => setActiveTab('games')} style={activeTab === 'games' ? styles.navBtnActive : styles.navBtn}><Trophy size={18}/> Elite</button>
-      </div>
-
-      {/* CONTEÚDO DAS ABAS */}
-      <div style={{marginTop: '30px'}}>
-        {activeTab === 'radar' && <RadarView />}
-        {activeTab === 'alertas' && <AlertasView />}
-        {activeTab === 'safras' && <SafrasView />}
-        {activeTab === 'geo' && <GeoView />}
-        {activeTab === 'games' && <ClubeElite />}
-      </div>
-
     </div>
   );
 };
 
-// --- ESTILOS INLINE (TEMA EXECUTIVO HUB) ---
-const styles = {
-  pageContainer: { background: '#020617', minHeight: '100vh', padding: '40px', color: 'white', fontFamily: "'Inter', sans-serif" },
-  loadingContainer: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:'#020617', color:'white' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', paddingBottom:'20px', borderBottom:'1px solid #1e293b' },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '20px' },
-  iconBox: { background: 'rgba(0, 242, 254, 0.1)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(0, 242, 254, 0.3)', boxShadow:'0 0 20px rgba(0, 242, 254, 0.2)' },
-  title: { fontSize: '32px', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' },
-  subtitle: { fontSize: '14px', color: '#64748b', margin: '5px 0 0 0' },
-  monthInput: { background: '#0f172a', border: '1px solid #1e293b', color: 'white', padding: '10px 15px', borderRadius: '12px', outline:'none', fontWeight:'bold' },
+// --- COMPONENTE PRINCIPAL ---
+export default function LaboratorioChurn({ userData }) {
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [loading, setLoading] = useState(true);
+  
+  const [leads, setLeads] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [actionPlans, setActionPlans] = useState([]);
 
-  navBar: { display: 'flex', gap: '5px', background: '#0f172a', padding: '6px', borderRadius: '14px', width: 'fit-content' },
-  navBtn: { background: 'transparent', border: 'none', color: '#64748b', padding: '12px 25px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600', borderRadius:'10px', transition:'0.2s' },
-  navBtnActive: { background: '#1e293b', border: 'none', color: '#00f2fe', padding: '12px 25px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', borderRadius:'10px', boxShadow:'0 4px 6px rgba(0,0,0,0.2)' },
+  const DEFAULT_TABS = [
+    { id: 'radar', label: 'Radar de Cidades', icon: Crosshair },
+    { id: 'projecoes', label: 'Fechamento', icon: Zap },
+    { id: 'inteligencia', label: 'Inteligência S&OP', icon: Lightbulb },
+    { id: 'omnichannel', label: 'Canais de Venda', icon: Share2 },
+    { id: 'relacionamento', label: 'Gestão Churn', icon: Headset }
+  ];
 
-  tabContent: { animation: 'fadeIn 0.4s ease-out' },
-  sectionTitle: { fontSize: '18px', fontWeight: 'bold', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '12px' },
-  tabSubText: { fontSize: '14px', color: '#94a3b8', marginTop: '-15px', marginBottom: '25px' },
+  const [tabsOrder, setTabsOrder] = useState(() => {
+    const saved = localStorage.getItem('oquei_churn_tabs');
+    return saved ? JSON.parse(saved) : DEFAULT_TABS.map(t => t.id);
+  });
 
-  grid2: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' },
-  cityCard: { background: '#0f172a', padding: '25px', borderRadius: '24px', border: '2px solid #1e293b', cursor: 'pointer', transition: 'all 0.2s' },
-  cityCardHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' },
-  statusDot: { width: '12px', height: '12px', borderRadius: '50%' },
-  cityName: { fontSize: '18px', fontWeight: 'bold', color: 'white' },
-  badge: { background: '#1e293b', color: '#94a3b8', fontSize: '11px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '8px' },
-  cardKpiGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' },
-  kpiBox: { display:'flex', flexDirection:'column', fontSize:'11px', color:'#64748b' },
+  const [activeLabTab, setActiveLabTab] = useState(tabsOrder[0]);
+  const [selectedCity, setSelectedCity] = useState(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [draggedTab, setDraggedTab] = useState(null);
+  const [planForm, setPlanForm] = useState({ title: '', problem: '', expected: '', relatedReason: 'concorrencia' });
 
-  alertList: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  alertCard: { background: '#0f172a', border: '1px solid #334155', borderLeft: '6px solid #ef4444', padding: '25px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '25px' },
-  alertTitle: { fontSize: '16px', fontWeight: '900', color: '#ef4444', margin: 0 },
-  alertText: { fontSize: '14px', color: '#94a3b8', margin: '5px 0 0 0', lineHeight: '1.5' },
-  btnPrescrever: { background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  emptyState: { textAlign:'center', padding:'60px', background:'#0f172a', borderRadius:'20px', color:'#64748b', fontStyle:'italic' },
+  // 1. ESCUTA DE DADOS REAIS (FIREBASE)
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      setLoading(true);
+      const unsubs = [];
+      const isCoord = userData?.role === 'coordinator';
+      const myCluster = String(userData?.clusterId || "").trim();
 
-  tableCard: { background: '#0f172a', borderRadius: '20px', border: '1px solid #1e293b', overflow: 'hidden' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  thRow: { background: 'rgba(255,255,255,0.03)' },
-  th: { padding: '15px 20px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  tr: { borderBottom: '1px solid #1e293b' },
-  td: { padding: '15px 20px', fontSize: '14px' },
+      const safeListen = (ref, setter) => {
+        unsubs.push(onSnapshot(ref, snap => setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.warn("Erro Coleção:", err)));
+      };
 
-  geoGrid: { display:'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' },
-  mapSimulator: { background: '#0f172a', height: '450px', borderRadius: '24px', border: '1px solid #1e293b', position: 'relative', overflow:'hidden' },
-  heatCircle: { position: 'absolute', borderRadius: '50%', display:'flex', alignItems:'center', justifyContent:'center' },
-  heatText: { fontSize: '10px', fontWeight: 'bold', whiteSpace:'nowrap' },
-  geoLegend: { background: '#0f172a', padding: '30px', borderRadius: '24px', border: '1px solid #1e293b' },
-  subTitle: { fontSize:'16px', fontWeight:'bold', marginBottom:'25px', color:'white', display:'flex', alignItems:'center', gap:'10px' },
-  geoItem: { marginBottom:'25px' },
-  geoName: { fontSize:'13px', fontWeight:'bold', display:'block', marginBottom:'8px' },
-  geoBarBg: { height:'8px', background:'#1e293b', borderRadius:'4px', overflow:'hidden' },
-  geoBarFill: { height:'100%', borderRadius:'4px', transition:'width 1s ease' },
-  geoPerc: { fontSize:'15px', fontWeight:'900', color:'white', marginTop:'5px', textAlign:'right', display:'block' },
+      safeListen(collection(db, 'leads'), setLeads);
+      safeListen(collection(db, 'action_plans'), setActionPlans);
+      
+      const qCities = isCoord ? collection(db, 'cities') : query(collection(db, 'cities'), where('clusterId', '==', myCluster));
+      safeListen(qCities, setCities);
 
-  gamingCard: { background: '#0f172a', padding: '30px', borderRadius: '24px', border: '1px solid #1e293b' },
-  missionRow: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'15px', background:'rgba(255,255,255,0.02)', borderRadius:'12px', marginBottom:'15px' },
-  missionInfo: { display:'flex', alignItems:'center', gap:'12px', fontSize:'14px', color:'#cbd5e1' },
-  missionProgress: { fontSize:'11px', fontWeight:'900', color:'#3b82f6', textTransform:'uppercase' },
-  badgeGrid: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px' },
-  badgeItem: { textAlign:'center', padding:'20px', background:'rgba(255,255,255,0.02)', borderRadius:'16px', border:'1px solid #1e293b' },
-  badgeIcon: { width:'56px', height:'56px', borderRadius:'50%', margin:'0 auto 15px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 15px rgba(0,0,0,0.3)' },
-  badgeLabel: { display:'block', fontSize:'13px', fontWeight:'bold', color:'white' },
-  badgeOwner: { display:'block', fontSize:'11px', color:'#64748b', marginTop:'5px' }
+      setLoading(false);
+      return () => unsubs.forEach(u => u());
+    });
+    return () => unsubAuth();
+  }, [userData]);
+
+  // 2. MOTOR DE CALCULO (BI ENGINE)
+  const processedData = useMemo(() => {
+    const monthLeads = leads.filter(l => l.date?.startsWith(selectedMonth));
+    const today = new Date();
+    const worked = today.getDate() > 22 ? 22 : today.getDate(); // Simplificação para Run Rate
+    const workRatio = 22 / worked;
+
+    return cities.map(city => {
+      const cityLeads = monthLeads.filter(l => l.cityId === city.id || l.cityId === city.name);
+      const gross = cityLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
+      const churn = cityLeads.filter(l => l.status === 'Descartado').length;
+      const net = gross - churn;
+
+      // SINCRONIZAÇÃO COM O HUB: Usa baseStart como fonte da verdade
+      const baseStart = city.baseStart || 0; 
+      const currentBase = baseStart + net;
+      const hps = city.hps || 1;
+
+      return {
+        ...city,
+        city: city.name || city.city,
+        totalSales: gross, cancelations: churn, netAdds: net,
+        currentBase, penetration: ((currentBase / hps) * 100).toFixed(1),
+        churnRate: baseStart > 0 ? ((churn / baseStart) * 100).toFixed(1) : 0,
+        targetPerc: city.targetNetAdds > 0 ? ((net / city.targetNetAdds) * 100).toFixed(0) : 0,
+        projNetAdds: Math.floor(net * workRatio),
+        channels: {
+          loja: cityLeads.filter(l => l.channel === 'Loja').length,
+          pap: cityLeads.filter(l => l.channel === 'PAP').length,
+          central: cityLeads.filter(l => l.channel === 'Central').length,
+          b2b: cityLeads.filter(l => l.channel === 'B2B').length
+        }
+      };
+    });
+  }, [leads, cities, selectedMonth]);
+
+  // 3. KPI GLOBAIS (OS QUE VOLTARAM)
+  const globalStats = useMemo(() => {
+    if (processedData.length === 0) return null;
+    const tBase = processedData.reduce((acc, c) => acc + c.currentBase, 0);
+    const tSales = processedData.reduce((acc, c) => acc + c.totalSales, 0);
+    const tCancels = processedData.reduce((acc, c) => acc + c.cancelations, 0);
+    const tNet = tSales - tCancels;
+    const avgChurn = tBase > 0 ? ((tCancels / (tBase - tNet)) * 100).toFixed(2) : 0;
+
+    return { tBase, tSales, tCancels, tNet, avgChurn };
+  }, [processedData]);
+
+  // 4. FUNÇÕES DE UI
+  const handleSavePlan = async (e) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'action_plans'), {
+        ...planForm, cityId: selectedCity.id, city: selectedCity.city, status: 'Ativo', createdAt: serverTimestamp(), createdBy: auth.currentUser.uid
+      });
+      setShowPlanModal(false);
+      setPlanForm({ title: '', problem: '', expected: '', relatedReason: 'concorrencia' });
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDragStart = (id) => setDraggedTab(id);
+  const handleDrop = (targetId) => {
+    if (draggedTab === targetId) return;
+    const newOrder = [...tabsOrder];
+    const dIdx = newOrder.indexOf(draggedTab);
+    const tIdx = newOrder.indexOf(targetId);
+    newOrder.splice(dIdx, 1);
+    newOrder.splice(tIdx, 0, draggedTab);
+    setTabsOrder(newOrder);
+    localStorage.setItem('oquei_churn_tabs', JSON.stringify(newOrder));
+  };
+
+  if (loading) return <div style={global.emptyState}><RefreshCw className="animate-spin"/> Sincronizando Inteligência...</div>;
+
+  return (
+    <div style={global.container}>
+      {/* HEADER */}
+      <div style={global.header}>
+        <div style={{display:'flex', alignItems:'center', gap:20}}>
+          <div style={{...global.iconHeader, background:colors.primary}}><Activity size={28} color="white"/></div>
+          <div><h1 style={global.title}>Laboratório Churn</h1><p style={global.subtitle}>Inteligência de Crescimento e S&OP</p></div>
+        </div>
+        <div style={global.searchBox}><CalendarIcon size={18}/><input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={global.searchInput}/></div>
+      </div>
+
+      {/* KPIS GLOBAIS (RESTAURADOS) */}
+      {globalStats && (
+        <div style={{...global.grid4, marginBottom: '30px'}}>
+          <div style={global.card}><span style={global.label}>Base Regional</span><div style={{fontSize:32, fontWeight:900, color:'var(--text-main)'}}>{globalStats.tBase.toLocaleString()}</div></div>
+          <div style={global.card}><span style={global.label}>Net Mês</span><div style={{fontSize:32, fontWeight:900, color:colors.success}}>{globalStats.tNet > 0 ? '+' : ''}{globalStats.tNet}</div></div>
+          <div style={global.card}><span style={global.label}>Vendas Brutas</span><div style={{fontSize:32, fontWeight:900, color:colors.primary}}>{globalStats.tSales}</div></div>
+          <div style={global.card}><span style={global.label}>Taxa de Churn</span><div style={{fontSize:32, fontWeight:900, color:colors.danger}}>{globalStats.avgChurn}%</div></div>
+        </div>
+      )}
+
+      {/* NAVEGAÇÃO DE ABAS */}
+      <div style={local.tabNav}>
+        {tabsOrder.map(tid => {
+          const t = DEFAULT_TABS.find(x => x.id === tid);
+          if (!t) return null;
+          return (
+            <button key={tid} draggable onDragStart={() => handleDragStart(tid)} onDragOver={e => e.preventDefault()} onDrop={() => handleDrop(tid)} onClick={() => setActiveLabTab(tid)} style={activeLabTab === tid ? local.tabActive : local.tab}>
+               <GripVertical size={14} style={{opacity:0.3}}/> <t.icon size={16}/> {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* CONTEÚDO DAS ABAS */}
+      <div style={{marginTop:30}}>
+        {activeLabTab === 'radar' && (
+          <div style={local.radarLayout}>
+            <div style={local.sidebarRadar}>
+              <h3 style={local.secTitle}>Regional</h3>
+              <div style={local.cityList}>
+                {processedData.map(city => (
+                  <div key={city.id} onClick={() => setSelectedCity(city)} style={{...local.cityEntry, borderColor: selectedCity?.id === city.id ? colors.primary : 'var(--border)', background: selectedCity?.id === city.id ? 'var(--bg-app)' : 'var(--bg-card)'}}>
+                    <div style={{display:'flex', justifyContent:'space-between'}}><strong>{city.city}</strong> <span style={{color: city.netAdds >= 0 ? colors.success : colors.danger}}>{city.netAdds} NET</span></div>
+                    <div style={local.miniProgress}><div style={{width: city.targetPerc + '%', background: colors.primary, height:'100%'}}/></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{...global.card, flex:1, minHeight: '500px'}}>
+              {!selectedCity ? <div style={global.emptyState}>Selecione uma unidade no radar lateral.</div> : (
+                <div className="animated-view">
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:30}}>
+                    <h2 style={global.title}>{selectedCity.city}</h2>
+                    <div style={{textAlign:'right'}}><span style={global.label}>Penetração</span><div style={{fontSize:24, fontWeight:900, color:colors.primary}}>{selectedCity.penetration}%</div></div>
+                  </div>
+                  <div style={local.funnel}>
+                    <div style={local.funBox}><span>Entradas (Gross)</span><strong>{selectedCity.totalSales}</strong></div>
+                    <div style={{fontWeight:900, color:'var(--border)'}}>-</div>
+                    <div style={{...local.funBox, borderColor:colors.danger}}><span>Saídas (Churn)</span><strong>{selectedCity.cancelations}</strong></div>
+                    <div style={{fontWeight:900, color:'var(--border)'}}>=</div>
+                    <div style={{...local.funBox, background:colors.primary, color:'white', border:'none'}}><span>Net Adds</span><strong>{selectedCity.netAdds}</strong></div>
+                  </div>
+                  <div style={{marginTop:40, paddingTop:20, borderTop:'1px solid var(--border)'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
+                      <h3 style={local.secTitle}>Planos de Ação</h3>
+                      <button onClick={() => setShowPlanModal(true)} style={{...global.btnPrimary, padding:'8px 16px', fontSize:12}}><Plus size={14}/> Nova Ação</button>
+                    </div>
+                    <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                       {actionPlans.filter(p => p.cityId === selectedCity.id).map(p => (
+                         <div key={p.id} style={local.planCard}><strong>{p.title}</strong><p style={{margin:0, fontSize:12, color:'var(--text-muted)'}}>{p.problem}</p></div>
+                       ))}
+                       {actionPlans.filter(p => p.cityId === selectedCity.id).length === 0 && <p style={{fontSize:'13px', color:'var(--text-muted)', fontStyle:'italic'}}>Nenhum plano ativo para esta praça.</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeLabTab === 'inteligencia' && <InteligenciaView processedData={processedData} />}
+        
+        {activeLabTab === 'projecoes' && (
+          <div style={global.grid4}>
+            {processedData.map(c => (
+              <div key={c.id} style={global.card}>
+                <h4 style={{margin:0, fontWeight:900}}>{c.city}</h4>
+                <div style={{marginTop:15, display:'flex', flexDirection:'column', gap:8, fontSize:12}}>
+                  <div style={{display:'flex', justifyContent:'space-between'}}><span>Projeção Final</span><strong style={{color:colors.success}}>{c.projNetAdds} NET</strong></div>
+                  <div style={{display:'flex', justifyContent:'space-between'}}><span>Churn Real</span><strong>{c.churnRate}%</strong></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL PLANOS DE AÇÃO */}
+      {showPlanModal && (
+        <div style={global.modalOverlay}><div style={global.modalBox}>
+          <div style={global.modalHeader}><h3>Nova Ação: {selectedCity?.city}</h3><button onClick={() => setShowPlanModal(false)}><X/></button></div>
+          <form onSubmit={handleSavePlan} style={global.form}>
+            <div style={global.field}><label style={global.label}>Título da Iniciativa</label><input style={global.input} value={planForm.title} onChange={e => setPlanForm({...planForm, title:e.target.value})} required placeholder="Ex: Mutirão de Retenção Bairro X"/></div>
+            <div style={global.field}><label style={global.label}>Problema Foco</label><textarea style={global.textarea} value={planForm.problem} onChange={e => setPlanForm({...planForm, problem:e.target.value})} required placeholder="Descreva o que motivou a ação..."/></div>
+            <button style={global.btnPrimary}>Salvar e Iniciar</button>
+          </form>
+        </div></div>
+      )}
+    </div>
+  );
+}
+
+const local = {
+  tabNav: { display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', marginBottom: 20 },
+  tab: { background: 'transparent', border: 'none', color: 'var(--text-muted)', padding: '12px 18px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight:'700', whiteSpace:'nowrap' },
+  tabActive: { background: 'transparent', border: 'none', color: 'var(--text-brand)', padding: '12px 18px', fontWeight: '800', borderBottom: '3px solid var(--text-brand)', display:'flex', alignItems:'center', gap:'8px', whiteSpace:'nowrap' },
+  radarLayout: { display: 'flex', gap: 30, flexWrap:'wrap' },
+  sidebarRadar: { width: 300, display: 'flex', flexDirection: 'column', gap: 15 },
+  cityList: { display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '600px', overflowY: 'auto' },
+  cityEntry: { padding: 15, borderRadius: 12, border: '1px solid', cursor: 'pointer', transition:'0.2s' },
+  miniProgress: { width: '100%', height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 10, overflow:'hidden' },
+  funnel: { display: 'flex', gap: 15, alignItems:'center', justifyContent:'center', marginTop: 20 },
+  funBox: { padding: 20, borderRadius: 16, border: '2px solid var(--border)', flex: 1, textAlign: 'center', display:'flex', flexDirection:'column', gap:5 },
+  secTitle: { fontSize: 13, fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-muted)', margin:0 },
+  rangeInput: { width: '100%', accentColor: colors.primary, cursor: 'pointer' },
+  slaBox: { background: 'var(--bg-app)', padding: 12, borderRadius: 10, border: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center' },
+  insightBox: { padding: 15, background: 'var(--bg-card)', borderRadius: 12, display: 'flex', gap: 12, alignItems: 'center', boxShadow:'var(--shadow-sm)' },
+  planCard: { padding: 15, background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 10 }
 };
-
-const styleSheet = document.createElement("style");
-styleSheet.innerText = "@keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } } @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }";
-document.head.appendChild(styleSheet);
-
-export default HubOquei;

@@ -1,301 +1,265 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, getDocs, where, onSnapshot } from 'firebase/firestore';
-import { CalendarClock, Filter, TrendingUp } from 'lucide-react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { CalendarClock, Filter, TrendingUp, RefreshCw } from 'lucide-react';
 
-// IMPORTAÇÃO DOS COMPONENTES FILHOS
+// IMPORTAÇÃO DOS COMPONENTES FILHOS (MANTIDOS INTACTOS)
 import SpeedometerCard from '../components/SpeedometerCard';
-import WarRoomProjections from '../components/WarRoomProjections'; // <-- NOVO COMPONENTE
+import WarRoomProjections from '../components/WarRoomProjections'; 
 import MonthlyEvolution from '../components/MonthlyEvolution';
 import { PerformanceCharts, SvaAnalyzer } from '../components/SalesCharts';
 import SalesTable from '../components/SalesTable';
+
+import { styles as global, colors } from '../styles/globalStyles';
 
 export default function PainelVendas({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [leads, setLeads] = useState([]); 
   const [myStores, setMyStores] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  
+  // ESTADOS DE METAS
+  const [monthlyGoals, setMonthlyGoals] = useState({}); // Metas das Unidades
+  const [monthlyClusterGoals, setMonthlyClusterGoals] = useState({}); // <-- INJEÇÃO: Metas do Cluster/Regional
+  
   const [loading, setLoading] = useState(true);
 
   const [chartClusterFilter, setChartClusterFilter] = useState('all');
   const [chartCityFilter, setChartCityFilter] = useState('all');
 
-  const [globalGoals] = useState({ sales: 150, planos: 100, migracoes: 50, installs: 140, svas: 80 });
-
+  // 1. MOTOR DE DADOS EM TEMPO REAL (CIRURGIÃO)
   useEffect(() => {
-    const fetchData = async () => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
       setLoading(true);
-      try {
-        let storesList = [];
-        if (userData?.clusterId && userData.role === 'supervisor') {
-          const qStore = query(collection(db, "cities"), where("clusterId", "==", userData.clusterId));
-          const snapStore = await getDocs(qStore);
-          storesList = snapStore.docs.map(d => ({ id: d.id, ...d.data() }));
-        } else {
-          const qStore = query(collection(db, "cities"));
-          const snapStore = await getDocs(qStore);
-          storesList = snapStore.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-        setMyStores(storesList);
 
-        const qHolidays = query(collection(db, "holidays"));
-        const snapHols = await getDocs(qHolidays);
-        setHolidays(snapHols.docs.map(d => ({ id: d.id, ...d.data() })));
+      const unsubs = [];
+      const myCluster = String(userData?.clusterId || "").trim();
+      const isCoord = userData?.role === 'coordinator' || userData?.role === 'coordenador';
+
+      const safeListen = (ref, setter, label) => {
+        const unsub = onSnapshot(ref, 
+          (snap) => setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+          (err) => console.warn(`[Permissão] Bloqueio na coleção ${label}:`, err)
+        );
+        unsubs.push(unsub);
+      };
+
+      try {
+        // CIDADES E LEADS
+        const qCities = isCoord ? collection(db, "cities") : query(collection(db, "cities"), where("clusterId", "==", myCluster));
+        getDocs(qCities).then(snap => {
+          const storesList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setMyStores(storesList);
+
+          const qLeads = collection(db, "leads");
+          const unsubLeads = onSnapshot(qLeads, (snapLeads) => {
+            const allLeads = snapLeads.docs.map(d => ({ id: d.id, ...d.data() }));
+            const storeNames = storesList.map(s => s.name);
+            const finalData = isCoord ? allLeads : allLeads.filter(l => storeNames.includes(l.cityId));
+            setLeads(finalData);
+            setLoading(false);
+          }, (err) => { console.error("Erro nos leads:", err); setLoading(false); });
+          unsubs.push(unsubLeads);
+        });
+
+        // FERIADOS
+        safeListen(collection(db, "holidays"), setHolidays, "Feriados");
+
+        // METAS DAS UNIDADES (CIDADES)
+        const qGoals = isCoord 
+          ? query(collection(db, "monthly_goals"), where("month", "==", selectedMonth))
+          : query(collection(db, "monthly_goals"), where("month", "==", selectedMonth), where("clusterId", "==", myCluster));
+        
+        const unsubGoals = onSnapshot(qGoals, (snap) => {
+          const gMap = {}; snap.docs.forEach(d => { gMap[d.data().cityId] = d.data(); }); setMonthlyGoals(gMap);
+        }, (err) => console.warn("Permissão negada para Metas Unidade."));
+        unsubs.push(unsubGoals);
+
+        // --- INJEÇÃO: METAS DA REGIONAL (CLUSTER) ---
+        const qClusterGoals = isCoord 
+          ? query(collection(db, "monthly_cluster_goals"), where("month", "==", selectedMonth))
+          : query(collection(db, "monthly_cluster_goals"), where("month", "==", selectedMonth), where("clusterId", "==", myCluster));
+        
+        const unsubClusterGoals = onSnapshot(qClusterGoals, (snap) => {
+          const cMap = {}; snap.docs.forEach(d => { cMap[d.data().clusterId] = d.data(); }); setMonthlyClusterGoals(cMap);
+        }, (err) => console.warn("Permissão negada para Metas Cluster."));
+        unsubs.push(unsubClusterGoals);
 
       } catch (e) {
-        console.error("Erro ao buscar dados básicos: ", e);
+        console.error("Erro geral no motor de dados:", e);
+        setLoading(false);
       }
 
-      const [y, m] = selectedMonth.split('-').map(Number);
-      let startYear = y;
-      let startMonth = m - 5;
-      if (startMonth <= 0) { startMonth += 12; startYear -= 1; }
-      const startPeriod = `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
+      return () => unsubs.forEach(u => u());
+    });
 
-      const qLeads = query(
-        collection(db, "leads"), 
-        where("date", ">=", startPeriod),
-        where("date", "<=", `${selectedMonth}-31`)
-      );
-
-      const unsubscribe = onSnapshot(qLeads, (snap) => {
-        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        let finalData = docs;
-        if (userData?.role === 'supervisor') {
-           const storeNames = myStores.map(s => s.name);
-           if(storeNames.length > 0) finalData = docs.filter(lead => storeNames.includes(lead.cityId));
-        }
-        setLeads(finalData); 
-        setLoading(false);
-      }, (err) => {
-        console.error(err);
-        setLoading(false);
-      });
-
-      return () => unsubscribe();
-    };
-    
-    fetchData();
+    return () => unsubAuth();
   }, [selectedMonth, userData]);
 
-  const currentMonthLeads = useMemo(() => {
-    return leads.filter(l => l.date && l.date.startsWith(selectedMonth));
-  }, [leads, selectedMonth]);
-
+  // --- LÓGICA DE CALENDÁRIO ---
   const getCalendarForScope = (year, month, storeId = null) => {
     const lastDay = new Date(year, month + 1, 0).getDate();
     let total = 0; let worked = 0;
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDate = now.getDate();
-
     for (let i = 1; i <= lastDay; i++) {
         const dateObj = new Date(year, month, i);
-        const dayOfWeek = dateObj.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-
+        if (dateObj.getDay() === 0 || dateObj.getDay() === 6) continue;
         const dateStr = `${year}-${String(month+1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-        const isHoliday = holidays.some(h => h.date === dateStr && (h.type === 'company' || h.type === 'national' || (h.type === 'municipal' && storeId && h.storeId === storeId)));
-
+        const isHoliday = holidays.some(h => h.date === dateStr);
         if (!isHoliday) {
             total++;
-            if (year < currentYear || (year === currentYear && month < currentMonth) || (year === currentYear && month === currentMonth && i <= currentDate)) {
-                worked++;
-            }
+            if (year < now.getFullYear() || (year === now.getFullYear() && month <= now.getMonth() && i <= now.getDate())) worked++;
         }
     }
-    if (year > currentYear || (year === currentYear && month > currentMonth)) worked = 0;
-    return { total, worked, remaining: total - worked };
+    return { total: total || 22, worked: worked || 1, remaining: Math.max(0, total - worked) };
   };
 
   const globalCalendar = useMemo(() => {
     const [y, m] = selectedMonth.split('-').map(Number);
-    let targetStoreId = null;
-    if (chartCityFilter !== 'all') targetStoreId = myStores.find(s => s.name === chartCityFilter)?.id || null;
-    return getCalendarForScope(y, m - 1, targetStoreId);
-  }, [selectedMonth, holidays, chartCityFilter, myStores]);
+    return getCalendarForScope(y, m - 1);
+  }, [selectedMonth, holidays]);
 
   const uniqueClusters = useMemo(() => {
     return [...new Set(myStores.map(s => s.clusterId).filter(Boolean))];
   }, [myStores]);
 
-  const totals = useMemo(() => {
-    let p = 0, mCount = 0, i = 0, ss = 0;
-    currentMonthLeads.forEach(lead => {
-      const isClosed = lead.status === 'Contratado' || lead.status === 'Instalado';
-      const isInstalled = lead.status === 'Instalado';
-      if (isClosed && lead.leadType === 'Plano Novo') p++;
-      if (isClosed && lead.leadType === 'Migração') mCount++;
-      if (isInstalled && lead.leadType === 'Plano Novo') i++;
-      if (isClosed && lead.leadType === 'SVA') ss++;
-    });
+  const currentMonthLeads = useMemo(() => leads.filter(l => l.date?.startsWith(selectedMonth)), [leads, selectedMonth]);
 
-    const today = globalCalendar.worked;
-    const totalDays = globalCalendar.total;
-
-    return { 
-      planos: p, migracoes: mCount, installs: i, svas: ss, 
-      projPlanos: today > 0 ? Math.floor((p / today) * totalDays) : 0, 
-      projMigracoes: today > 0 ? Math.floor((mCount / today) * totalDays) : 0, 
-      projInstalls: today > 0 ? Math.floor((i / today) * totalDays) : 0, 
-      projSvas: today > 0 ? Math.floor((ss / today) * totalDays) : 0
-    };
-  }, [currentMonthLeads, globalCalendar]);
-
+  // --- COMPILADOR DE DADOS DA UNIDADE ---
   const storeData = useMemo(() => {
     let targetStores = myStores;
-    const [y, m] = selectedMonth.split('-').map(Number);
-    
     if (chartClusterFilter !== 'all') targetStores = targetStores.filter(s => s.clusterId === chartClusterFilter);
     if (chartCityFilter !== 'all') targetStores = targetStores.filter(s => s.name === chartCityFilter);
 
     return targetStores.map(store => {
-      const storeLeads = currentMonthLeads.filter(l => l.cityId === store.name);
-      let p = 0, mCount = 0, i = 0, ss = 0;
+      const storeLeads = currentMonthLeads.filter(l => l.cityId === store.name || l.cityId === store.id);
+      const goal = monthlyGoals[store.id] || {};
       
-      storeLeads.forEach(lead => {
-        const isClosed = lead.status === 'Contratado' || lead.status === 'Instalado';
-        const isInstalled = lead.status === 'Instalado';
-        if (isClosed && lead.leadType === 'Plano Novo') p++;
-        if (isClosed && lead.leadType === 'Migração') mCount++;
-        if (isInstalled && lead.leadType === 'Plano Novo') i++;
-        if (isClosed && lead.leadType === 'SVA') ss++;
-      });
-
-      const storeCal = getCalendarForScope(y, m - 1, store.id);
-      const mockMetaPlanos = 20, mockMetaMigracoes = 10, mockMetaSva = 15;
+      const p = storeLeads.filter(l => (l.status === 'Contratado' || l.status === 'Instalado') && l.leadType === 'Plano Novo').length;
+      const i = storeLeads.filter(l => l.status === 'Instalado' && l.leadType === 'Plano Novo').length;
+      const ss = storeLeads.filter(l => (l.status === 'Contratado' || l.status === 'Instalado') && l.leadType === 'SVA').length;
+      const mCount = storeLeads.filter(l => (l.status === 'Contratado' || l.status === 'Instalado') && l.leadType === 'Migração').length;
+      const metaTotal = (parseInt(goal.plans_loja)||0) + (parseInt(goal.plans_pap)||0) + (parseInt(goal.plans_central)||0) + (parseInt(goal.plans_b2b)||0);
 
       return {
-        city: store.name,
-        metaPlanos: mockMetaPlanos, salesPlanos: p, installedPlanos: i,
-        metaMigracoes: mockMetaMigracoes, salesMigracoes: mCount,
-        metaSVA: mockMetaSva, salesSVA: ss,
-        projSales: storeCal.worked > 0 ? Math.floor((p / storeCal.worked) * storeCal.total) : 0,
+        id: store.id, city: store.name, clusterId: store.clusterId,
+        metaPlanos: metaTotal || 0, salesPlanos: p, installedPlanos: i, salesSVA: ss, metaSVA: parseInt(goal.sva) || 0,
+        salesMigracoes: mCount, metaMigracoes: parseInt(goal.migrations) || 0,
+        projSales: globalCalendar.worked > 0 ? Math.floor((p / globalCalendar.worked) * globalCalendar.total) : 0,
       };
     }).sort((a, b) => b.salesPlanos - a.salesPlanos); 
-  }, [currentMonthLeads, myStores, selectedMonth, holidays, chartClusterFilter, chartCityFilter]);
+  }, [currentMonthLeads, myStores, selectedMonth, chartClusterFilter, chartCityFilter, monthlyGoals, globalCalendar]);
 
-  const svaAnalysis = useMemo(() => {
-    let targetStores = myStores;
-    if (chartClusterFilter !== 'all') targetStores = targetStores.filter(s => s.clusterId === chartClusterFilter);
-    if (chartCityFilter !== 'all') targetStores = targetStores.filter(s => s.name === chartCityFilter);
+  // --- TOTAIS GLOBAIS (CIRURGIÃO: OVERRIDE COM METAS DO CLUSTER) ---
+  const totals = useMemo(() => {
+    // 1. Soma da performance real e das metas das unidades (fallback)
+    const s = storeData.reduce((acc, curr) => {
+      acc.p += curr.salesPlanos; acc.i += curr.installedPlanos; acc.ss += curr.salesSVA; 
+      acc.m += curr.salesMigracoes;
+      acc.gp += curr.metaPlanos; acc.gm += curr.metaMigracoes; acc.gs += curr.metaSVA;
+      return acc;
+    }, { p: 0, i: 0, ss: 0, gp: 0, m:0, gm:0, gs:0 });
+    
+    // 2. Determinar as Metas do Cluster (Se existirem, sobrepõem as das unidades)
+    let clusterP = 0, clusterM = 0, clusterS = 0;
+    let hasClusterGoals = false;
 
-    const storeNames = targetStores.map(s => s.name);
-    const svaCounts = {}; const sellerCounts = {}; const cityCounts = {};
-
-    currentMonthLeads.forEach(lead => {
-      if (storeNames.includes(lead.cityId) && lead.leadType === 'SVA' && (lead.status === 'Contratado' || lead.status === 'Instalado')) {
-        const pName = lead.productName || 'Outros SVAs';
-        const seller = lead.attendantName || 'Desconhecido';
-        const city = lead.cityId || 'Desconhecida';
-
-        svaCounts[pName] = (svaCounts[pName] || 0) + 1;
-        sellerCounts[seller] = (sellerCounts[seller] || 0) + 1;
-        cityCounts[city] = (cityCounts[city] || 0) + 1;
+    if (chartClusterFilter !== 'all') {
+      const cg = monthlyClusterGoals[chartClusterFilter];
+      if (cg && (cg.plans || cg.migrations || cg.sva)) {
+        clusterP = parseInt(cg.plans) || 0;
+        clusterM = parseInt(cg.migrations) || 0;
+        clusterS = parseInt(cg.sva) || 0;
+        hasClusterGoals = true;
       }
+    } else {
+      // Se Visão Global, soma os alvos de todas as regionais que o utilizador vê
+      uniqueClusters.forEach(clusterId => {
+        const cg = monthlyClusterGoals[clusterId];
+        if (cg && (cg.plans || cg.migrations || cg.sva)) {
+          clusterP += parseInt(cg.plans) || 0;
+          clusterM += parseInt(cg.migrations) || 0;
+          clusterS += parseInt(cg.sva) || 0;
+          hasClusterGoals = true;
+        }
+      });
+    }
+
+    const workRatio = globalCalendar.total / (globalCalendar.worked || 1);
+    
+    return { 
+      ...s, 
+      // SE A DIRETORIA DEFINIU META DE CLUSTER, USA. SENÃO, FAZ A SOMA DAS LOJAS.
+      goalP: hasClusterGoals ? clusterP : s.gp,
+      goalM: hasClusterGoals ? clusterM : s.gm,
+      goalS: hasClusterGoals ? clusterS : s.gs,
+      projP: Math.floor(s.p * workRatio), 
+      projM: Math.floor(s.m * workRatio), 
+      projI: Math.floor(s.i * workRatio), 
+      projS: Math.floor(s.ss * workRatio) 
+    };
+  }, [storeData, globalCalendar, monthlyClusterGoals, chartClusterFilter, uniqueClusters]);
+
+  // --- INTELIGÊNCIA DE SVA ---
+  const svaAnalysis = useMemo(() => {
+    const svaCounts = {}; const sellerCounts = {}; const cityCounts = {};
+    currentMonthLeads.filter(l => l.leadType === 'SVA' && (l.status === 'Contratado' || l.status === 'Instalado')).forEach(lead => {
+        svaCounts[lead.productName || 'Outros'] = (svaCounts[lead.productName || 'Outros'] || 0) + 1;
+        sellerCounts[lead.attendantName || 'N/D'] = (sellerCounts[lead.attendantName || 'N/D'] || 0) + 1;
+        cityCounts[lead.cityId || 'N/D'] = (cityCounts[lead.cityId || 'N/D'] || 0) + 1;
     });
+    return { 
+      radarData: Object.keys(svaCounts).map(k => ({ subject: k, A: svaCounts[k], fullMark: 10 })),
+      topSellers: Object.keys(sellerCounts).map(k => ({ name: k, count: sellerCounts[k] })).sort((a,b)=>b.count-a.count).slice(0,5),
+      topCities: Object.keys(cityCounts).map(k => ({ name: k, count: cityCounts[k] })).sort((a,b)=>b.count-a.count).slice(0,5)
+    };
+  }, [currentMonthLeads]);
 
-    const radarData = Object.keys(svaCounts).map(key => ({ subject: key, A: svaCounts[key], fullMark: Math.max(...Object.values(svaCounts)) + 2 })).sort((a, b) => b.A - a.A);
-    const topSellers = Object.keys(sellerCounts).map(key => ({ name: key, count: sellerCounts[key] })).sort((a, b) => b.count - a.count).slice(0, 5);
-    const topCities = Object.keys(cityCounts).map(key => ({ name: key, count: cityCounts[key] })).sort((a, b) => b.count - a.count).slice(0, 5);
-
-    return { radarData, topSellers, topCities };
-  }, [currentMonthLeads, myStores, chartClusterFilter, chartCityFilter]);
+  if (loading) return <div style={{padding: 100, textAlign:'center'}}><RefreshCw className="animate-spin" color={colors?.primary} /></div>;
 
   return (
-    <div style={styles.container}>
-      
-      {/* CABEÇALHO */}
-      <div style={styles.newHeaderCard}>
-        <div style={styles.headerLeft}>
-          <div style={styles.headerIconWrapper}>
-            <TrendingUp size={32} color="#2563eb" />
-          </div>
-          <div>
-            <h2 style={styles.newPageTitle}>Painel de Vendas</h2>
-            <p style={styles.newPageSubtitle}>Visão consolidada e alimentação automática via CRM</p>
-          </div>
+    <div style={global.container}>
+      <div style={{...global.card, display:'flex', justifyContent:'space-between', alignItems:'center', padding:'30px', marginBottom:'30px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:'20px'}}>
+          <div style={{...global.iconHeader, background:colors.primary}}><TrendingUp size={32} color="white" /></div>
+          <div><h2 style={global.title}>Painel de Vendas</h2><p style={global.subtitle}>Gestão de Metas da Regional</p></div>
         </div>
-        
-        <div style={styles.headerRight}>
-          <div style={styles.rhythmBadge}>
-             <div style={styles.rhythmIconBox}><CalendarClock size={20} color="#2563eb" /></div>
-             <div style={{display: 'flex', flexDirection: 'column'}}>
-                <span style={styles.rhythmLabel}>Ritmo do Mês</span>
-                <span style={styles.rhythmValue}>
-                   {globalCalendar.worked} <span style={styles.rhythmTextLight}>trab.</span> / {globalCalendar.remaining} <span style={styles.rhythmTextLight}>rest.</span>
-                </span>
-             </div>
+        <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
+          <div style={{background:colors.primary + '10', padding:'10px 20px', borderRadius:'12px', color:colors.primary, fontWeight:'900'}}>
+            {globalCalendar.worked} trab. / {globalCalendar.remaining} rest.
           </div>
-          <div style={styles.monthSelector}>
-            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={styles.monthInput} />
-          </div>
+          <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={global.input} />
         </div>
       </div>
 
-      {loading ? (
-        <div style={styles.loadingText}>Sincronizando dados do CRM...</div>
-      ) : (
-        <>
-          <div id="resumo-global" style={styles.speedometerGrid}>
-            <SpeedometerCard title="Planos Novos" current={totals.planos} target={globalGoals.planos} projection={totals.projPlanos} />
-            <SpeedometerCard title="Migrações" current={totals.migracoes} target={globalGoals.migracoes} projection={totals.projMigracoes} color="orange" />
-            <SpeedometerCard title="Instalações" current={totals.installs} target={globalGoals.installs} projection={totals.projInstalls} color="green" />
-            <SpeedometerCard title="Mix de SVA" current={totals.svas} target={globalGoals.svas} projection={totals.projSvas} color="purple" />
-          </div>
+      {/* ESTES VELOCÍMETROS AGORA PUXAM A META DA REGIONAL */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:'20px', marginBottom:'40px'}}>
+        <SpeedometerCard title="Planos Novos" current={totals.p} target={totals.goalP} projection={totals.projP} delay="0s" />
+        <SpeedometerCard title="Migrações" current={totals.m} target={totals.goalM} projection={totals.projM} color="orange" delay="0.1s" />
+        <SpeedometerCard title="Instalações" current={totals.i} target={totals.p} projection={totals.projI} color="green" delay="0.2s" />
+        <SpeedometerCard title="Mix SVA" current={totals.ss} target={totals.goalS} projection={totals.projS} color="purple" delay="0.3s" />
+      </div>
 
-          <div style={styles.chartFiltersContainer}>
-            <div style={styles.chartTabs}>
-              <button style={chartClusterFilter === 'all' && chartCityFilter === 'all' ? styles.chartTabActive : styles.chartTab} onClick={() => { setChartClusterFilter('all'); setChartCityFilter('all'); }}>Visão Global</button>
-              {uniqueClusters.map(cluster => (
-                <button key={cluster} style={chartClusterFilter === cluster && chartCityFilter === 'all' ? styles.chartTabActive : styles.chartTab} onClick={() => { setChartClusterFilter(cluster); setChartCityFilter('all'); }}>{cluster}</button>
-              ))}
-            </div>
-            <div style={styles.chartCityFilter}>
-              <Filter size={14} color="#64748b" style={{marginRight: '8px'}} />
-              <select value={chartCityFilter} onChange={(e) => setChartCityFilter(e.target.value)} style={styles.chartSelect}>
-                <option value="all">Ou filtre por Loja Específica...</option>
-                {myStores.filter(s => chartClusterFilter === 'all' || s.clusterId === chartClusterFilter).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              </select>
-            </div>
-          </div>
+      <div style={{background: 'var(--bg-card)', padding:'15px', borderRadius:'16px', display:'flex', gap:'10px', marginBottom:'30px'}}>
+           <button style={chartClusterFilter === 'all' ? local.tabActive : local.tab} onClick={() => setChartClusterFilter('all')}>Visão Global</button>
+           {uniqueClusters.map(c => (
+             <button key={c} style={chartClusterFilter === c ? local.tabActive : local.tab} onClick={() => setChartClusterFilter(c)}>{c}</button>
+           ))}
+      </div>
 
-          {/* NOVO COMPONENTE: SALA DE GUERRA */}
-          <WarRoomProjections storeData={storeData} globalCalendar={globalCalendar} />
-
-          <MonthlyEvolution allLeads={leads} myStores={myStores} chartClusterFilter={chartClusterFilter} chartCityFilter={chartCityFilter} />
-          <PerformanceCharts storeData={storeData} />
-          <SvaAnalyzer svaAnalysis={svaAnalysis} />
-          <SalesTable storeData={storeData} />
-        </>
-      )}
+      {/* ESTES COMPONENTES CONTINUAM A AVALIAR A PERFORMANCE POR CIDADE */}
+      <WarRoomProjections storeData={storeData} globalCalendar={globalCalendar} />
+      <MonthlyEvolution allLeads={leads} myStores={myStores} chartClusterFilter={chartClusterFilter} chartCityFilter={chartCityFilter} />
+      <PerformanceCharts storeData={storeData} />
+      <SvaAnalyzer svaAnalysis={svaAnalysis} />
+      <SalesTable storeData={storeData} />
     </div>
   );
 }
 
-// ESTILOS ESPECÍFICOS DO MAIN PAINEL E HEADER
-const styles = {
-  container: { display: 'flex', flexDirection: 'column', gap: '30px', paddingBottom: '40px', fontFamily: "'Inter', sans-serif", animation: 'fadeIn 0.5s ease-out', width: '100%' },
-  newHeaderCard: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '28px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)', border: '1px solid rgba(226, 232, 240, 0.8)', marginBottom: '10px' },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '20px' },
-  headerIconWrapper: { backgroundColor: '#eff6ff', padding: '16px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.5)' },
-  newPageTitle: { fontSize: '26px', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.02em' },
-  newPageSubtitle: { fontSize: '14px', fontWeight: '600', color: '#64748b', margin: '4px 0 0 0' },
-  headerRight: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' },
-  rhythmBadge: { display: 'flex', alignItems: 'center', gap: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '14px', boxShadow: '0 2px 4px rgba(37,99,235,0.05)' },
-  rhythmIconBox: { background: 'white', padding: '6px', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
-  rhythmLabel: { display: 'block', fontSize: '10px', fontWeight: '900', color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' },
-  rhythmValue: { display: 'block', fontSize: '15px', fontWeight: '900', color: '#2563eb' },
-  rhythmTextLight: { fontSize: '11px', fontWeight: '600', color: '#60a5fa' },
-  monthSelector: { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', padding: '12px 20px', borderRadius: '14px', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.02)', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center' },
-  monthInput: { backgroundColor: 'transparent', fontSize: '15px', fontWeight: '900', color: '#334155', border: 'none', outline: 'none', cursor: 'pointer' },
-  loadingText: { textAlign: 'center', padding: '60px', color: '#94a3b8', fontWeight: 'bold', fontSize: '16px' },
-  speedometerGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', alignItems: 'stretch' },
-  chartFiltersContainer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' },
-  chartTabs: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  chartTab: { padding: '10px 20px', borderRadius: '12px', background: 'transparent', border: '1px solid transparent', color: '#64748b', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' },
-  chartTabActive: { padding: '10px 20px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', color: '#2563eb', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  chartCityFilter: { display: 'flex', alignItems: 'center', background: 'white', padding: '2px 10px', borderRadius: '12px', border: '1px solid #e2e8f0', flex: 1, maxWidth: '300px' },
-  chartSelect: { padding: '10px', border: 'none', outline: 'none', fontSize: '13px', color: '#1e293b', fontWeight: 'bold', cursor: 'pointer', width: '100%', background: 'transparent' },
+const local = {
+  tab: { padding:'10px 20px', borderRadius:'10px', border:'none', background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontWeight:'bold' },
+  tabActive: { padding:'10px 20px', borderRadius:'10px', border:'none', background:'white', color:colors.primary, fontWeight:'900', boxShadow:'0 2px 5px rgba(0,0,0,0.05)' }
 };

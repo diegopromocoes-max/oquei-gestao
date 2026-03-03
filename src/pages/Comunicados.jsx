@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, getDocs, addDoc, serverTimestamp, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { Megaphone, Send, User, CheckCircle, MessageCircle, Users, RefreshCw } from 'lucide-react';
+import { 
+  Megaphone, Send, User, CheckCircle, MessageCircle, Users, RefreshCw, 
+  Pin, Star, CalendarDays, X, PlusCircle, CheckCircle2, ChevronDown
+} from 'lucide-react';
 
-// IMPORTAÇÃO DOS ESTILOS GLOBAIS
 import { styles as global } from '../styles/globalStyles';
 
 export default function Comunicados({ userData }) {
@@ -11,15 +13,30 @@ export default function Comunicados({ userData }) {
   const [recipients, setRecipients] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   
-  const canSendToAll = userData?.role === 'coordinator' || userData?.role === 'supervisor';
+  const chatEndRef = useRef(null);
 
-  const [form, setForm] = useState({ text: '', to: canSendToAll ? 'all' : '', priority: 'normal' });
+  const canSendToAll = userData?.role === 'coordinator' || userData?.role === 'supervisor';
+  const canPin = userData?.role === 'coordinator' || userData?.role === 'supervisor';
+
+  const [form, setForm] = useState({ text: '', to: canSendToAll ? 'all' : 'coordinator', priority: 1 });
+
+  // Datas para o Cabeçalho
+  const todayDateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const unreadCount = messages.filter(m => !m.read).length;
 
   useEffect(() => {
     fetchMessages();
-    fetchUsers();
+    if (canSendToAll) fetchUsers();
   }, [userData]);
+
+  // Auto-scroll para a última mensagem ao carregar
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   const fetchUsers = async () => {
     try {
@@ -41,7 +58,8 @@ export default function Comunicados({ userData }) {
   const fetchMessages = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "messages"), orderBy("createdAt", "desc"));
+      // Ordenação ASC para simular um chat (mais antigos em cima, mais novos em baixo)
+      const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
       const snap = await getDocs(q);
       const allMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -53,8 +71,14 @@ export default function Comunicados({ userData }) {
         return false;
       });
 
-      setMessages(filtered);
-      markAsReadBatch(filtered);
+      // Mapear leitura
+      const msgsWithReadStatus = filtered.map(msg => ({
+        ...msg,
+        read: msg.readBy && auth.currentUser && msg.readBy.includes(auth.currentUser.uid)
+      }));
+
+      setMessages(msgsWithReadStatus);
+      markAsReadBatch(msgsWithReadStatus);
     } catch (err) { window.alert(err.message); }
     setLoading(false);
   };
@@ -63,7 +87,7 @@ export default function Comunicados({ userData }) {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
     msgs.forEach(msg => {
-      if (msg.senderId !== userId && (!msg.readBy || !msg.readBy.includes(userId))) {
+      if (msg.senderId !== userId && !msg.read) {
         updateDoc(doc(db, "messages", msg.id), { readBy: arrayUnion(userId) }).catch(e => console.log(e));
       }
     });
@@ -76,18 +100,36 @@ export default function Comunicados({ userData }) {
     setSending(true);
 
     try {
-      const recipientName = form.to === 'all' ? 'Todos' : recipients.find(r => r.id === form.to)?.name || 'Usuário';
+      const recipientName = form.to === 'all' ? 'Todos' : form.to === 'coordinator' ? 'Coordenação' : recipients.find(r => r.id === form.to)?.name || 'Usuário';
 
       await addDoc(collection(db, "messages"), {
-        text: form.text, senderId: auth.currentUser.uid, senderName: userData.name,
-        senderRole: userData.role, to: form.to, toName: recipientName,
-        priority: form.priority, readBy: [auth.currentUser.uid], createdAt: serverTimestamp()
+        text: form.text, 
+        senderId: auth.currentUser.uid, 
+        senderName: userData.name,
+        senderRole: userData.role, 
+        to: form.to, 
+        toName: recipientName,
+        priority: form.priority, 
+        pinned: false,
+        readBy: [auth.currentUser.uid], 
+        createdAt: serverTimestamp()
       });
 
-      setForm({ ...form, text: '', to: canSendToAll ? 'all' : '' });
+      setForm({ ...form, text: '', priority: 1, to: canSendToAll ? 'all' : 'coordinator' });
+      setIsComposing(false);
       fetchMessages(); 
     } catch (err) { window.alert(err.message); }
     setSending(false);
+  };
+
+  const togglePinMessage = async (msg) => {
+    if (!canPin) return;
+    try {
+      await updateDoc(doc(db, "messages", msg.id), { pinned: !msg.pinned });
+      fetchMessages();
+    } catch (err) {
+      window.alert("Erro ao fixar a mensagem.");
+    }
   };
 
   const getRoleLabel = (role) => {
@@ -96,115 +138,283 @@ export default function Comunicados({ userData }) {
     return 'Comercial';
   };
 
-  return (
-    <div style={{...global.container, maxWidth: '900px'}}>
+  // Agrupar mensagens por dia
+  const groupMessagesByDay = () => {
+    const groups = {};
+    const today = new Date().toLocaleDateString('pt-BR');
+    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR');
+
+    messages.forEach(msg => {
+      const dateObj = msg.createdAt ? new Date(msg.createdAt.seconds * 1000) : new Date();
+      const dateStr = dateObj.toLocaleDateString('pt-BR');
       
-      {/* HEADER GLOBAL */}
-      <div style={global.header}>
-        <div style={global.iconHeader}><Megaphone size={28} color="white"/></div>
-        <div>
-          <h1 style={global.title}>Mural de Comunicados</h1>
-          <p style={global.subtitle}>Mensagens diretas e avisos públicos da rede.</p>
+      let label = dateStr;
+      if (dateStr === today) label = 'Hoje';
+      else if (dateStr === yesterday) label = 'Ontem';
+
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(msg);
+    });
+
+    return groups;
+  };
+
+  const groupedMessages = groupMessagesByDay();
+  const pinnedMessages = messages.filter(m => m.pinned);
+
+  return (
+    <div style={{...global.container, maxWidth: '1000px', display: 'flex', flexDirection: 'column', height: '90vh', padding: '20px 40px'}}>
+      
+      {/* CABEÇALHO DASHBOARD-STYLE */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '20px', marginBottom: '20px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'var(--text-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.25)' }}>
+            <Megaphone size={28} color="white" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 5px 0', letterSpacing: '-0.02em' }}>Mural de Comunicados</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '600' }}>
+               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><CalendarDays size={16}/> <span style={{textTransform: 'capitalize'}}>{todayDateStr}</span></span>
+               <span style={{ color: 'var(--border)' }}>•</span>
+               <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: unreadCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+                 <MessageCircle size={16}/> {unreadCount} não lidas
+               </span>
+            </div>
+          </div>
         </div>
-        <button onClick={fetchMessages} style={{...global.iconBtn, marginLeft: 'auto'}}><RefreshCw size={20}/></button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={fetchMessages} style={{...global.iconBtn, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)'}} title="Atualizar">
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={() => setIsComposing(true)} style={{...global.btnPrimary, background: 'var(--text-brand)'}}>
+            <PlusCircle size={18} /> Nova Mensagem
+          </button>
+        </div>
       </div>
 
-      <div style={local.layout}>
+      {/* ÁREA PRINCIPAL DO CHAT */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', position: 'relative' }}>
         
-        {/* FORMULÁRIO DE ENVIO */}
-        <div style={global.card}>
-          <h3 style={global.sectionTitle}>Nova Mensagem</h3>
-          <form onSubmit={handleSend} style={global.form}>
-            
-            <div style={local.recipientRow}>
-              {canSendToAll && (
-                <label style={local.radioLabel}>
-                  <input type="radio" checked={form.to === 'all'} onChange={() => setForm({...form, to: 'all'})} style={{accentColor: 'var(--text-brand)'}} />
-                  <span style={{fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', gap: '6px'}}><Users size={14}/> Público (Todos)</span>
-                </label>
-              )}
-              
-              <div style={{display:'flex', alignItems:'center', gap:'10px', flex: 1}}>
-                <span style={{fontSize:'13px', color:'var(--text-muted)'}}>{canSendToAll ? "Ou Direcionado:" : "Enviar para:"}</span>
-                <select style={global.select} value={form.to !== 'all' ? form.to : ''} onChange={e => setForm({...form, to: e.target.value})} required={!canSendToAll || form.to !== 'all'}>
-                  <option value="" disabled>Selecionar Colaborador...</option>
-                  {recipients.map(u => <option key={u.id} value={u.id}>{u.name} ({getRoleLabel(u.role)})</option>)}
-                </select>
-              </div>
+        {/* BANNER MENSAGENS FIXADAS */}
+        {pinnedMessages.length > 0 && (
+          <div style={{ background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)', padding: '15px 20px', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0, zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+            <h4 style={{ margin: 0, fontSize: '12px', fontWeight: '900', color: 'var(--text-brand)', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase' }}>
+              <Pin size={14} fill="currentColor" /> Avisos Fixados
+            </h4>
+            <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '5px' }} className="hide-scrollbar">
+              {pinnedMessages.map(msg => (
+                <div key={`pin-${msg.id}`} style={{ minWidth: '250px', maxWidth: '300px', background: 'var(--bg-app)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', position: 'relative' }}>
+                   {canPin && (
+                     <button onClick={() => togglePinMessage(msg)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                       <X size={14}/>
+                     </button>
+                   )}
+                   <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '4px' }}>{msg.senderName}</div>
+                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg.text}</div>
+                </div>
+              ))}
             </div>
+          </div>
+        )}
 
-            <textarea style={global.textarea} placeholder="Escreva sua mensagem ou aviso..." value={form.text} onChange={e => setForm({...form, text: e.target.value})} required />
-
-            <div style={{display: 'flex', justifyContent: 'flex-end'}}>
-              <button type="submit" style={global.btnPrimary} disabled={sending}>
-                {sending ? 'Enviando...' : 'Enviar Mensagem'} <Send size={16} />
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* FEED DE MENSAGENS */}
-        <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-          <h3 style={global.sectionTitle}>Últimas Atualizações</h3>
+        {/* FEED DE MENSAGENS (Scrollable) */}
+        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', background: 'var(--bg-app)' }} className="custom-scrollbar">
           
-          {loading ? (
-            <p style={{textAlign:'center', color:'var(--text-muted)'}}>A carregar...</p>
+          {loading && messages.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px', fontStyle: 'italic' }}>Carregando histórico...</div>
           ) : messages.length === 0 ? (
-            <div style={global.emptyState}>
-              <MessageCircle size={40} style={{opacity:0.3}} />
-              <p>Nenhuma mensagem encontrada.</p>
+            <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <MessageCircle size={48} style={{ opacity: 0.2, marginBottom: '15px' }} />
+              <p style={{ fontWeight: 'bold', fontSize: '14px' }}>Mural Limpo</p>
+              <p style={{ fontSize: '12px' }}>Nenhuma mensagem na sua caixa de entrada.</p>
             </div>
           ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-              {messages.map(msg => {
-                const isMine = msg.senderId === auth.currentUser?.uid;
-                const isGeneral = msg.to === 'all';
-                return (
-                  <div key={msg.id} style={{
-                    ...local.messageCard, alignSelf: isMine ? 'flex-end' : 'flex-start',
-                    backgroundColor: isMine ? 'var(--bg-primary-light)' : 'var(--bg-card)',
-                    border: isGeneral && !isMine ? '1px solid rgba(234,88,12,0.4)' : '1px solid var(--border)'
-                  }}>
-                    <div style={local.msgHeader}>
-                      <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                        {isGeneral && <Megaphone size={14} color="#ea580c" />}
-                        {!isGeneral && !isMine && <User size={14} color="var(--text-brand)" />}
-                        <span style={{fontWeight:'bold', color: isMine ? 'var(--text-brand)' : 'var(--text-main)'}}>{isMine ? 'Você' : msg.senderName}</span>
-                        {!isMine && <span style={local.roleBadge}>{getRoleLabel(msg.senderRole)}</span>}
+            Object.keys(groupedMessages).map(dateLabel => (
+              <div key={dateLabel} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                
+                {/* Divisor de Data */}
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
+                  <span style={{ background: 'var(--bg-panel)', color: 'var(--text-muted)', padding: '6px 16px', borderRadius: '20px', fontSize: '11px', fontWeight: '800', border: '1px solid var(--border)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                    {dateLabel}
+                  </span>
+                </div>
+
+                {/* Bolhas de Chat */}
+                {groupedMessages[dateLabel].map(msg => {
+                  const isMine = msg.senderId === auth.currentUser?.uid;
+                  const isGeneral = msg.to === 'all';
+                  const timeStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Agora';
+
+                  return (
+                    <div key={msg.id} style={{
+                      alignSelf: isMine ? 'flex-end' : 'flex-start',
+                      maxWidth: '75%',
+                      minWidth: '250px'
+                    }}>
+                      {/* Metadados acima da bolha */}
+                      <div style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '8px', marginBottom: '4px', padding: '0 4px' }}>
+                         {!isMine && <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)' }}>{msg.senderName}</span>}
+                         {!isMine && <span style={{ fontSize: '9px', background: 'var(--border)', color: 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>{getRoleLabel(msg.senderRole)}</span>}
+                         {isGeneral && !isMine && <span style={{ fontSize: '10px', color: '#ea580c', fontWeight: 'bold' }}>@Todos</span>}
+                         
+                         {/* Indicador de Fixado no Chat */}
+                         {msg.pinned && <Pin size={12} color="var(--text-brand)" fill="var(--text-brand)" />}
                       </div>
-                      <span style={{fontSize:'10px', color:'var(--text-muted)'}}>{msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}</span>
+
+                      {/* Bolha */}
+                      <div style={{
+                        background: isMine ? 'var(--text-brand)' : 'var(--bg-card)',
+                        color: isMine ? 'white' : 'var(--text-main)',
+                        padding: '16px 20px',
+                        borderRadius: isMine ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                        border: isMine ? 'none' : '1px solid var(--border)',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                        position: 'relative'
+                      }}>
+                        {/* Fix Button for Admins */}
+                        {canPin && (
+                          <button 
+                            onClick={() => togglePinMessage(msg)} 
+                            style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.1)', border: 'none', borderRadius: '6px', padding: '4px', cursor: 'pointer', color: isMine ? 'white' : 'var(--text-muted)' }}
+                            title={msg.pinned ? "Desfixar" : "Fixar Mensagem"}
+                          >
+                            <Pin size={14} fill={msg.pinned ? "currentColor" : "none"} />
+                          </button>
+                        )}
+
+                        {/* Prioridade */}
+                        {msg.priority > 1 && (
+                          <div style={{ display: 'flex', gap: '2px', marginBottom: '8px' }}>
+                            {Array.from({length: msg.priority}).map((_, i) => (
+                              <Star key={i} size={12} color={isMine ? "#fde047" : "#f59e0b"} fill={isMine ? "#fde047" : "#f59e0b"} />
+                            ))}
+                          </div>
+                        )}
+
+                        <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px', marginTop: '10px', opacity: isMine ? 0.9 : 0.5, fontSize: '10px', fontWeight: 'bold' }}>
+                          <span>{timeStr}</span>
+                          {isMine && (
+                            <CheckCircle2 size={12} color={msg.readBy?.length > 1 || msg.to === 'all' ? (isMine ? "#a7f3d0" : "#10b981") : "currentColor"} />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    
-                    <p style={local.msgText}>{msg.text}</p>
-                    
-                    <div style={local.msgFooter}>
-                      <span style={{fontSize:'11px', color:'var(--text-muted)', fontStyle:'italic'}}>{isGeneral ? 'Aviso Público' : isMine ? `Enviado para: ${msg.toName}` : 'Mensagem Direta'}</span>
-                      {isMine && (
-                        <span style={{display:'flex', alignItems:'center', gap:'4px', color: msg.readBy?.length > 1 || msg.to === 'all' ? '#10b981' : 'var(--text-muted)', fontSize:'11px', fontWeight:'bold'}}>
-                           <CheckCircle size={14} /> {msg.readBy?.length > 1 || msg.to === 'all' ? 'Lida' : 'Enviada'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ))
           )}
+          <div ref={chatEndRef} />
         </div>
       </div>
+
+      {/* PAINEL DE NOVA MENSAGEM (OVERLAY ESTILO MODAL) */}
+      {isComposing && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 6, 23, 0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
+          <div style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '600px', borderRadius: '24px', padding: '30px', border: '1px solid var(--border)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', animation: 'slideUp 0.3s ease-out' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+               <h3 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                 <Send size={20} color="var(--text-brand)" /> Enviar Mensagem
+               </h3>
+               <button onClick={() => setIsComposing(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24}/></button>
+            </div>
+
+            <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* DESTINATÁRIO */}
+              <div style={{ background: 'var(--bg-panel)', padding: '15px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '10px', textTransform: 'uppercase' }}>Para quem?</label>
+                {canSendToAll ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                      <input type="radio" checked={form.to === 'all'} onChange={() => setForm({...form, to: 'all'})} style={{ accentColor: 'var(--text-brand)', width: '18px', height: '18px' }} />
+                      <Users size={16} color="var(--text-brand)"/> Mural Público (Toda a Rede)
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input type="radio" checked={form.to !== 'all'} onChange={() => setForm({...form, to: recipients[0]?.id || ''})} style={{ accentColor: 'var(--text-brand)', width: '18px', height: '18px' }} />
+                      <select 
+                        style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', outline: 'none', fontWeight: '600' }}
+                        value={form.to !== 'all' ? form.to : ''} 
+                        onChange={e => setForm({...form, to: e.target.value})}
+                        disabled={form.to === 'all'}
+                      >
+                        <option value="" disabled>Selecionar utilizador específico...</option>
+                        {recipients.map(u => <option key={u.id} value={u.id}>{u.name} ({getRoleLabel(u.role)})</option>)}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShieldCheck size={18} color="var(--text-brand)" /> Apenas Coordenação (Mensagem Privada)
+                  </div>
+                )}
+              </div>
+
+              {/* PRIORIDADE */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Prioridade (1 a 5 Estrelas)</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <Star 
+                      key={star} 
+                      size={28} 
+                      color={star <= form.priority ? "#f59e0b" : "var(--border)"} 
+                      fill={star <= form.priority ? "#f59e0b" : "transparent"} 
+                      style={{ cursor: 'pointer', transition: '0.2s' }}
+                      onClick={() => setForm({...form, priority: star})}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* CORPO DA MENSAGEM */}
+              <div>
+                <textarea 
+                  style={{ width: '100%', padding: '16px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', outline: 'none', fontSize: '15px', minHeight: '120px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} 
+                  placeholder="Escreva sua mensagem ou aviso oficial aqui..." 
+                  value={form.text} 
+                  onChange={e => setForm({...form, text: e.target.value})} 
+                  required 
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setIsComposing(false)} style={{ flex: 1, padding: '14px', borderRadius: '12px', background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border)', fontWeight: 'bold', cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={sending} style={{ flex: 2, padding: '14px', borderRadius: '12px', background: 'var(--text-brand)', color: 'white', border: 'none', fontWeight: '900', fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 8px 20px rgba(37,99,235,0.3)' }}>
+                  {sending ? 'A enviar...' : 'Enviar Agora'} <Send size={18} />
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ESTILOS LOCAIS (Apenas o que é exclusivo desta página)
-const local = {
-  layout: { display: 'flex', flexDirection: 'column', gap: '40px' },
-  recipientRow: { display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', background: 'var(--bg-panel)', padding: '12px 15px', borderRadius: '12px', border: '1px solid var(--border)' },
-  radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' },
-  
-  messageCard: { padding: '18px', borderRadius: '16px', width: '100%', maxWidth: '85%', boxShadow: 'var(--shadow-sm)', boxSizing: 'border-box' },
-  msgHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
-  roleBadge: { fontSize: '9px', textTransform: 'uppercase', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '3px 6px', borderRadius: '6px', fontWeight: 'bold' },
-  msgText: { fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5', whiteSpace: 'pre-wrap', margin: '0 0 10px 0' },
-  msgFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '10px' },
-};
+// ESTILOS DE ANIMAÇÃO GLOBAIS
+if (typeof document !== 'undefined') {
+  const styleId = 'chat-animations';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.innerHTML = `
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+      .hide-scrollbar::-webkit-scrollbar { display: none; }
+      .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    `;
+    document.head.appendChild(style);
+  }
+}

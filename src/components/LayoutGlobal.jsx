@@ -140,9 +140,16 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {/* BOTÃO MODO CLARO/ESCURO */}
             <button onClick={toggleTheme} style={local.headerIconBtn}>
               {theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
             </button>
+            
+            {/* NOVO BOTÃO DE CONFIGURAÇÕES */}
+            <button onClick={() => onTabChange('configuracoes')} style={local.headerIconBtn} title="Configurações">
+              <Settings size={20} />
+            </button>
+
             <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border)' }}></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ textAlign: 'right' }}>

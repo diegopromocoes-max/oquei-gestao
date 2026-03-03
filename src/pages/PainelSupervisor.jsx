@@ -13,7 +13,7 @@ import { colors, styles } from '../styles/globalStyles';
 
 // IMPORTAÇÃO DOS MÓDULOS
 import DashboardSupervisor from './DashboardSupervisor'; 
-import LojasOquei from './LojasOquei'; // <-- Adicionado (faltava!)
+import LojasOquei from './LojasOquei'; 
 import FaltasSupervisor from './FaltasSupervisor';
 import ManualSupervisor from './ManualSupervisor';
 import AgendaSupervisor from './AgendaSupervisor';
@@ -30,6 +30,9 @@ import Wallboard from './Wallboard';
 import HubOquei from './HubOquei';
 import RelatorioGeral from './RelatorioGeral';
 import LaboratorioChurn from './LaboratorioChurn';
+
+// 👇 1. IMPORTAÇÃO DO MÓDULO DE CONFIGURAÇÕES AQUI 👇
+import Configuracoes from './Configuracoes'; 
 
 export default function PainelSupervisor({ userData }) {
   const [activeView, setActiveView] = useState('dashboard');
@@ -80,6 +83,10 @@ export default function PainelSupervisor({ userData }) {
       case 'links': return <LinksUteis userData={userData} />;
       case 'orientacoes': return <ManualSupervisor userData={userData} />;
       case 'japa': return <JapaSupervisor userData={userData} />;
+      
+      // 👇 2. ROTA DAS CONFIGURAÇÕES ADICIONADA AQUI 👇
+      case 'configuracoes': return <Configuracoes userData={userData} />;
+      
       default: return <DashboardSupervisor userData={userData} setActiveView={setActiveView} />;
     }
   };
