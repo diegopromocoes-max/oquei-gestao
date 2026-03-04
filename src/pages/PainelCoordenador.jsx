@@ -5,7 +5,8 @@ import { signOut as authSignOut } from 'firebase/auth';
 import { 
   Store, Clock, TrendingUp, Users, Zap, Globe, BarChart3, 
   MapPin, UserPlus, ShoppingBag, LayoutGrid, Wallet, 
-  RefreshCw, AlertCircle, Tv, Megaphone, FileCheck
+  RefreshCw, AlertCircle, Tv, Megaphone, FileCheck, Settings,
+  Gift, HeartHandshake, MonitorPlay // Novos ícones para Marketing
 } from 'lucide-react';
 
 // IMPORTAÇÃO DO DESIGN SYSTEM
@@ -25,6 +26,7 @@ import Wallboard from './Wallboard';
 import HubOquei from './HubOquei';
 import RelatorioGeral from './RelatorioGeral';
 import LinksUteis from './LinksUteis';
+import Configuracoes from './Configuracoes';
 
 export default function PainelCoordenador({ userData }) {
   const [activeView, setActiveView] = useState('dashboard');
@@ -32,21 +34,36 @@ export default function PainelCoordenador({ userData }) {
   const [stats, setStats] = useState({ clusters: 0, cidades: 0, supervisores: 0 });
 
   const MENU_ITEMS = [
+    // --- PRINCIPAL ---
     { id: 'dashboard', label: 'Dashboard Master', icon: Globe, section: 'Principal' },
     { id: 'comunicados', label: 'Comunicados', icon: Megaphone, section: 'Principal' },
     { id: 'wallboard', label: 'Modo TV (Wallboard)', icon: Tv, section: 'Principal', color: colors.cyan },
     
+    // --- INTELIGÊNCIA ---
     { id: 'hub_oquei', label: 'HubOquei Radar', icon: Zap, section: 'Inteligência', color: colors.cyan },
     { id: 'relatorio_geral', label: 'Relatório BI', icon: BarChart3, section: 'Inteligência', color: colors.primary },
     
+    // --- GESTÃO ---
     { id: 'admin_supervisores', label: 'Supervisores', icon: UserPlus, section: 'Gestão', color: colors.purple },
     { id: 'estrutura', label: 'Estrutura Lojas', icon: MapPin, section: 'Gestão', color: colors.primary },
     { id: 'produtos', label: 'Produtos/SVA', icon: ShoppingBag, section: 'Gestão', color: colors.warning },
     
+    // --- OPERAÇÃO ---
     { id: 'lojas_view', label: 'Portfolio', icon: Store, section: 'Operação' },
     { id: 'faltas', label: 'Faltas Globais', icon: AlertCircle, section: 'Operação' },
     { id: 'rh_requests', label: 'Pedidos RH', icon: FileCheck, section: 'Operação' },
-    { id: 'desencaixe', label: 'Financeiro', icon: Wallet, section: 'Operação' },
+
+    // --- MARKETING (NOVO) ---
+    { id: 'acoes_japa', label: 'Ações do Japa', icon: Gift, section: 'Marketing', color: '#ff4757' },
+    { id: 'patrocinio', label: 'Patrocínio', icon: HeartHandshake, section: 'Marketing', color: '#ffa502' },
+    { id: 'solicitar_campanha', label: 'Solicitar Campanha', icon: Megaphone, section: 'Marketing', color: colors.warning },
+    { id: 'conteudos_digitais', label: 'Conteúdos Digitais', icon: MonitorPlay, section: 'Marketing', color: colors.cyan },
+
+    // --- SISTEMAS (NOVO - CAIXA LOCAL MOVIDO PARA AQUI) ---
+    { id: 'desencaixe', label: 'Caixa Local', icon: Wallet, section: 'Sistemas', color: colors.success },
+    
+    // --- FERRAMENTAS ---
+    { id: 'configuracoes', label: 'Configurações S&OP', icon: Settings, section: 'Ferramentas' },
     { id: 'links', label: 'Links Úteis', icon: LayoutGrid, section: 'Ferramentas' }
   ];
 
@@ -66,13 +83,13 @@ export default function PainelCoordenador({ userData }) {
   const DashboardHome = () => (
     <div style={{ animation: 'fadeIn 0.4s ease' }}>
       <div style={styles.dashboardHeader}>
-         <div>
+          <div>
             <h2 style={styles.greetingTitle}>Coordenação Master</h2>
             <p style={styles.greetingSub}>Monitoramento global da rede Oquei Telecom</p>
-         </div>
-         <button onClick={carregarDados} style={styles.refreshBtn}>
+          </div>
+          <button onClick={carregarDados} style={styles.refreshBtn}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-         </button>
+          </button>
       </div>
 
       <div style={styles.kpiGrid}>
@@ -84,10 +101,10 @@ export default function PainelCoordenador({ userData }) {
 
       <h3 style={styles.sectionHeader}>Acesso Rápido Inteligente</h3>
       <div style={styles.actionGrid}>
-         <ActionBtn label="HubOquei Radar" icon={Zap} color={colors.cyan} onClick={() => setActiveView('hub_oquei')} />
-         <ActionBtn label="Relatório BI" icon={BarChart3} color={colors.primary} onClick={() => setActiveView('relatorio_geral')} />
-         <ActionBtn label="Gerir Estrutura" icon={MapPin} color={colors.primary} onClick={() => setActiveView('estrutura')} />
-         <ActionBtn label="Escala Global" icon={AlertCircle} color={colors.danger} onClick={() => setActiveView('faltas')} />
+          <ActionBtn label="HubOquei Radar" icon={Zap} color={colors.cyan} onClick={() => setActiveView('hub_oquei')} />
+          <ActionBtn label="Relatório BI" icon={BarChart3} color={colors.primary} onClick={() => setActiveView('relatorio_geral')} />
+          <ActionBtn label="Gerir Estrutura" icon={MapPin} color={colors.primary} onClick={() => setActiveView('estrutura')} />
+          <ActionBtn label="Escala Global" icon={AlertCircle} color={colors.danger} onClick={() => setActiveView('faltas')} />
       </div>
     </div>
   );
@@ -106,6 +123,14 @@ export default function PainelCoordenador({ userData }) {
       case 'desencaixe': return <DesencaixeSupervisor userData={userData} />;
       case 'comunicados': return <Comunicados userData={userData} />;
       case 'links': return <LinksUteis userData={userData} />;
+      case 'configuracoes': return <Configuracoes userData={userData} />;
+      
+      // Placeholders para os novos itens de Marketing (usando IDs do Supervisor para manter padrão)
+      case 'acoes_japa': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Ações do Japa (Master)</h3><p>Relatório de ações em campo.</p></div>;
+      case 'patrocinio': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Gestão de Patrocínios</h3><p>Controle centralizado de verbas de marketing.</p></div>;
+      case 'solicitar_campanha': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Módulo de Solicitação de Campanhas</h3><p>Em breve...</p></div>;
+      case 'conteudos_digitais': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Repositório de Conteúdos Digitais</h3><p>Em breve...</p></div>;
+      
       default: return <DashboardHome />;
     }
   };

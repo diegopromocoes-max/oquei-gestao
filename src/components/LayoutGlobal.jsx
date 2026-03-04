@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   ChevronRight, LogOut, Menu, Zap, Bell, ChevronDown, 
   Settings, UserCircle, Moon, Sun, Activity, 
@@ -19,6 +19,42 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
   const [radarOpen, setRadarOpen] = useState(true);
   const [recentActions, setRecentActions] = useState([]);
   const [theme, setTheme] = useState('dark');
+
+  // --- NOVA INTELIGÊNCIA DA SANFONA (MÚLTIPLAS ABERTAS) ---
+  const [expandedSections, setExpandedSections] = useState([]); // Agora é uma Array (lista)
+
+  // Agrupa os itens do menu por seção
+  const groupedMenu = useMemo(() => {
+    return menuItems.reduce((acc, item) => {
+      const section = item.section || 'Geral';
+      if (!acc[section]) acc[section] = [];
+      acc[section].push(item);
+      return acc;
+    }, {});
+  }, [menuItems]);
+
+  // Mantém a sanfona aberta na seção da aba ativa sem fechar as outras
+  useEffect(() => {
+    const activeItem = menuItems.find(i => i.id === activeTab);
+    if (activeItem && activeItem.section) {
+      setExpandedSections(prev => {
+        if (!prev.includes(activeItem.section)) {
+          return [...prev, activeItem.section];
+        }
+        return prev;
+      });
+    }
+  }, [activeTab, menuItems]);
+
+  // Abre e fecha clicando, permitindo várias ao mesmo tempo
+  const toggleSection = (sectionName) => {
+    setExpandedSections(prev => 
+      prev.includes(sectionName) 
+        ? prev.filter(s => s !== sectionName) // Se já está aberto, remove da lista (fecha)
+        : [...prev, sectionName]              // Se não está, adiciona à lista (abre)
+    );
+  };
+  // -------------------------------------
 
   // ESCUTA EM TEMPO REAL PARA O RADAR (COLUNA DIREITA)
   useEffect(() => {
@@ -74,39 +110,88 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
           {sidebarOpen && <span style={{ fontWeight: '900', fontSize: '20px', color: 'var(--text-main)', letterSpacing: '-1px' }}>OQUEI <span style={{fontWeight: '400', opacity: 0.6}}>Geral</span></span>}
         </div>
 
-        {/* MENU ITEMS */}
-        <nav style={{ flex: 1, padding: '10px', overflowY: 'auto' }} className="hide-scrollbar">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '12px 15px',
-                marginBottom: '4px',
-                borderRadius: '12px',
-                border: 'none',
-                cursor: 'pointer',
-                gap: '12px',
-                backgroundColor: activeTab === item.id ? 'var(--bg-primary-light)' : 'transparent',
-                color: activeTab === item.id ? 'var(--text-brand)' : 'var(--text-muted)',
-                transition: '0.2s'
-              }}
-            >
-              <item.icon size={20} strokeWidth={activeTab === item.id ? 2.5 : 2} />
-              {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: activeTab === item.id ? '800' : '600' }}>{item.label}</span>}
-            </button>
-          ))}
+        {/* MENU ITEMS COM SANFONA */}
+        <nav style={{ flex: 1, padding: '10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }} className="hide-scrollbar">
+          {Object.entries(groupedMenu).map(([sectionName, items]) => {
+            // Verifica se esta seção específica está dentro do Array de seções abertas
+            const isExpanded = !sidebarOpen || expandedSections.includes(sectionName);
+            
+            return (
+              <div key={sectionName} style={{ marginBottom: '5px' }}>
+                
+                {/* CABEÇALHO DA SEÇÃO */}
+                {sidebarOpen ? (
+                  <button 
+                    onClick={() => toggleSection(sectionName)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 15px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: isExpanded ? 'var(--text-brand)' : 'var(--text-muted)',
+                      fontWeight: '900',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      transition: '0.2s',
+                      letterSpacing: '0.5px'
+                    }}
+                  >
+                    <span style={{ fontSize: '11px' }}>{sectionName}</span>
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+                ) : (
+                  /* LINHA DIVISÓRIA (QUANDO MENU ESTÁ FECHADO) */
+                  <div style={{ height: '1px', background: 'var(--border)', margin: '15px 15px 10px 15px' }} title={sectionName} />
+                )}
+
+                {/* ITENS DA SEÇÃO */}
+                <div style={{
+                  maxHeight: isExpanded ? '1000px' : '0px',
+                  overflow: 'hidden',
+                  transition: 'max-height 0.3s ease-in-out',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  {items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => onTabChange(item.id)}
+                      title={!sidebarOpen ? item.label : ''} // Tooltip natural ao passar o rato se fechado
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: sidebarOpen ? '12px 15px' : '12px 0',
+                        justifyContent: sidebarOpen ? 'flex-start' : 'center', // Centraliza ícones se fechado
+                        borderRadius: '12px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        gap: sidebarOpen ? '12px' : '0',
+                        backgroundColor: activeTab === item.id ? 'var(--bg-primary-light)' : 'transparent',
+                        color: activeTab === item.id ? 'var(--text-brand)' : 'var(--text-muted)',
+                        transition: '0.2s'
+                      }}
+                    >
+                      <item.icon size={20} strokeWidth={activeTab === item.id ? 2.5 : 2} />
+                      {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: activeTab === item.id ? '800' : '600' }}>{item.label}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         {/* FOOTER SIDEBAR */}
         <div style={{ padding: '20px', borderTop: '1px solid var(--border)' }}>
           <button onClick={onLogout} style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'flex-start' : 'center', gap: '12px',
             background: 'transparent', border: 'none', color: '#ef4444', 
-            cursor: 'pointer', padding: '10px'
+            cursor: 'pointer', padding: sidebarOpen ? '10px' : '10px 0'
           }}>
             <LogOut size={20} />
             {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Sair da Conta</span>}
@@ -145,7 +230,7 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
               {theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
             </button>
             
-            {/* NOVO BOTÃO DE CONFIGURAÇÕES */}
+            {/* BOTÃO DE CONFIGURAÇÕES */}
             <button onClick={() => onTabChange('configuracoes')} style={local.headerIconBtn} title="Configurações">
               <Settings size={20} />
             </button>
