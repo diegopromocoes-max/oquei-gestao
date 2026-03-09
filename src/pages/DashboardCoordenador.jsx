@@ -1,94 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
+import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { 
-  Store, Users, TrendingUp, Zap, AlertCircle, 
+  Store, UserPlus, TrendingUp, Zap, AlertCircle, 
   RefreshCw, Activity, MapPin, Flame, FileCheck, 
   Megaphone, Target, ShieldAlert, Calendar, Clock,
-  CheckCircle2, FileText, UserCheck, ListChecks, Wallet
+  CheckCircle2, FileText, UserCheck, ListChecks
 } from 'lucide-react';
 import { colors } from '../styles/globalStyles';
 
-export default function DashboardSupervisor({ userData, setActiveView }) {
+export default function DashboardCoordenador({ userData, setActiveView }) {
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({ lojas: 0, consultores: 0, vendasMes: 0, alertasRh: 0 });
+  const [stats, setStats] = useState({ cidades: 0, supervisores: 0, vendasMes: 0, alertasRh: 0 });
   
-  // Estados para a Gestão Diária
+  // Novos estados para a Gestão Diária
   const [rhPendentes, setRhPendentes] = useState([]);
   const [faltasHoje, setFaltasHoje] = useState([]);
   const [rotinas, setRotinas] = useState([
-    { id: 1, title: 'Conferência de Vendas', desc: 'Validar contratos lançados ontem no sistema', done: false },
-    { id: 2, title: 'Ponto Tangerino', desc: 'Validar atrasos e justificar faltas da equipa', done: false },
-    { id: 3, title: 'Alinhamento Matinal', desc: 'Check-in de alinhamento e metas com os gerentes', done: false }
+    { id: 1, title: 'Conferência de Vendas', desc: 'Validar contratos lançados ontem', done: false },
+    { id: 2, title: 'Ponto Tangerino', desc: 'Validar atrasos da equipa', done: false },
+    { id: 3, title: 'Alinhamento Matinal', desc: 'Check-in rápido com os gerentes de loja', done: false }
   ]);
 
-  const myCluster = String(userData?.clusterId || userData?.cluster || '').trim();
-
   const carregarDados = async () => {
-    if (!auth.currentUser || !myCluster) return;
     setLoading(true);
-    
     try {
-      // 1. Busca Lojas da Regional
-      let qCities = collection(db, "cities");
-      if (myCluster) qCities = query(qCities, where("clusterId", "==", myCluster));
-      const citySnap = await getDocs(qCities);
-      
-      // 2. Busca Consultores da Regional
+      const citySnap = await getDocs(collection(db, "cities"));
       const userSnap = await getDocs(collection(db, "users"));
-      const consultores = userSnap.docs.filter(d => {
-        const data = d.data();
-        return String(data.role).toLowerCase().includes('atend') && 
-               String(data.clusterId || data.cluster || '').trim() === myCluster;
-      });
+      const supervisores = userSnap.docs.filter(d => String(d.data().role).toLowerCase().includes('superv'));
       
-      // 3. Vendas do Mês Atual (Regional)
       const hoje = new Date();
       const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
       const dataHojeStr = hoje.toISOString().split('T')[0];
       
+      // 1. Vendas Globais do Mês
       let vendas = 0;
       try {
         const qLeads = query(collection(db, "leads"), where("date", ">=", `${mesAtual}-01`), where("date", "<=", `${mesAtual}-31`));
         const leadsSnap = await getDocs(qLeads);
-        // Filtra as vendas apenas da regional do supervisor
-        const leadsRegional = leadsSnap.docs.filter(d => String(d.data().clusterId || d.data().cluster || '').trim() === myCluster);
-        vendas = leadsRegional.filter(d => ['Contratado', 'Instalado'].includes(d.data().status)).length;
+        vendas = leadsSnap.docs.filter(d => ['Contratado', 'Instalado'].includes(d.data().status)).length;
       } catch (e) { console.warn("Aviso Leads:", e); }
 
-      // 4. Pedidos de RH Pendentes (Para este Supervisor)
+      // 2. Pedidos de RH Pendentes
       let rhData = [];
       try {
-        const qRh = query(collection(db, "rh_requests"), where("supervisorId", "==", auth.currentUser.uid));
+        const qRh = query(collection(db, "rh_requests"), where("status", "==", "Pendente"));
         const rhSnap = await getDocs(qRh);
-        rhData = rhSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'Pendente');
+        rhData = rhSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       } catch (e) { console.warn("Aviso RH:", e); }
 
-      // 5. Faltas de Hoje (Na Regional)
+      // 3. Faltas de Hoje
       let faltasData = [];
       try {
-        let qFaltas = collection(db, "absences");
-        if (myCluster) qFaltas = query(qFaltas, where("clusterId", "==", myCluster));
+        const qFaltas = query(collection(db, "absences"), where("startDate", "<=", dataHojeStr));
         const faltasSnap = await getDocs(qFaltas);
-        faltasData = faltasSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(f => f.startDate <= dataHojeStr && f.endDate >= dataHojeStr);
+        faltasData = faltasSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(f => f.endDate >= dataHojeStr);
       } catch (e) { console.warn("Aviso Faltas:", e); }
 
-      setStats({ lojas: citySnap.size, consultores: consultores.length, vendasMes: vendas, alertasRh: rhData.length });
+      setStats({ cidades: citySnap.size, supervisores: supervisores.length, vendasMes: vendas, alertasRh: rhData.length });
       setRhPendentes(rhData);
       setFaltasHoje(faltasData);
 
     } catch (err) { 
-      console.error("Erro ao carregar KPIs do Supervisor:", err); 
+      console.error("Erro ao carregar KPIs:", err); 
     }
     setLoading(false);
   };
 
-  useEffect(() => { carregarDados(); }, [userData]);
+  useEffect(() => { carregarDados(); }, []);
 
-  // Formatação de data e meta
   const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const metaRegional = stats.lojas > 0 ? stats.lojas * 30 : 100; // Meta baseada no n.º de lojas da regional
-  const percentualMeta = metaRegional > 0 ? Math.min(Math.round((stats.vendasMes / metaRegional) * 100), 100) : 0;
+  const metaGlobal = stats.cidades > 0 ? stats.cidades * 30 : 500; 
+  const percentualMeta = metaGlobal > 0 ? Math.min(Math.round((stats.vendasMes / metaGlobal) * 100), 100) : 0;
 
   const toggleRotina = (id) => {
     setRotinas(rotinas.map(r => r.id === id ? { ...r, done: !r.done } : r));
@@ -105,31 +88,30 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
             <span style={{ fontSize: '13px', fontWeight: '600', textTransform: 'capitalize' }}>{dataAtual}</span>
           </div>
           <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 5px 0', letterSpacing: '-0.02em' }}>
-            Olá, {userData?.name?.split(' ')[0] || 'Supervisor'}! 👋
+            Olá, {userData?.name?.split(' ')[0] || 'Gestor'}! 👋
           </h1>
-          <p style={{ fontSize: '15px', margin: 0, opacity: 0.9 }}>Visão Estratégica da {myCluster || 'Sua Regional'}</p>
+          <p style={{ fontSize: '15px', margin: 0, opacity: 0.9 }}>Visão Master da Operação Oquei Telecom</p>
         </div>
         <button onClick={carregarDados} style={styles.heroRefreshBtn} title="Atualizar Dashboard">
           <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      {/* 2. KPIs GLOBAIS DA REGIONAL */}
+      {/* 2. KPIs GLOBAIS E PERFORMANCE */}
       <div style={styles.kpiGrid}>
-        <MetricCard title="Vendas da Regional" value={stats.vendasMes} sub="Fechadas este mês" color={colors?.success || '#10b981'} icon={TrendingUp} />
-        <MetricCard title="Lojas Ativas" value={stats.lojas} sub="Na sua área de gestão" color={colors?.primary || '#3b82f6'} icon={Store} />
-        <MetricCard title="Consultores" value={stats.consultores} sub="Equipa de Vendas" color={colors?.purple || '#8b5cf6'} icon={Users} />
+        <MetricCard title="Vendas Globais" value={stats.vendasMes} sub="Fechadas este mês" color={colors?.success || '#10b981'} icon={TrendingUp} />
+        <MetricCard title="Lojas Ativas" value={stats.cidades} sub="Unidades na Rede" color={colors?.primary || '#3b82f6'} icon={Store} />
+        <MetricCard title="Gestores" value={stats.supervisores} sub="Supervisores Ativos" color={colors?.purple || '#8b5cf6'} icon={UserPlus} />
         <MetricCard title="Avisos RH" value={stats.alertasRh} sub="Pendentes de Ação" color={stats.alertasRh > 0 ? (colors?.danger || '#ef4444') : (colors?.warning || '#f59e0b')} icon={ShieldAlert} />
       </div>
 
-      {/* 3. PERFORMANCE DO MÊS (Pacing de Vendas) */}
       <div style={styles.progressSection}>
         <div style={styles.progressHeader}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Target size={20} color={colors?.primary || '#3b82f6'} /> Pacing de Vendas ({myCluster || 'Sua Regional'})
+            <Target size={20} color={colors?.primary || '#3b82f6'} /> Pacing de Vendas (Rede Global)
           </h3>
           <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)' }}>
-            {stats.vendasMes} / <span style={{ color: 'var(--text-main)' }}>{metaRegional} Meta</span>
+            {stats.vendasMes} / <span style={{ color: 'var(--text-main)' }}>{metaGlobal} Meta</span>
           </span>
         </div>
         <div style={styles.progressBarBg}>
@@ -140,7 +122,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
         </p>
       </div>
 
-      {/* 4. GESTÃO DIÁRIA (RH, FALTAS E ROTINAS) */}
+      {/* 3. GESTÃO DIÁRIA (RH, FALTAS E ROTINAS) */}
       <div style={styles.dailyManagementGrid}>
         
         {/* Coluna Esquerda: RH e Faltas */}
@@ -152,7 +134,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
             {rhPendentes.length === 0 ? (
               <div style={styles.emptyStateBox}>
                 <FileCheck size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} />
-                <span>A sua caixa de entrada de RH está vazia. Excelente trabalho!</span>
+                <span>A caixa de entrada de RH está vazia. Excelente trabalho!</span>
               </div>
             ) : (
               <div style={styles.listContainer}>
@@ -177,7 +159,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
               <div style={{ ...styles.emptyStateBox, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}>
                 <CheckCircle2 size={24} color="#10b981" style={{ marginBottom: '10px' }} />
                 <strong style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>Cobertura Completa</strong>
-                <span style={{ fontSize: '12px' }}>A sua equipa iniciou a operação sem baixas reportadas hoje.</span>
+                <span style={{ fontSize: '12px' }}>A operação global iniciou sem baixas reportadas hoje.</span>
               </div>
             ) : (
               <div style={styles.listContainer}>
@@ -185,7 +167,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
                   <div key={i} style={{ ...styles.listItem, borderLeft: '3px solid #ef4444' }}>
                     <div>
                       <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)' }}>{falta.attendantName || 'Colaborador'}</strong>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ausente hoje ({falta.cityId || 'Sem Loja'})</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ausente hoje ({falta.clusterId || 'Sem Loja'})</span>
                     </div>
                   </div>
                 ))}
@@ -198,7 +180,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
         <div style={styles.cardPanel}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ ...styles.cardHeaderTitle, marginBottom: 0 }}><ListChecks size={18} color={colors?.warning || '#f59e0b'} /> ROTINAS OPERACIONAIS</h3>
-            <span style={{ fontSize: '11px', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer' }}>Minha Rotina</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer' }}>Editar Rotinas</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {rotinas.map(rotina => (
@@ -221,23 +203,23 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
 
       </div>
 
-      {/* 5. MENU RÁPIDO (ACESSOS RÁPIDOS) */}
+      {/* 4. ACESSOS RÁPIDOS E FERRAMENTAS */}
       <div style={{ marginBottom: '40px' }}>
-        <h3 style={styles.sectionHeaderShortcut}>Sistemas Oquei</h3>
+        <h3 style={styles.sectionHeaderShortcut}>Sistemas de Inteligência</h3>
         <div style={styles.shortcutGrid}>
           <ShortcutCard title="HubOquei Radar" icon={Zap} color={colors?.cyan || '#06b6d4'} onClick={() => setActiveView('hub_oquei')} />
-          <ShortcutCard title="Painel de Vendas" icon={TrendingUp} color={colors?.success || '#10b981'} onClick={() => setActiveView('vendas')} />
+          <ShortcutCard title="Laboratório Churn" icon={Activity} color={colors?.purple || '#8b5cf6'} onClick={() => setActiveView('churn')} />
           <ShortcutCard title="Sala de Guerra" icon={Flame} color={colors?.danger || '#ef4444'} onClick={() => setActiveView('war_room')} />
-          <ShortcutCard title="Caixa Local" icon={Wallet} color={colors?.success || '#10b981'} onClick={() => setActiveView('desencaixe')} />
+          <ShortcutCard title="Painel de Vendas" icon={TrendingUp} color={colors?.success || '#10b981'} onClick={() => setActiveView('vendas')} />
         </div>
       </div>
 
       <div>
-        <h3 style={styles.sectionHeaderShortcut}>Gestão de Equipa</h3>
+        <h3 style={styles.sectionHeaderShortcut}>Administração e Estrutura</h3>
         <div style={styles.shortcutGrid}>
-          <ShortcutCard title="Faltas e Escala" icon={AlertCircle} color={colors?.danger || '#ef4444'} onClick={() => setActiveView('faltas')} />
+          <ShortcutCard title="Gestão de Estrutura" icon={MapPin} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('estrutura')} />
+          <ShortcutCard title="Gestão de Equipa" icon={UserPlus} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('admin_supervisores')} />
           <ShortcutCard title="Aprovações de RH" icon={FileCheck} color={colors?.warning || '#f59e0b'} onClick={() => setActiveView('rh_requests')} />
-          <ShortcutCard title="Banco de Horas" icon={Clock} color={colors?.warning || '#f59e0b'} onClick={() => setActiveView('banco_horas')} />
           <ShortcutCard title="Comunicados" icon={Megaphone} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('comunicados')} />
         </div>
       </div>
@@ -284,9 +266,9 @@ const ShortcutCard = ({ title, icon: Icon, color, onClick }) => (
 // ==========================================
 const styles = {
   heroBanner: { 
-    background: `linear-gradient(135deg, ${colors?.purple || '#8b5cf6'} 0%, #4c1d95 100%)`, // Um tom mais roxo para diferenciar da Master
+    background: `linear-gradient(135deg, ${colors?.primary || '#3b82f6'} 0%, #1e40af 100%)`, 
     borderRadius: '24px', padding: '35px 40px', display: 'flex', justifyContent: 'space-between', 
-    alignItems: 'flex-start', color: 'white', marginBottom: '30px', boxShadow: '0 10px 30px rgba(139, 92, 246, 0.2)'
+    alignItems: 'flex-start', color: 'white', marginBottom: '30px', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.2)'
   },
   heroContent: { flex: 1 },
   heroRefreshBtn: { background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '12px', borderRadius: '14px', color: 'white', cursor: 'pointer', backdropFilter: 'blur(10px)', transition: 'background 0.2s' },

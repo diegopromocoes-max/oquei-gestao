@@ -1,45 +1,50 @@
+// styles.js - Versão Master Completa
 export const styles = {
-  pageContainer: { background: '#020617', minHeight: '100vh', padding: '30px', color: '#f8fafc', fontFamily: "'Inter', sans-serif" },
-  loadingContainer: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:'#020617', color:'white' },
+  pageContainer: { background: 'var(--bg-page)', minHeight: '100vh', padding: '30px', color: 'var(--text-main)', fontFamily: "'Inter', sans-serif" },
+  loadingContainer: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--bg-page)', color:'var(--text-main)' },
+  
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '20px' },
-  iconBox: { background: 'rgba(59, 130, 246, 0.1)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.3)', boxShadow: '0 0 20px rgba(59, 130, 246, 0.2)' },
-  title: { fontSize: '28px', fontWeight: '900', margin: 0, letterSpacing: '-0.02em', color: 'white' },
-  subtitle: { fontSize: '14px', color: '#94a3b8', margin: '5px 0 0 0' },
-  monthSelector: { backgroundColor: '#0f172a', border: '1px solid #1e293b', padding: '12px 20px', borderRadius: '12px' },
-  monthInput: { backgroundColor: 'transparent', fontSize: '16px', fontWeight: '900', color: 'white', border: 'none', outline: 'none', cursor: 'pointer', colorScheme: 'dark' },
-  globalGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
-  globalCard: { background: '#0f172a', border: '1px solid #1e293b', padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '10px' },
-  globalLabel: { fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  globalValue: { fontSize: '32px', fontWeight: '900', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  labNav: { display: 'flex', gap: '10px', borderBottom: '1px solid #1e293b', paddingBottom: '10px', overflowX: 'auto' },
-  labNavBtn: { background: 'transparent', border: 'none', borderBottom: '3px solid transparent', color: '#64748b', padding: '12px 20px', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'grab', whiteSpace: 'nowrap', transition: '0.2s', userSelect: 'none' },
-  labNavBtnActive: { background: 'transparent', border: 'none', borderBottom: '3px solid #3b82f6', color: '#3b82f6', padding: '12px 20px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'grab', whiteSpace: 'nowrap', transition: '0.2s', userSelect: 'none' },
-  mainLayout: { display: 'grid', gridTemplateColumns: '350px 1fr', gap: '30px', alignItems: 'start', animation: 'fadeIn 0.3s' },
-  radarColumn: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  sectionTitle: { fontSize: '16px', fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 10px 0' },
-  cityList: { display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '5px' },
-  cityCard: { padding: '20px', borderRadius: '16px', border: '2px solid', cursor: 'pointer', transition: 'all 0.2s' },
-  cityCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  cityName: { fontSize: '16px', fontWeight: 'bold', color: 'white', margin: 0 },
-  penetrationBadge: { fontSize: '10px', background: '#1e293b', color: '#94a3b8', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold' },
-  cityCardMetrics: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '10px' },
-  metricMicro: { display: 'flex', flexDirection: 'column', fontSize: '11px', color: '#64748b' },
-  detailsColumn: { background: '#0f172a', border: '1px solid #1e293b', borderRadius: '24px', padding: '40px', minHeight: '600px' },
-  emptySelect: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b', textAlign: 'center' },
-  funnelContainer: { display: 'grid', gridTemplateColumns: '1fr 40px 1fr 40px 1fr', gap: '15px', marginTop: '30px', marginBottom: '40px' },
-  funnelBox: { background: '#1e293b', borderTop: '4px solid #3b82f6', borderRadius: '16px', padding: '25px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
-  clinicSection: { borderTop: '1px solid #1e293b', paddingTop: '30px' },
-  btnAction: { background: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' },
-  btnDanger: { background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(239,68,68,0.2)' },
-  planCard: { background: '#1e293b', border: '1px solid #334155', borderRadius: '16px', padding: '20px' },
-  gridCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalBox: { background: '#0f172a', border: '1px solid #334155', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '550px', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' },
-  label: { display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#94a3b8', marginBottom: '8px' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #334155', background: '#1e293b', color: 'white', outline: 'none', fontSize: '14px', boxSizing: 'border-box', colorScheme: 'dark' },
-  select: { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #334155', background: '#1e293b', color: 'white', outline: 'none', fontSize: '14px', boxSizing: 'border-box' },
-  btnSubmit: { width: '100%', padding: '15px', borderRadius: '12px', background: '#3b82f6', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', marginTop: '10px' },
-  form: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  field: { display: 'flex', flexDirection: 'column', gap: '8px' }
+  iconBox: { background: 'var(--bg-card)', padding: '12px', borderRadius: '16px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  
+  title: { fontSize: '26px', fontWeight: '900', margin: 0, letterSpacing: '-0.02em', color: 'var(--text-main)' },
+  subtitle: { fontSize: '14px', color: 'var(--text-secondary)', margin: '4px 0 0 0' },
+  
+  monthSelector: { backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', padding: '10px 18px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px' },
+  monthInput: { backgroundColor: 'transparent', fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', border: 'none', outline: 'none', cursor: 'pointer', colorScheme: 'dark' },
+  
+  globalGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' },
+  globalCard: { background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
+  globalLabel: { fontSize: '11px', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  globalValue: { fontSize: '30px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  
+  labNav: { display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', overflowX: 'auto', marginBottom: '25px' },
+  labNavBtn: { background: 'transparent', border: 'none', borderBottom: '3px solid transparent', color: 'var(--text-secondary)', padding: '12px 18px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', transition: '0.2s' },
+  labNavBtnActive: { background: 'transparent', border: 'none', borderBottom: '3px solid var(--primary)', color: 'var(--primary)', padding: '12px 18px', fontSize: '14px', fontWeight: '800', cursor: 'pointer', whiteSpace: 'nowrap' },
+  
+  mainLayout: { display: 'flex', flexDirection: 'column', gap: '25px' },
+  sectionTitle: { fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.03em' },
+  
+  cityCard: { padding: '20px', borderRadius: '20px', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.3s ease', background: 'var(--bg-card)', position: 'relative', overflow: 'hidden' },
+  cityName: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 },
+  penetrationBadge: { fontSize: '10px', background: 'var(--bg-app)', color: 'var(--text-secondary)', padding: '5px 10px', borderRadius: '8px', fontWeight: '900' },
+  
+  detailsColumn: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '24px', padding: '30px', borderTop: '4px solid var(--primary)' },
+  emptySelect: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)', gap: '15px' },
+  
+  funnelBox: { background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '18px', padding: '20px', flex: 1, textAlign: 'center' },
+  gridCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginTop: '20px' },
+  planCard: { background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '16px', padding: '18px' },
+  
+  btnAction: { background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: '0.2s' },
+  input: { width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', outline: 'none', fontSize: '14px' }
+};
+
+export const colors = {
+  primary: 'var(--primary)',
+  success: '#10b981',
+  danger: '#ef4444',
+  warning: '#f59e0b',
+  info: '#3b82f6',
+  purple: '#8b5cf6'
 };

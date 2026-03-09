@@ -21,25 +21,27 @@ export default function GestaoProdutos() {
   const [showModal, setShowModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   
+  // Estados para Gestão de Produtos
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-
   const [form, setForm] = useState({
-    name: '',
-    categoryId: '',
-    price: '',
-    description: '',
-    active: true
+    name: '', categoryId: '', price: '', description: '', active: true
   });
+
+  // Estados para Gestão de Categorias
+  const [catName, setCatName] = useState('');
+  const [catTemMeta, setCatTemMeta] = useState(true); // O NOSSO NOVO CAMPO DE META!
+  const [editingCat, setEditingCat] = useState(null);
 
   // --- CARREGAMENTO DO BANCO DE DADOS ---
   const fetchCategories = async () => {
     try {
       const snap = await getDocs(query(collection(db, "product_categories"), orderBy("name")));
       if (snap.empty) {
+        // Se estiver vazio, cria as categorias com a meta ativada por defeito
         const defaultCats = ['Plano de Internet', 'SVA', 'Equipamento', 'Serviço Adicional'];
         for (const cat of defaultCats) {
-            await addDoc(collection(db, "product_categories"), { name: cat });
+            await addDoc(collection(db, "product_categories"), { name: cat, temMeta: true });
         }
         const snap2 = await getDocs(query(collection(db, "product_categories"), orderBy("name")));
         setCategorias(snap2.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -71,6 +73,48 @@ export default function GestaoProdutos() {
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // --- CONTROLE DE CATEGORIAS ---
+  const handleSaveCat = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingCat) {
+        await updateDoc(doc(db, "product_categories", editingCat.id), { 
+          name: catName, 
+          temMeta: catTemMeta 
+        });
+      } else {
+        await addDoc(collection(db, "product_categories"), { 
+          name: catName, 
+          temMeta: catTemMeta 
+        });
+      }
+      setCatName('');
+      setCatTemMeta(true);
+      setEditingCat(null);
+      fetchCategories();
+    } catch (err) { alert(err.message); }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    const q = query(collection(db, "products"), where("categoryId", "==", id));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      alert(`Não é possível excluir! Existem ${snap.size} produtos usando esta categoria.`);
+      return;
+    }
+    if (window.confirm("Excluir esta categoria permanentemente?")) {
+      await deleteDoc(doc(db, "product_categories", id));
+      fetchCategories();
+    }
+  };
+
+  const openCatModal = () => {
+    setCatName('');
+    setCatTemMeta(true);
+    setEditingCat(null);
+    setShowCategoryModal(true);
+  };
 
   // --- CONTROLE DE PRODUTOS ---
   const openModal = (prod = null) => {
@@ -183,69 +227,6 @@ export default function GestaoProdutos() {
     return 'rgba(124, 58, 237, 0.1)';
   };
 
-  // --- GERENCIADOR DE CATEGORIAS ---
-  const CategoryManager = () => {
-    const [catName, setCatName] = useState('');
-    const [editingCat, setEditingCat] = useState(null);
-
-    const handleSaveCat = async (e) => {
-      e.preventDefault();
-      try {
-        if (editingCat) {
-          await updateDoc(doc(db, "product_categories", editingCat.id), { name: catName });
-        } else {
-          await addDoc(collection(db, "product_categories"), { name: catName });
-        }
-        setCatName('');
-        setEditingCat(null);
-        fetchCategories();
-      } catch (err) { alert(err.message); }
-    };
-
-    const handleDeleteCategory = async (id) => {
-      const q = query(collection(db, "products"), where("categoryId", "==", id));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        alert(`Não é possível excluir! Existem ${snap.size} produtos usando esta categoria.`);
-        return;
-      }
-      if (window.confirm("Excluir esta categoria permanentemente?")) {
-        await deleteDoc(doc(db, "product_categories", id));
-        fetchCategories();
-      }
-    };
-
-    return (
-      <div style={global.modalOverlay}>
-        <div style={global.modalBox}>
-          <div style={global.modalHeader}>
-            <h3 style={global.modalTitle}>Catálogo de Categorias</h3>
-            <button onClick={() => setShowCategoryModal(false)} style={global.closeBtn}><X size={20}/></button>
-          </div>
-          
-          <form onSubmit={handleSaveCat} style={{display:'flex', gap:'10px', marginBottom:'25px'}}>
-            <input style={global.input} placeholder="Nome da Categoria..." value={catName} onChange={e=>setCatName(e.target.value)} required autoFocus />
-            <button style={{...(global.btnPrimary || {}), width:'auto'}}>{editingCat ? 'Salvar' : 'Adicionar'}</button>
-            {editingCat && <button type="button" onClick={()=>{setEditingCat(null); setCatName('');}} style={global.btnSecondary}>Cancelar</button>}
-          </form>
-
-          <div style={{maxHeight:'300px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'10px'}}>
-            {categorias.map(c => (
-              <div key={c.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px', background:'var(--bg-panel)', borderRadius:'10px', border:'1px solid var(--border)'}}>
-                <span style={{fontWeight:'bold', color:'var(--text-main)'}}>{c.name}</span>
-                <div style={{display:'flex', gap:'5px'}}>
-                  <button onClick={()=>{setEditingCat(c); setCatName(c.name);}} style={global.iconBtn} title="Editar"><Edit size={14} color="var(--text-brand)"/></button>
-                  <button onClick={()=>handleDeleteCategory(c.id)} style={global.iconBtn} title="Excluir"><Trash2 size={14} color="#ef4444"/></button>
-                </div>
-              </div>
-            ))}
-            {categorias.length === 0 && <p style={global.emptyState}>Nenhuma categoria criada.</p>}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div style={{...(global.container || {}), maxWidth: '1200px'}}>
       
@@ -253,7 +234,7 @@ export default function GestaoProdutos() {
         <div style={{...(global.iconHeader || {}), background: '#ea580c'}}><ShoppingBag size={28} color="white"/></div>
         <div>
           <h1 style={global.title}>Produtos & Serviços</h1>
-          <p style={global.subtitle}>Gerencie o catálogo de ofertas da Oquei Telecom.</p>
+          <p style={global.subtitle}>Gerencie o catálogo de ofertas e categorias da Oquei Telecom.</p>
         </div>
       </div>
 
@@ -285,7 +266,7 @@ export default function GestaoProdutos() {
         </div>
 
         <div style={{display: 'flex', gap: '10px'}}>
-          <button onClick={() => setShowCategoryModal(true)} style={global.btnSecondary}>
+          <button onClick={openCatModal} style={global.btnSecondary}>
             <Layers size={18} /> Categorias
           </button>
           <button onClick={() => openModal()} style={{...(global.btnPrimary || {}), background: '#ea580c'}}>
@@ -344,6 +325,7 @@ export default function GestaoProdutos() {
         </div>
       )}
 
+      {/* MODAL DE PRODUTOS */}
       {showModal && (
         <div style={global.modalOverlay}>
           <div style={global.modalBox}>
@@ -415,6 +397,75 @@ export default function GestaoProdutos() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CATEGORIAS (NOVO E FUNCIONAL!) */}
+      {showCategoryModal && (
+        <div style={global.modalOverlay}>
+          <div style={global.modalBox}>
+            <div style={global.modalHeader}>
+              <h3 style={global.modalTitle}>Catálogo de Categorias</h3>
+              <button onClick={() => { setShowCategoryModal(false); setEditingCat(null); setCatName(''); setCatTemMeta(true); }} style={global.closeBtn}><X size={20}/></button>
+            </div>
+            
+            <form onSubmit={handleSaveCat} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '25px', padding: '15px', background: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  style={{...global.input, flex: 1}} 
+                  placeholder="Nome da Categoria..." 
+                  value={catName} 
+                  onChange={e => setCatName(e.target.value)} 
+                  required 
+                  autoFocus 
+                />
+                <button type="submit" style={{...(global.btnPrimary || {}), width:'auto', background: '#ea580c'}}>
+                  {editingCat ? 'Salvar' : 'Adicionar'}
+                </button>
+                {editingCat && (
+                  <button type="button" onClick={() => {setEditingCat(null); setCatName(''); setCatTemMeta(true);}} style={global.btnSecondary}>
+                    Cancelar
+                  </button>
+                )}
+              </div>
+
+              {/* CHECKBOX: ESTA CATEGORIA GERA META? */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={catTemMeta} 
+                  onChange={e => setCatTemMeta(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', accentColor: '#ea580c' }} 
+                />
+                Esta categoria GERA META (Aparece no painel da Coordenação)
+              </label>
+            </form>
+
+            <div style={{maxHeight:'300px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'10px'}}>
+              {categorias.map(c => (
+                <div key={c.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px', background:'var(--bg-panel)', borderRadius:'10px', border:'1px solid var(--border)'}}>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{fontWeight:'bold', color:'var(--text-main)', fontSize: '15px'}}>{c.name}</span>
+                    <span style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', color: c.temMeta !== false ? '#10b981' : 'var(--text-muted)' }}>
+                      {c.temMeta !== false ? '✅ Com Meta' : '❌ Sem Meta'}
+                    </span>
+                  </div>
+
+                  <div style={{display:'flex', gap:'5px'}}>
+                    <button onClick={() => {setEditingCat(c); setCatName(c.name); setCatTemMeta(c.temMeta !== false);}} style={global.iconBtn} title="Editar">
+                      <Edit size={16} color="var(--text-brand)"/>
+                    </button>
+                    <button onClick={() => handleDeleteCategory(c.id)} style={global.iconBtn} title="Excluir">
+                      <Trash2 size={16} color="#ef4444"/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {categorias.length === 0 && <p style={global.emptyState}>Nenhuma categoria criada.</p>}
+            </div>
+
           </div>
         </div>
       )}

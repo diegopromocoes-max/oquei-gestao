@@ -1,130 +1,136 @@
-// --- COMPONENTE: INTELIGÊNCIA S&OP (VISIBILIDADE TOTAL GARANTIDA) ---
-const InteligenciaView = ({ processedData }) => {
-  const [simCityId, setSimCityId] = useState('');
-  const [simGrowthPerc, setSimGrowthPerc] = useState(2.0); 
-  const [simChurnPerc, setSimChurnPerc] = useState(1.5); 
+import React, { useMemo } from 'react';
+import { 
+  Target, TrendingUp, AlertCircle, 
+  CheckCircle2, Gauge, MousePointerClick,
+  ArrowUpRight, ArrowDownRight
+} from 'lucide-react';
+import { styles, colors } from './styles';
 
-  // Sincroniza a cidade selecionada
-  useEffect(() => {
-    if (processedData.length > 0 && !simCityId) {
-      setSimCityId(processedData[0].id);
-    }
-  }, [processedData, simCityId]);
-
-  const selectedCityData = processedData.find(c => c.id === simCityId);
-
-  // 1. CÁLCULOS BASE (Com proteção total contra valores nulos)
-  const baseClientes = selectedCityData?.currentBase || 1000;
-  const hAvgGrowth = parseFloat(selectedCityData?.histAvgGrowth) || 1.5;
-  const hAvgChurn = parseFloat(selectedCityData?.histAvgChurn) || 1.2;
-
-  const tNetAdds = Math.ceil(baseClientes * (simGrowthPerc / 100));
-  const pChurnVol = Math.ceil(baseClientes * (simChurnPerc / 100));
-  const rGrossAdds = tNetAdds + pChurnVol;
-
-  // 2. SLA DE CANAIS (Garante que os números apareçam sempre)
-  const hist = selectedCityData?.channels || { loja: 0, pap: 0, central: 0, b2b: 0 };
-  const hTotal = (hist.loja || 0) + (hist.pap || 0) + (hist.central || 0) + (hist.b2b || 0);
+export default function InteligenciaView({ processedData }) {
   
-  let dLoja, dPap, dCentral, dB2b;
-  if (hTotal > 0) {
-    dLoja = Math.round(rGrossAdds * (hist.loja / hTotal));
-    dPap = Math.round(rGrossAdds * (hist.pap / hTotal));
-    dCentral = Math.round(rGrossAdds * (hist.central / hTotal));
-    dB2b = Math.max(0, rGrossAdds - (dLoja + dPap + dCentral)); 
-  } else {
-    dLoja = Math.round(rGrossAdds * 0.4);
-    dPap = Math.round(rGrossAdds * 0.3);
-    dCentral = Math.round(rGrossAdds * 0.2);
-    dB2b = Math.max(0, rGrossAdds - (dLoja + dPap + dCentral));
-  }
+  // 1. Cálculos de Inteligência Global
+  const stats = useMemo(() => {
+    if (!processedData.length) return null;
+    const totalNet = processedData.reduce((acc, c) => acc + c.netAdds, 0);
+    const totalTarget = processedData.reduce((acc, c) => acc + c.targetNetAdds, 0);
+    const avgAttainment = totalTarget > 0 ? (totalNet / totalTarget) * 100 : 0;
+    
+    return {
+      totalNet,
+      totalTarget,
+      avgAttainment: avgAttainment.toFixed(1),
+      onTrack: processedData.filter(c => c.netAdds >= c.targetNetAdds).length,
+      belowTarget: processedData.filter(c => c.netAdds < c.targetNetAdds).length
+    };
+  }, [processedData]);
 
-  // 3. DEFINIÇÃO DIRETA DOS INSIGHTS (Sem funções externas para evitar falhas)
-  let gInsight = { title: "Meta Alinhada", message: "Crescimento sustentável.", color: "#10b981", icon: CheckCircle };
-  if (simGrowthPerc <= 0) {
-    gInsight = { title: "Risco de Retração", message: "O planejamento resultará em perda de clientes.", color: "#ef4444", icon: TrendingDown };
-  } else if (simGrowthPerc > hAvgGrowth * 2) {
-    gInsight = { title: "Meta Irrealista", message: `Exigir ${simGrowthPerc}% é o dobro da média da unidade (${hAvgGrowth}%).`, color: "#ef4444", icon: AlertOctagon };
-  } else if (simGrowthPerc > hAvgGrowth * 1.3) {
-    gInsight = { title: "Meta Agressiva", message: "Desafio acima da média. Requer reforço comercial.", color: "#f59e0b", icon: Target };
-  }
+  if (!stats) return null;
 
   return (
-    <div style={{ animation: 'slideUp 0.5s ease-out forwards' }}>
-      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', animation: 'fadeIn 0.5s ease-out' }}>
+      
+      {/* SEÇÃO 1: SCORECARDS DE INTELIGÊNCIA S&OP */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
         
-        {/* LADO ESQUERDO: CONTROLES */}
-        <div style={{ ...global.card, flex: 1, minWidth: '320px' }}>
-          <h3 style={local.secTitle}><Sliders size={18} color={colors.primary}/> Configurar Simulação</h3>
-          
-          <div style={global.field}>
-            <label style={global.label}>Cidade para Análise</label>
-            <select style={global.select} value={simCityId} onChange={e => setSimCityId(e.target.value)}>
-              {processedData.map(c => <option key={c.id} value={c.id}>{c.city}</option>)}
-            </select>
+        {/* Card: Atingimento Regional */}
+        <div style={{ ...styles.globalCard, borderLeft: `6px solid ${stats.avgAttainment >= 100 ? '#10b981' : '#f59e0b'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={styles.globalLabel}>Atingimento Regional</span>
+            <Gauge size={20} color="var(--primary)" />
           </div>
-
-          <div style={{...global.field, marginTop: '20px'}}>
-            <label style={global.label}>Meta Crescimento Líquido: <strong style={{color: colors.primary}}>{simGrowthPerc}%</strong></label>
-            <input type="range" min="-2" max="10" step="0.1" value={simGrowthPerc} onChange={e => setSimGrowthPerc(parseFloat(e.target.value))} style={local.rangeInput} />
+          <div style={{ ...styles.globalValue, color: stats.avgAttainment >= 100 ? '#10b981' : 'var(--text-main)' }}>
+            {stats.avgAttainment}%
           </div>
-
-          <div style={{...global.field, marginTop: '20px'}}>
-            <label style={global.label}>Teto de Churn Máximo: <strong style={{color: '#ef4444'}}>{simChurnPerc}%</strong></label>
-            <input type="range" min="0" max="5" step="0.1" value={simChurnPerc} onChange={e => setSimChurnPerc(parseFloat(e.target.value))} style={local.rangeInput} />
-          </div>
-
-          <div style={{marginTop: 30, padding: '15px', background: 'var(--bg-app)', borderRadius: '12px', border: '1px dashed var(--border)'}}>
-            <p style={{margin:0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6'}}>
-              Base: <strong>{baseClientes}</strong> clientes.<br/>
-              Objetivo: <strong>+{tNetAdds}</strong> líquidos.<br/>
-              Gross Necessário: <strong>{rGrossAdds}</strong> vendas.
-            </p>
+          <div style={{ width: '100%', height: '8px', background: 'var(--bg-app)', borderRadius: '10px', marginTop: '10px', overflow: 'hidden' }}>
+            <div style={{ 
+              width: `${Math.min(100, stats.avgAttainment)}%`, 
+              height: '100%', 
+              background: stats.avgAttainment >= 100 ? '#10b981' : 'var(--primary)',
+              transition: 'width 1s ease'
+            }} />
           </div>
         </div>
 
-        {/* LADO DIREITO: RESULTADOS E INSIGHTS (Sempre visível) */}
-        <div style={{ flex: 1.5, minWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* SLA BOXES */}
-          <div style={global.card}>
-            <h4 style={{...local.secTitle, marginBottom: '20px'}}>SLA DE VENDAS POR CANAL</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              <div style={local.slaBox}><Store size={18} color="#10b981" /> <div><span>Loja</span><strong>{dLoja}</strong></div></div>
-              <div style={local.slaBox}><MapPin size={18} color="#f59e0b" /> <div><span>PAP</span><strong>{dPap}</strong></div></div>
-              <div style={local.slaBox}><Headset size={18} color="#2563eb" /> <div><span>Central</span><strong>{dCentral}</strong></div></div>
-              <div style={local.slaBox}><Briefcase size={18} color="#8b5cf6" /> <div><span>B2B</span><strong>{dB2b}</strong></div></div>
+        {/* Card: Status de Unidades */}
+        <div style={styles.globalCard}>
+          <span style={styles.globalLabel}>Status das Unidades</span>
+          <div style={{ display: 'flex', gap: '20px', marginTop: '15px' }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#10b981' }}>{stats.onTrack}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>NO ALVO</div>
+            </div>
+            <div style={{ width: '1px', background: 'var(--border)', height: '40px' }} />
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#ef4444' }}>{stats.belowTarget}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>ABAIXO</div>
             </div>
           </div>
+        </div>
 
-          {/* CARD DE INSIGHT (O QUE NÃO ESTAVA APARECENDO) */}
-          <div style={{
-            padding: '20px', 
-            borderRadius: '16px', 
-            display: 'flex', 
-            gap: '15px', 
-            alignItems: 'center', 
-            background: `${gInsight.color}10`, 
-            borderLeft: `5px solid ${gInsight.color}`,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-          }}>
-            <div style={{ color: gInsight.color }}><gInsight.icon size={24} /></div>
-            <div>
-              <h4 style={{ margin: 0, color: gInsight.color, fontSize: '15px', fontWeight: '900' }}>{gInsight.title}</h4>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-main)', fontWeight: '500' }}>{gInsight.message}</p>
-            </div>
-          </div>
+      </div>
 
-          {/* DICA DE ESTRATÉGIA */}
-          <div style={{ padding: '15px', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe', display: 'flex', gap: '10px' }}>
-            <Info size={18} color="#2563eb" />
-            <p style={{ margin: 0, fontSize: '12px', color: '#1e40af' }}>
-              <strong>Dica S&OP:</strong> Mantenha a meta de crescimento dentro de 30% da média histórica para garantir a saúde da equipe técnica.
-            </p>
-          </div>
+      {/* SEÇÃO 2: TABELA DE APURAÇÃO VS METAS */}
+      <div style={styles.detailsColumn}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+          <h3 style={styles.sectionTitle}><Target size={20} color="var(--primary)" /> Comparativo Meta vs Realizado</h3>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dados integrados em tempo real</span>
+        </div>
 
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
+                <th style={local.th}>UNIDADE</th>
+                <th style={local.th}>META NET</th>
+                <th style={local.th}>REALIZADO</th>
+                <th style={local.th}>GAP</th>
+                <th style={local.th}>PERFORMANCE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processedData.map(city => {
+                const attainment = city.targetNetAdds > 0 ? (city.netAdds / city.targetNetAdds) * 100 : 0;
+                const gap = city.targetNetAdds - city.netAdds;
+                const isOk = city.netAdds >= city.targetNetAdds;
+
+                return (
+                  <tr key={city.id} style={{ borderBottom: '1px solid var(--border)', transition: '0.2s' }} className="row-hover">
+                    <td style={local.td}><strong>{city.city}</strong></td>
+                    <td style={local.td}>{city.targetNetAdds}</td>
+                    <td style={{ ...local.td, color: isOk ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
+                      {city.netAdds}
+                    </td>
+                    <td style={local.td}>
+                      {gap <= 0 ? (
+                        <span style={{ color: '#10b981' }}>OK</span>
+                      ) : (
+                        <span style={{ color: '#ef4444' }}>-{gap}</span>
+                      )}
+                    </td>
+                    <td style={local.td}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ flex: 1, height: '6px', background: 'var(--bg-app)', borderRadius: '10px', maxWidth: '80px', overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(100, Math.max(0, attainment))}%`, 
+                            height: '100%', 
+                            background: isOk ? '#10b981' : attainment > 50 ? '#f59e0b' : '#ef4444' 
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{attainment.toFixed(0)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
+}
+
+const local = {
+  th: { padding: '15px 12px', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  td: { padding: '15px 12px', fontSize: '14px', color: 'var(--text-main)' }
 };

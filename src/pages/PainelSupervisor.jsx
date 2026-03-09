@@ -5,7 +5,7 @@ import {
   Store, BookOpen, Clock, TrendingUp, Zap, Globe, Megaphone, 
   FileCheck, CalendarClock, Briefcase, Wallet, Share2, 
   LayoutGrid, UserX, Activity, Tv, Flame, BarChart3,
-  Settings, Gift, HeartHandshake, MonitorPlay // Novos ícones importados
+  Settings, Gift, HeartHandshake, MonitorPlay, Calculator // Novos ícones importados
 } from 'lucide-react';
 
 // IMPORTAÇÃO DO DESIGN SYSTEM
@@ -29,9 +29,10 @@ import BancoHorasSupervisor from './BancoHorasSupervisor';
 import LinksUteis from './LinksUteis';
 import Wallboard from './Wallboard';
 import HubOquei from './HubOquei';
-import RelatorioGeral from './RelatorioGeral';
+///import RelatorioGeral from './RelatorioGeral';
 import LaboratorioChurn from './LaboratorioChurn';
 import Configuracoes from './Configuracoes'; 
+import ApuracaoResultados from './ApuracaoResultados';
 
 export default function PainelSupervisor({ userData }) {
   const [activeView, setActiveView] = useState('dashboard');
@@ -52,6 +53,7 @@ export default function PainelSupervisor({ userData }) {
     { id: 'war_room', label: 'Sala de Guerra', icon: Flame, section: 'Sistemas', color: colors?.danger || '#ef4444' }, 
     { id: 'banco_horas', label: 'Banco de Horas', icon: Clock, section: 'Sistemas', color: colors?.warning || '#f59e0b' },
     { id: 'desencaixe', label: 'Caixa Local', icon: Wallet, section: 'Sistemas', color: colors?.success || '#10b981' },
+{ id: 'apuracao_metas', label: 'Inserir Vendas (Retrato)', icon: Calculator, section: 'Sistemas', color: colors?.warning || '#f59e0b' },    
     
     // --- GESTÃO ---
     { id: 'lojas', label: 'Minhas Lojas', icon: Store, section: 'Gestão' },
@@ -79,7 +81,7 @@ export default function PainelSupervisor({ userData }) {
       case 'lojas': return <LojasOquei isEditingAllowed={false} />;
       case 'hub_oquei': return <HubOquei userData={userData} />;
       case 'churn': return <LaboratorioChurn userData={userData} />;
-      case 'relatorio_geral': return <RelatorioGeral userData={userData} />;
+      ///case 'relatorio_geral': return <RelatorioGeral userData={userData} />;
       case 'vendas': return <PainelVendas userData={userData} />;
       case 'war_room': return <SalaDeGuerra userData={userData} />;
       case 'banco_horas': return <BancoHorasSupervisor userData={userData} />;
@@ -93,6 +95,7 @@ export default function PainelSupervisor({ userData }) {
       case 'orientacoes': return <ManualSupervisor userData={userData} />;
       case 'japa': return <JapaSupervisor userData={userData} />;
       case 'configuracoes': return <Configuracoes userData={userData} />;
+      case 'apuracao_metas': return <ApuracaoResultados userData={userData} />;
       
       // Placeholders para novos módulos de Marketing
       case 'solicitar_campanha': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Módulo de Solicitação de Campanhas</h3><p>Em breve...</p></div>;
