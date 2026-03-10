@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, doc, getDoc, setDoc, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { 
-  Calculator, Calendar, MapPin, Save, 
-  Users, TrendingDown, TrendingUp, 
-  AlertCircle, Layers, Activity, Database, Clock, Plus, Tag, Trash2
+  Calendar, MapPin, Save, 
+  TrendingDown, TrendingUp, 
+  Activity, Clock, Plus, ChevronRight, CheckCircle,
+  Edit2, Trash2, Check, X
 } from 'lucide-react';
-import { colors } from '../styles/globalStyles';
+
+// Certifique-se de importar os novos estilos
+import { colors, styles } from '../styles/globalStyles';
 
 export default function ApuracaoResultados({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -18,29 +21,30 @@ export default function ApuracaoResultados({ userData }) {
   const [channels, setChannels] = useState([]);
   const [products, setProducts] = useState([]);
   
-  // --- NOVOS ESTADOS PARA MOTIVOS ---
-  const [reasonTypes, setReasonTypes] = useState([]); // Motivos cadastrados no banco
-  const [newReasonName, setNewReasonName] = useState(''); // Input para novo motivo
+  const [reasonTypes, setReasonTypes] = useState([]);
+  const [newReasonName, setNewReasonName] = useState('');
   
+  const [editingReasonId, setEditingReasonId] = useState(null);
+  const [editReasonName, setEditReasonName] = useState('');
+
   const [selectedCity, setSelectedCity] = useState('');
-  const [systemCount, setSystemCount] = useState(0);
   const [autoCRM, setAutoCRM] = useState(false);
 
   const [manualData, setManualData] = useState({
     vendas: {}, 
     cancelamentos: 0,
-    cancelamentosMotivos: {} // Ex: { "id_motivo_1": 5, "id_motivo_2": 2 }
+    cancelamentosMotivos: {} 
   });
 
   const [lastUpdate, setLastUpdate] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [successAnim, setSuccessAnim] = useState(false);
 
   const dataDeHoje = new Intl.DateTimeFormat('pt-BR', { 
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' 
   }).format(new Date());
 
-  // 1. CARREGAR BASES DINÂMICAS (INCLUINDO MOTIVOS)
   const fetchBaseData = async () => {
     try {
       const snapCities = await getDocs(collection(db, 'cities'));
@@ -54,30 +58,20 @@ export default function ApuracaoResultados({ userData }) {
       const snapPr = await getDocs(collection(db, 'product_categories'));
       setProducts(snapPr.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.temMeta !== false));
 
-      // Busca os motivos de cancelamento do banco
       const snapReasons = await getDocs(collection(db, 'churn_reasons'));
-      const re = snapReasons.docs.map(d => ({ id: d.id, ...d.data() }));
-      setReasonTypes(re);
+      setReasonTypes(snapReasons.docs.map(d => ({ id: d.id, ...d.data() })));
 
       if (ci.length > 0 && !selectedCity) setSelectedCity(ci[0].id);
-    } catch (err) {
-      console.error("Erro ao carregar dados base:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  useEffect(() => {
-    fetchBaseData();
-  }, [userData]);
+  useEffect(() => { fetchBaseData(); }, [userData]);
 
-  // 2. BUSCAR DADOS DO MÊS E CIDADE
   useEffect(() => {
     if (!selectedMonth || !selectedCity) return;
-
     const fetchMonthData = async () => {
       setLoading(true);
       try {
-        // ... lógica de systemCount do CRM mantida ...
-        
         const docRef = doc(db, 'city_results', `${selectedMonth}_${selectedCity}`);
         const docSnap = await getDoc(docRef);
         
@@ -95,15 +89,12 @@ export default function ApuracaoResultados({ userData }) {
           setAutoCRM(false);
           setLastUpdate(null);
         }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      }
+      } catch (error) { console.error(error); }
       setLoading(false);
     };
     fetchMonthData();
   }, [selectedMonth, selectedCity]);
 
-  // 3. HANDLERS
   const handleVendasChange = (channelId, productId, value) => {
     setManualData(prev => ({
       ...prev,
@@ -118,25 +109,40 @@ export default function ApuracaoResultados({ userData }) {
     const newVal = Number(value);
     setManualData(prev => {
       const novosMotivos = { ...prev.cancelamentosMotivos, [reasonId]: newVal };
-      // Calcula o total automaticamente somando os motivos
       const novoTotal = Object.values(novosMotivos).reduce((a, b) => a + b, 0);
       return { ...prev, cancelamentosMotivos: novosMotivos, cancelamentos: novoTotal };
     });
   };
 
-  // GESTOR: Adicionar novo tipo de motivo ao Firebase
   const handleAddReasonType = async () => {
     if (!newReasonName.trim()) return;
     try {
-      await addDoc(collection(db, 'churn_reasons'), {
-        name: newReasonName.trim(),
-        createdAt: serverTimestamp()
-      });
+      await addDoc(collection(db, 'churn_reasons'), { name: newReasonName.trim(), createdAt: serverTimestamp() });
       setNewReasonName('');
-      fetchBaseData(); // Recarrega a lista
-    } catch (err) {
-      alert("Erro ao cadastrar motivo.");
-    }
+      fetchBaseData(); 
+    } catch (err) { alert("Erro ao cadastrar motivo."); }
+  };
+
+  const startEditingReason = (reason) => {
+    setEditingReasonId(reason.id);
+    setEditReasonName(reason.name);
+  };
+
+  const saveEditedReason = async (reasonId) => {
+    if (!editReasonName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'churn_reasons', reasonId), { name: editReasonName.trim() });
+      setEditingReasonId(null);
+      fetchBaseData();
+    } catch (err) { alert("Erro ao atualizar motivo."); }
+  };
+
+  const deleteReason = async (reasonId) => {
+    if (!window.confirm("Atenção: Tem a certeza que deseja excluir este motivo? Ele será removido da lista para todas as unidades.")) return;
+    try {
+      await deleteDoc(doc(db, 'churn_reasons', reasonId));
+      fetchBaseData();
+    } catch (err) { alert("Erro ao excluir motivo."); }
   };
 
   const handleSave = async () => {
@@ -156,34 +162,65 @@ export default function ApuracaoResultados({ userData }) {
       });
       
       setLastUpdate({ date: timestamp, user: userName });
-      alert('Resultados apurados com sucesso!');
+      
+      setSuccessAnim(true);
+      setTimeout(() => setSuccessAnim(false), 3000);
+      
     } catch (error) {
-      console.error(error);
       alert('Erro ao guardar os dados.');
     }
     setSaving(false);
   };
 
+  const getChannelTotal = (channelId) => {
+    const channelSales = manualData.vendas[channelId] || {};
+    return Object.values(channelSales).reduce((a, b) => a + (Number(b) || 0), 0);
+  };
+
+  const getProductTotal = (productId) => {
+    let total = 0;
+    Object.values(manualData.vendas || {}).forEach(channel => {
+      total += Number(channel[productId] || 0);
+    });
+    return total;
+  };
+
+  const getTotalGeral = () => {
+    let total = 0;
+    Object.values(manualData.vendas || {}).forEach(channel => {
+      Object.values(channel).forEach(val => {
+        total += Number(val) || 0;
+      });
+    });
+    return total;
+  };
+
+  const currentCityName = cities.find(c => c.id === selectedCity)?.name || 'Carregando...';
+
   return (
-    <div className="animated-view" style={{ padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
+    <div className="animated-view" style={styles.container}>
       
       {/* CABEÇALHO */}
-      <div style={styles.header}>
-        <div>
-          <h2 style={styles.title}>
-            <Activity color={colors?.warning || '#f59e0b'} size={28} />
-            Apuração de Resultados
-          </h2>
-          <p style={styles.subtitle}>Alimente as vendas e o detalhamento de churn da unidade.</p>
+      <div style={styles.headerContainer}>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={styles.iconBox}>
+            <Activity color="#3b82f6" size={28} />
+          </div>
+          <div>
+            <h1 style={styles.pageTitle}>Apuração de Resultados</h1>
+            <p style={styles.dateBadge}>
+              <Calendar size={14} /> Hoje é {dataDeHoje}
+            </p>
+          </div>
         </div>
 
-        <div style={styles.headerFilters}>
-          <div style={styles.filterGroup}>
-            <Calendar size={18} color="var(--text-muted)" />
+        <div style={styles.filterBar}>
+          <div style={styles.filterPill}>
+            <Calendar size={16} color="#3b82f6" />
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={styles.filterInput} />
           </div>
-          <div style={styles.filterGroup}>
-            <MapPin size={18} color="var(--text-muted)" />
+          <div style={styles.filterPill}>
+            <MapPin size={16} color="#3b82f6" />
             <select value={selectedCity} onChange={e => setSelectedCity(e.target.value)} style={styles.filterInput}>
               {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -191,119 +228,192 @@ export default function ApuracaoResultados({ userData }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
-        
-        {/* BLOCO DE VENDAS (MANTIDO) */}
-        <div style={styles.card}>
-          <h3 style={styles.cardTitle}><TrendingUp color="#10b981" size={20} /> Vendas Fechadas (Apuração)</h3>
-          {channels.map(ch => (
-            <div key={ch.id} style={styles.channelBlock}>
-              <h4 style={styles.channelName}>{ch.name}</h4>
-              <div style={styles.inputGrid}>
-                {products.map(prod => (
-                  <div key={prod.id} style={styles.inputGroup}>
-                    <label style={styles.label}>{prod.name}</label>
-                    <input 
-                      type="number" 
-                      value={manualData.vendas?.[ch.id]?.[prod.id] || ''} 
-                      onChange={e => handleVendasChange(ch.id, prod.id, e.target.value)} 
-                      style={styles.input} placeholder="0"
-                    />
-                  </div>
-                ))}
+      {loading ? (
+        <div style={styles.loadingState}>Sincronizando dados da unidade...</div>
+      ) : (
+        <>
+          {/* BANNER DA CIDADE */}
+          <div style={styles.activeCityBanner}>
+            <MapPin size={32} color="#3b82f6" />
+            <div>
+              <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Unidade Selecionada
+              </span>
+              <h2 style={styles.activeCityTitle}>{currentCityName}</h2>
+            </div>
+          </div>
+
+          {/* NOVO LAYOUT: GRID EM PILHA (100% W) */}
+          <div style={styles.dashboardGridFull}>
+            
+            {/* 1. MATRIZ DE VENDAS */}
+            <div style={styles.mainCard}>
+              <div style={styles.cardHeader}>
+                <h2 style={styles.cardTitle}><TrendingUp color="#10b981" size={20} /> Matriz de Vendas Brutas</h2>
+                <div style={{...styles.totalBadge, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)'}}>
+                  TOTAL: {getTotalGeral()}
+                </div>
+              </div>
+              
+              <div style={styles.tableWrapper}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Canais de Venda</th>
+                      {products.map(p => <th key={p.id} style={{...styles.th, textAlign: 'center'}}>{p.name}</th>)}
+                      <th style={{...styles.th, textAlign: 'right', color: 'var(--text-main)'}}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {channels.map(ch => {
+                      const rowTotal = getChannelTotal(ch.id);
+                      return (
+                        <tr key={ch.id} style={styles.tr}>
+                          <td style={styles.td}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                              <ChevronRight size={14} color="var(--text-muted)" />
+                              {ch.name}
+                            </div>
+                          </td>
+                          {products.map(prod => (
+                            <td key={prod.id} style={{...styles.td, textAlign: 'center'}}>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={manualData.vendas?.[ch.id]?.[prod.id] || ''} 
+                                onChange={e => handleVendasChange(ch.id, prod.id, e.target.value)} 
+                                style={styles.matrixInput} 
+                                placeholder="0"
+                              />
+                            </td>
+                          ))}
+                          <td style={{...styles.td, textAlign: 'right', fontWeight: '900', fontSize: '16px', color: rowTotal > 0 ? '#10b981' : 'var(--text-muted)'}}>
+                            {rowTotal}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--bg-app)', borderTop: '2px solid var(--border)' }}>
+                      <td style={{...styles.td, fontWeight: '900', color: 'var(--text-main)', textTransform: 'uppercase', fontSize: '12px'}}>
+                        Totalização
+                      </td>
+                      {products.map(prod => (
+                        <td key={prod.id} style={{...styles.td, textAlign: 'center', fontWeight: '900', color: 'var(--text-main)'}}>
+                          {getProductTotal(prod.id) || 0}
+                        </td>
+                      ))}
+                      <td style={{...styles.td, textAlign: 'right', fontWeight: '900', fontSize: '18px', color: '#10b981'}}>
+                        {getTotalGeral()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* BLOCO DE CANCELAMENTOS COM GESTOR DE MOTIVOS */}
-        <div style={{...styles.card, borderTop: '4px solid #ef4444'}}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={styles.cardTitle}><TrendingDown color="#ef4444" size={20} /> Detalhamento de Churn</h3>
-            <div style={{ fontSize: '18px', fontWeight: '900', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '5px 12px', borderRadius: '8px' }}>
-              Total: {manualData.cancelamentos}
-            </div>
-          </div>
-
-          {/* Sub-bloco: Gestor de Tipos de Motivo (Firebase) */}
-          <div style={styles.managerBox}>
-            <p style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)' }}>
-              <Plus size={12} /> CADASTRAR NOVO MOTIVO NO SISTEMA
-            </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input 
-                value={newReasonName} 
-                onChange={e => setNewReasonName(e.target.value)}
-                placeholder="Ex: Concorrência Fibra, Mudança de Endereço..." 
-                style={{...styles.input, fontSize: '14px'}}
-              />
-              <button onClick={handleAddReasonType} style={styles.addBtn}><Plus size={18} /></button>
-            </div>
-          </div>
-
-          {/* Grade de Motivos para Apuração */}
-          <div style={{ ...styles.inputGrid, marginTop: '20px' }}>
-            {reasonTypes.length === 0 ? (
-              <p style={{ gridColumn: '1/-1', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>Nenhum motivo cadastrado. Use o gestor acima.</p>
-            ) : (
-              reasonTypes.map(reason => (
-                <div key={reason.id} style={styles.inputGroup}>
-                  <label style={styles.label}><Tag size={10} /> {reason.name}</label>
-                  <input 
-                    type="number" min="0"
-                    value={manualData.cancelamentosMotivos?.[reason.id] || ''}
-                    onChange={e => handleReasonValueChange(reason.id, e.target.value)}
-                    style={{...styles.input, borderColor: '#fca5a5'}}
-                    placeholder="0"
-                  />
+            {/* 2. CHURN COM GRID MULTICOLUNAS (Sem scroll) */}
+            <div style={{...styles.mainCard, borderTop: '4px solid #ef4444'}}>
+              <div style={styles.cardHeader}>
+                <h2 style={styles.cardTitle}><TrendingDown color="#ef4444" size={20} /> Detalhamento de Evasão (Motivos)</h2>
+                <div style={styles.totalBadge}>
+                  TOTAL: {manualData.cancelamentos}
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              </div>
 
-        <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
-          <Save size={20} /> {saving ? 'A guardar...' : 'Salvar Apuração da Unidade'}
-        </button>
+              {/* AQUI ESTÁ A MÁGICA: O novo Grid Responsivo */}
+              <div style={styles.reasonsGridFull}>
+                {reasonTypes.map(reason => {
+                  const isEditing = editingReasonId === reason.id;
 
-        {lastUpdate && (
-          <div style={styles.footerAudit}>
-            <Clock size={14} />
-            <span>Última atualização: <strong>{new Date(lastUpdate.date).toLocaleString()}</strong> por <strong>{lastUpdate.user}</strong></span>
+                  return (
+                    <div key={reason.id} style={styles.reasonRow}>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', width: '100%', gap: '8px', alignItems: 'center' }}>
+                          <input 
+                            value={editReasonName}
+                            onChange={e => setEditReasonName(e.target.value)}
+                            style={{...styles.addReasonInput, padding: '6px 10px', margin: 0}}
+                            autoFocus
+                          />
+                          <button onClick={() => saveEditedReason(reason.id)} style={{...styles.actionBtn, color: '#10b981'}}><Check size={16}/></button>
+                          <button onClick={() => setEditingReasonId(null)} style={{...styles.actionBtn, color: '#ef4444'}}><X size={16}/></button>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                            <div style={styles.reasonLabel}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
+                              {reason.name}
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button onClick={() => startEditingReason(reason)} style={styles.actionBtn} title="Editar Motivo"><Edit2 size={12} /></button>
+                              <button onClick={() => deleteReason(reason.id)} style={styles.actionBtn} title="Excluir Motivo"><Trash2 size={12} /></button>
+                            </div>
+                          </div>
+
+                          <input 
+                            type="number" min="0"
+                            value={manualData.cancelamentosMotivos?.[reason.id] || ''}
+                            onChange={e => handleReasonValueChange(reason.id, e.target.value)}
+                            style={styles.reasonInput}
+                            placeholder="0"
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={styles.addReasonBox}>
+                <input 
+                  value={newReasonName} 
+                  onChange={e => setNewReasonName(e.target.value)}
+                  placeholder="Cadastrar novo motivo no sistema..." 
+                  style={{...styles.addReasonInput, maxWidth: '400px'}}
+                />
+                <button onClick={handleAddReasonType} style={styles.addReasonBtn} title="Adicionar Motivo">
+                  <Plus size={18} /> Cadastrar Motivo
+                </button>
+              </div>
+            </div>
+
+            {/* 3. BOTÃO DE SALVAR */}
+            <div style={{...styles.mainCard, background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <button 
+                onClick={handleSave} 
+                disabled={saving} 
+                style={{
+                  ...styles.saveBtnLarge,
+                  background: successAnim ? '#10b981' : '#3b82f6',
+                }}
+              >
+                {successAnim ? <CheckCircle size={20} /> : <Save size={20} />}
+                {saving ? 'A guardar...' : successAnim ? 'Apuração Salva!' : 'Finalizar e Salvar Apuração'}
+              </button>
+
+              {lastUpdate ? (
+                <div style={styles.auditStamp}>
+                  <Clock size={14} />
+                  <span>Atualizado por <strong>{lastUpdate.user}</strong> em {new Date(lastUpdate.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                </div>
+              ) : (
+                <div style={styles.auditStamp}>
+                  <Clock size={14} /> Nenhum registo salvo este mês.
+                </div>
+              )}
+            </div>
+
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <style>{`
         @keyframes fadeInView { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animated-view { animation: fadeInView 0.3s ease forwards; }
+        .animated-view { animation: fadeInView 0.4s ease forwards; }
       `}</style>
     </div>
   );
 }
-
-const styles = {
-  header: { marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' },
-  subtitle: { fontSize: '14px', color: 'var(--text-muted)', margin: '5px 0 0 0' },
-  headerFilters: { display: 'flex', gap: '12px' },
-  filterGroup: { display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--border)' },
-  filterInput: { border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)', cursor: 'pointer' },
-  
-  card: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' },
-  cardTitle: { margin: '0', fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' },
-  
-  channelBlock: { marginTop: '15px', padding: '15px', background: 'var(--bg-app)', borderRadius: '12px' },
-  channelName: { margin: '0 0 10px 0', fontSize: '13px', color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  
-  managerBox: { padding: '15px', background: 'var(--bg-app)', borderRadius: '12px', border: '1px dashed var(--border)', marginTop: '10px' },
-  addBtn: { background: 'var(--text-main)', color: 'var(--bg-card)', border: 'none', borderRadius: '8px', padding: '0 15px', cursor: 'pointer' },
-
-  inputGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' },
-  inputGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  label: { fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' },
-  input: { padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)', outline: 'none', fontSize: '15px', fontWeight: 'bold', color: 'var(--text-main)', width: '100%', boxSizing: 'border-box' },
-  
-  saveBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '16px', borderRadius: '12px', fontSize: '15px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', transition: 'all 0.2s' },
-  footerAudit: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)' }
-};

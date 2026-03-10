@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase'; // <-- CAMINHO CORRIGIDO: ../../firebase
+import { db } from '../../firebase';
 import { collection, query, getDocs, doc, setDoc, where } from 'firebase/firestore';
-import { Database, Save, RefreshCcw } from 'lucide-react';
-
-import { styles as global, colors } from '../../styles/globalStyles'; // <-- CAMINHO CORRIGIDO: ../../styles
+import { Database, Save, RefreshCcw, Target, ArrowRight } from 'lucide-react';
+import { styles as global, colors } from '../../styles/globalStyles';
 
 export default function ConfigBaseAtiva({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -11,64 +10,109 @@ export default function ConfigBaseAtiva({ userData }) {
   const [basesData, setBasesData] = useState({});
   const [saving, setSaving] = useState(false);
 
-  // 1. CARREGAMENTO DE CIDADES
+  // Função auxiliar para calcular o próximo mês (YYYY-MM)
+  const getNextMonth = (currentMonth) => {
+    const [year, month] = currentMonth.split('-').map(Number);
+    const date = new Date(year, month, 1); // JS Date Month é 0-indexed, então 'month' já é o próximo
+    return date.toISOString().slice(0, 7);
+  };
+
   useEffect(() => {
     const fetchCities = async () => {
-      const snapCit = await getDocs(collection(db, "cities"));
-      const list = snapCit.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Filtra pelas cidades do supervisor, se for o caso
-      setCities(userData?.role === 'supervisor' ? list.filter(c => c.clusterId === userData.clusterId) : list);
+      try {
+        const snapCit = await getDocs(collection(db, "cities"));
+        const list = snapCit.docs.map(d => ({ id: d.id, ...d.data() }));
+        const filtered = userData?.role === 'supervisor' 
+          ? list.filter(c => c.clusterId === userData.clusterId) 
+          : list;
+        setCities(filtered);
+      } catch (err) { console.error("Erro ao carregar cidades:", err); }
     };
     fetchCities();
   }, [userData]);
 
-  // 2. BUSCA DA BASE MENSAL
   useEffect(() => {
     const fetchBases = async () => {
-      const q = query(collection(db, "monthly_bases"), where("month", "==", selectedMonth));
-      const snap = await getDocs(q);
-      const bMap = {};
-      snap.docs.forEach(d => { bMap[d.data().cityId] = d.data(); });
-      setBasesData(bMap);
+      try {
+        const q = query(collection(db, "monthly_bases"), where("month", "==", selectedMonth));
+        const snap = await getDocs(q);
+        const bMap = {};
+        snap.docs.forEach(d => { bMap[d.data().cityId] = d.data(); });
+        setBasesData(bMap);
+      } catch (err) { console.error("Erro ao carregar bases:", err); }
     };
     fetchBases();
   }, [selectedMonth]);
 
-  // 3. HANDLERS DE ATUALIZAÇÃO E SALVAMENTO
-  const updateBaseField = (cityId, field, value) => {
-    setBasesData(prev => ({
-      ...prev,
-      [cityId]: { ...prev[cityId], [field]: value }
-    }));
+  const updateField = (cityId, field, value) => {
+    if (field === 'potencial') {
+      setCities(prev => prev.map(c => c.id === cityId ? { ...c, potencial: value } : c));
+    } else {
+      setBasesData(prev => ({
+        ...prev,
+        [cityId]: { ...prev[cityId], [field]: value }
+      }));
+    }
   };
 
   const handleSaveBases = async (e) => {
     e.preventDefault();
     setSaving(true);
+    const nextMonth = getNextMonth(selectedMonth);
+
     try {
       const promises = cities.map(city => {
         const data = basesData[city.id] || {};
-        // Só salva se houver algum valor preenchido
-        if (data.baseStart || data.baseEnd) {
-          const docRef = doc(db, "monthly_bases", `${city.id}_${selectedMonth}`);
-          return setDoc(docRef, {
+        
+        if (data.baseStart || data.baseEnd || city.potencial) {
+          const baseStartNum = parseInt(data.baseStart) || 0;
+          const baseEndNum = parseInt(data.baseEnd) || 0;
+          const potencialNum = parseInt(city.potencial) || 0;
+
+          // 1. Salva o Mês Atual
+          const currentMonthRef = doc(db, "monthly_bases", `${selectedMonth}_${city.id}`);
+          const p1 = setDoc(currentMonthRef, {
             cityId: city.id,
-            cityName: city.name,
-            clusterId: city.clusterId,
+            cityName: city.name || city.city,
             month: selectedMonth,
-            baseStart: parseInt(data.baseStart) || 0,
-            baseEnd: parseInt(data.baseEnd) || 0,
-            updatedAt: new Date(),
-            updatedBy: userData?.name
+            baseStart: baseStartNum,
+            baseEnd: baseEndNum,
+            updatedAt: new Date().toISOString(),
+            updatedBy: userData?.name || 'Gestor'
           }, { merge: true });
+
+          // 2. SISTEMÁTICA: Transporta Base Final para Base Inicial do Próximo Mês
+          let p2 = Promise.resolve();
+          if (baseEndNum > 0) {
+            const nextMonthRef = doc(db, "monthly_bases", `${nextMonth}_${city.id}`);
+            p2 = setDoc(nextMonthRef, {
+              cityId: city.id,
+              cityName: city.name || city.city,
+              month: nextMonth,
+              baseStart: baseEndNum, // A mágica acontece aqui
+              updatedAt: new Date().toISOString(),
+              updatedBy: "Sistema (Transporte Automático)"
+            }, { merge: true });
+          }
+
+          // 3. Atualiza o cadastro fixo da Cidade (Prioriza a base final se houver)
+          const cityRef = doc(db, "cities", city.id);
+          const p3 = setDoc(cityRef, {
+            baseStart: baseEndNum > 0 ? baseEndNum : baseStartNum,
+            potencial: potencialNum,
+            lastUpdate: selectedMonth
+          }, { merge: true });
+
+          return Promise.all([p1, p2, p3]);
         }
         return Promise.resolve();
       });
+
       await Promise.all(promises);
-      alert(`Bases de ${selectedMonth} atualizadas com sucesso!`);
-    } catch (e) { 
-      console.error(e); 
-      alert("Erro ao salvar bases.");
+      alert(`Dados salvos! A base final foi transportada como abertura para ${nextMonth}.`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao sincronizar bases.");
     }
     setSaving(false);
   };
@@ -77,9 +121,9 @@ export default function ConfigBaseAtiva({ userData }) {
     <div className="animated-view" style={local.panel}>
       <div style={local.headerRow}>
         <div>
-          <h2 style={local.panelTitle}><Database size={24} color={colors.primary}/> Gestão de Base Ativa</h2>
+          <h2 style={local.panelTitle}><Database size={24} color={colors.primary}/> Gestão de Base e Potencial</h2>
           <p style={{margin:'5px 0 0 0', fontSize:'13px', color:'var(--text-muted)'}}>
-            Abasteça a base no 1º dia (para cálculos S&OP) e no último dia (auditoria de fechamento).
+            O fechamento da auditoria será automaticamente a abertura do mês seguinte.
           </p>
         </div>
         <input 
@@ -96,51 +140,59 @@ export default function ConfigBaseAtiva({ userData }) {
             <thead style={{background: 'var(--bg-app)'}}>
               <tr>
                 <th style={local.th}>Unidade / Cidade</th>
-                <th style={local.th}>Base Inicial (Dia 01)</th>
-                <th style={local.th}>Base Final (Fechamento)</th>
+                <th style={local.th}>Base Inicial (Abertura)</th>
+                <th style={local.th}>Base Final (Auditoria)</th>
+                <th style={{...local.th, color: colors.primary}}>
+                   <div style={{display:'flex', alignItems:'center', gap:'4px'}}><Target size={12}/> HPs Ativos</div>
+                </th>
               </tr>
             </thead>
             <tbody>
               {cities.map(city => {
-                const cityData = basesData[city.id] || { baseStart: '', baseEnd: '' };
+                const cityBase = basesData[city.id] || { baseStart: '', baseEnd: '' };
                 return (
                   <tr key={city.id} style={{borderBottom: '1px solid var(--border)'}}>
-                    <td style={local.td}><strong>{city.name}</strong></td>
+                    <td style={local.td}><strong>{city.name || city.city}</strong></td>
                     <td style={local.td}>
                       <input 
                         type="number" 
-                        placeholder="Ex: 1250"
-                        value={cityData.baseStart} 
-                        onChange={e => updateBaseField(city.id, 'baseStart', e.target.value)}
+                        value={cityBase.baseStart} 
+                        onChange={e => updateField(city.id, 'baseStart', e.target.value)}
                         style={local.baseInput}
+                        placeholder="Abertura"
                       />
+                    </td>
+                    <td style={local.td}>
+                      <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                        <input 
+                          type="number" 
+                          value={cityBase.baseEnd} 
+                          onChange={e => updateField(city.id, 'baseEnd', e.target.value)}
+                          style={{...local.baseInput, borderColor: cityBase.baseEnd ? colors.success : 'var(--border)'}}
+                          placeholder="Fechamento"
+                        />
+                        {cityBase.baseEnd > 0 && <ArrowRight size={14} color={colors.success} title="Transportar para próximo mês" />}
+                      </div>
                     </td>
                     <td style={local.td}>
                       <input 
                         type="number" 
-                        placeholder="Número Voalle"
-                        value={cityData.baseEnd} 
-                        onChange={e => updateBaseField(city.id, 'baseEnd', e.target.value)}
-                        style={{...local.baseInput, borderColor: cityData.baseEnd ? colors.success : 'var(--border)'}}
+                        value={city.potencial || ''} 
+                        onChange={e => updateField(city.id, 'potencial', e.target.value)}
+                        style={{...local.baseInput, borderColor: colors.primary + '40', background: colors.primary + '05'}}
+                        placeholder="Potencial HP"
                       />
                     </td>
                   </tr>
-                )
+                );
               })}
-              {cities.length === 0 && (
-                <tr>
-                  <td colSpan="3" style={{textAlign: 'center', padding: '20px', color: 'var(--text-muted)'}}>
-                    Nenhuma cidade vinculada ao seu perfil.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
         
         <button type="submit" disabled={saving || cities.length === 0} style={local.btnSave}>
           {saving ? <RefreshCcw size={18} className="animate-spin" /> : <Save size={18}/>} 
-          Gravar Bases do Mês
+          Salvar Bases e Transportar para Próximo Mês
         </button>
       </form>
     </div>
@@ -148,13 +200,13 @@ export default function ConfigBaseAtiva({ userData }) {
 }
 
 const local = {
-  panel: { background:'var(--bg-panel)', padding:'30px', borderRadius:'24px', border:'1px solid var(--border)' },
+  panel: { background:'var(--bg-card)', padding:'30px', borderRadius:'24px', border:'1px solid var(--border)' },
   headerRow: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '30px' },
   panelTitle: { fontSize:'22px', fontWeight:'900', display:'flex', alignItems:'center', gap:'12px', margin:0 },
-  tableContainer: { background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden' },
+  tableContainer: { borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { padding: '15px', textAlign: 'left', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' },
   td: { padding: '15px', fontSize: '14px', color: 'var(--text-main)' },
-  baseInput: { padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-panel)', width: '100%', fontWeight: '800', color: 'var(--text-main)', boxSizing: 'border-box' },
+  baseInput: { padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-app)', width: '100%', fontWeight: '800', color: 'var(--text-main)' },
   btnSave: { marginTop:'20px', width:'100%', padding:'15px', borderRadius:'12px', background:colors.primary, color:'white', fontWeight:'900', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', border:'none' }
 };

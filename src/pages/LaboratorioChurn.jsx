@@ -5,7 +5,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { 
   Activity, Calendar as CalendarIcon, RefreshCw, Target, TrendingUp 
 } from 'lucide-react';
-import { styles, colors } from "./LaboratorioChurn/styles";
+
+// IMPORTAÇÃO DOS ESTILOS GLOBAIS
+import { styles } from '../styles/globalStyles';
 
 // Importação das Views
 import RadarView from './LaboratorioChurn/RadarView';
@@ -19,11 +21,11 @@ export default function LaboratorioChurn({ userData }) {
   const [loading, setLoading] = useState(true);
   const [cities, setCities] = useState([]);
   const [monthlyGoals, setMonthlyGoals] = useState({});
-  const [cityResults, setCityResults] = useState({}); // Dados do Painel de Apuração
+  const [cityResults, setCityResults] = useState({}); 
+  const [reasonsMap, setReasonsMap] = useState({}); // NOVO: Mapa de Motivos
   const [activeLabTab, setActiveLabTab] = useState('radar');
   const [selectedCity, setSelectedCity] = useState(null);
 
-  // 1. SINCRONIZAÇÃO: Puxando Metas e Apuração Oficial
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) return;
@@ -39,18 +41,19 @@ export default function LaboratorioChurn({ userData }) {
           if (list.length > 0 && !selectedCity) setSelectedCity(list[0]);
         }),
         
-        // GESTÃO DE METAS
+        // Metas
         onSnapshot(query(collection(db, "monthly_goals"), where("month", "==", selectedMonth)), snap => {
-          const gMap = {}; 
-          snap.docs.forEach(d => { gMap[d.data().cityId] = d.data(); }); 
-          setMonthlyGoals(gMap);
+          const gMap = {}; snap.docs.forEach(d => { gMap[d.data().cityId] = d.data(); }); setMonthlyGoals(gMap);
         }),
 
-        // APURAÇÃO DE RESULTADOS (O que foi alimentado manualmente)
+        // Apuração Oficial
         onSnapshot(query(collection(db, "city_results"), where("month", "==", selectedMonth)), snap => {
-          const rMap = {}; 
-          snap.docs.forEach(d => { rMap[d.data().cityId] = d.data(); }); 
-          setCityResults(rMap);
+          const rMap = {}; snap.docs.forEach(d => { rMap[d.data().cityId] = d.data(); }); setCityResults(rMap);
+        }),
+
+        // NOVO: Lê os motivos de cancelamento dinâmicos do Firebase
+        onSnapshot(collection(db, "churn_reasons"), snap => {
+          const rm = {}; snap.docs.forEach(d => { rm[d.id] = d.data().name; }); setReasonsMap(rm);
         })
       ];
       setLoading(false);
@@ -59,13 +62,11 @@ export default function LaboratorioChurn({ userData }) {
     return () => unsubAuth();
   }, [userData, selectedMonth]);
 
-  // 2. MOTOR DE BI: Cruzando Apuração vs Metas
   const processedData = useMemo(() => {
     return cities.map(city => {
       const cityGoal = monthlyGoals[city.id] || {};
       const res = cityResults[city.id] || {};
       
-      // Soma todas as vendas de todos os canais/produtos da apuração
       let totalSales = 0;
       if (res.vendas) {
         Object.values(res.vendas).forEach(channel => {
@@ -73,7 +74,6 @@ export default function LaboratorioChurn({ userData }) {
         });
       }
 
-      // Dados oficiais de cancelamento do painel de apuração
       const cancelations = Number(res.cancelamentos || 0);
       const netAdds = totalSales - cancelations;
 
@@ -89,14 +89,12 @@ export default function LaboratorioChurn({ userData }) {
         currentBase: baseStart + netAdds,
         targetNetAdds: targetNet,
         churnRate: baseStart > 0 ? ((cancelations / baseStart) * 100).toFixed(2) : "0.00",
-        // Breakdown para gráficos
         channels: res.vendas || {},
-        churnReasons: res.cancelamentosMotivos || {}
+        churnReasons: res.cancelamentosMotivos || {} // Dados que vêm da Apuração
       };
     });
   }, [cities, monthlyGoals, cityResults]);
 
-  // 3. KPIs GLOBAIS DO CABEÇALHO (Consolidado da Apuração)
   const globalStats = useMemo(() => {
     if (processedData.length === 0) return null;
     const tSales = processedData.reduce((acc, c) => acc + c.totalSales, 0);
@@ -110,64 +108,77 @@ export default function LaboratorioChurn({ userData }) {
     };
   }, [processedData]);
 
-  if (loading) return <div style={styles.loadingContainer}><RefreshCw className="animate-spin" /></div>;
+  if (loading) return <div style={styles.loadingState}>Sincronizando Laboratório...</div>;
 
   return (
-    <div style={styles.pageContainer}>
-      {/* CABEÇALHO COM DADOS DA APURAÇÃO */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.iconBox}><Activity size={28} color="var(--primary)" /></div>
-          <div><h1 style={styles.title}>Laboratório Churn</h1><p style={styles.subtitle}>Apuração Oficial vs Metas Regionais</p></div>
+    <div className="animated-view" style={styles.container}>
+      <div style={styles.headerContainer}>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={styles.iconBox}><Activity color="#3b82f6" size={28} /></div>
+          <div><h1 style={styles.pageTitle}>Laboratório Churn</h1><p style={styles.dateBadge}>Apuração Oficial vs Metas Regionais</p></div>
         </div>
-        <div style={styles.monthSelector}>
-          <CalendarIcon size={18} color="var(--text-secondary)" style={{marginRight: '10px'}} />
-          <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={styles.monthInput} />
+        <div style={styles.filterPill}>
+          <CalendarIcon size={16} color="#3b82f6" />
+          <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={styles.filterInput} />
         </div>
       </div>
 
-      {/* KPIS PRINCIPAIS (DADOS GLOBAIS DA APURAÇÃO) */}
       {globalStats && (
-        <div style={styles.globalGrid}>
-          <div style={styles.globalCard}>
-            <span style={styles.globalLabel}>Base Regional Total</span>
-            <div style={styles.globalValue}>{globalStats.tBase.toLocaleString()}</div>
+        <div style={styles.grid4}>
+          <div style={styles.mainCard}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Base Regional Total</span>
+            <div style={{ fontSize: '30px', fontWeight: '900', color: 'var(--text-main)' }}>{globalStats.tBase.toLocaleString()}</div>
           </div>
-          <div style={styles.globalCard}>
-            <span style={styles.globalLabel}>Atingimento Meta Regional</span>
-            <div style={{ ...styles.globalValue, color: globalStats.attainment >= 100 ? '#10b981' : '#f59e0b' }}>
+          <div style={{...styles.mainCard, borderLeft: `6px solid ${globalStats.attainment >= 100 ? '#10b981' : '#f59e0b'}`}}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Atingimento Meta</span>
+            <div style={{ fontSize: '30px', fontWeight: '900', color: globalStats.attainment >= 100 ? '#10b981' : '#f59e0b', display: 'flex', justifyContent: 'space-between' }}>
               {globalStats.attainment}% <Target size={24} />
             </div>
           </div>
-          <div style={styles.globalCard}>
-            <span style={styles.globalLabel}>Vendas Brutas (Apuração)</span>
-            <div style={{ ...styles.globalValue, color: 'var(--primary)' }}>{globalStats.tSales} <TrendingUp size={24} /></div>
+          <div style={{...styles.mainCard, borderLeft: '6px solid #3b82f6'}}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Vendas Brutas (Mês)</span>
+            <div style={{ fontSize: '30px', fontWeight: '900', color: '#3b82f6', display: 'flex', justifyContent: 'space-between' }}>
+              {globalStats.tSales} <TrendingUp size={24} />
+            </div>
           </div>
-          <div style={styles.globalCard}>
-            <span style={styles.globalLabel}>Saldo Net Regional</span>
-            <div style={{ ...styles.globalValue, color: globalStats.tNet >= 0 ? '#10b981' : '#ef4444' }}>
+          <div style={{...styles.mainCard, borderLeft: `6px solid ${globalStats.tNet >= 0 ? '#10b981' : '#ef4444'}`}}>
+            <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Net Regional</span>
+            <div style={{ fontSize: '30px', fontWeight: '900', color: globalStats.tNet >= 0 ? '#10b981' : '#ef4444' }}>
               {globalStats.tNet > 0 ? '+' : ''}{globalStats.tNet}
             </div>
           </div>
         </div>
       )}
 
-      {/* NAVEGAÇÃO */}
-      <div style={styles.labNav}>
-        <button onClick={() => setActiveLabTab('radar')} style={activeLabTab === 'radar' ? styles.labNavBtnActive : styles.labNavBtn}>Radar de Cidades</button>
-        <button onClick={() => setActiveLabTab('inteligencia')} style={activeLabTab === 'inteligencia' ? styles.labNavBtnActive : styles.labNavBtn}>Inteligência de Metas</button>
-        <button onClick={() => setActiveLabTab('omnichannel')} style={activeLabTab === 'omnichannel' ? styles.labNavBtnActive : styles.labNavBtn}>Canais de Venda</button>
-        <button onClick={() => setActiveLabTab('relacionamento')} style={activeLabTab === 'relacionamento' ? styles.labNavBtnActive : styles.labNavBtn}>Relacionamento</button>
-        <button onClick={() => setActiveLabTab('projecoes')} style={activeLabTab === 'projecoes' ? styles.labNavBtnActive : styles.labNavBtn}>Projeções</button>
+      {/* Navegação Simplificada */}
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '25px', overflowX: 'auto' }}>
+        {['radar', 'inteligencia', 'omnichannel', 'relacionamento', 'projecoes'].map(tab => (
+          <button 
+            key={tab} 
+            onClick={() => setActiveLabTab(tab)} 
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              borderBottom: activeLabTab === tab ? '3px solid #3b82f6' : '3px solid transparent',
+              color: activeLabTab === tab ? '#3b82f6' : 'var(--text-muted)',
+              padding: '12px 18px', fontSize: '14px', fontWeight: activeLabTab === tab ? '800' : '600',
+              textTransform: 'capitalize', whiteSpace: 'nowrap', transition: '0.2s'
+            }}
+          >
+            {tab === 'radar' ? 'Radar de Cidades' : tab === 'inteligencia' ? 'Inteligência de Metas' : tab === 'omnichannel' ? 'Canais de Venda' : tab}
+          </button>
+        ))}
       </div>
 
-      <div style={{ marginTop: '30px' }}>
+      <div style={{ marginTop: '20px' }}>
         {activeLabTab === 'radar' && <RadarView processedData={processedData} selectedCity={selectedCity} setSelectedCity={setSelectedCity} />}
         {activeLabTab === 'inteligencia' && <InteligenciaView processedData={processedData} />}
         {activeLabTab === 'omnichannel' && <OmnichannelView processedData={processedData} />}
-        {activeLabTab === 'relacionamento' && <RelacionamentoView processedData={processedData} />}
+        {/* Passamos o reasonsMap para a View de Relacionamento */}
+        {activeLabTab === 'relacionamento' && <RelacionamentoView processedData={processedData} reasonsMap={reasonsMap} />}
         {activeLabTab === 'projecoes' && <ProjecoesView processedData={processedData} />}
       </div>
+
+      <style>{`@keyframes fadeInView { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animated-view { animation: fadeInView 0.4s ease forwards; }`}</style>
     </div>
   );
 }

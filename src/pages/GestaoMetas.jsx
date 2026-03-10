@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Target, Calendar, BarChart3, Building2, TrendingDown } from 'lucide-react';
+import { Target, Calendar, BarChart3, Building2, TrendingDown, Sliders } from 'lucide-react';
 import { colors } from '../styles/globalStyles';
 
-// Importação das nossas novas abas modulares
+// Importação das nossas abas modulares
 import TabMetasCanais from './tabs_metas/TabMetasCanais';
 import TabMetasCidades from './tabs_metas/TabMetasCidades';
 import TabMetasChurn from './tabs_metas/TabMetasChurn';
+import TabSimuladorSOP from './tabs_metas/TabSimuladorSOP'; // NOVO: Nossa 4ª Aba
 
 export default function GestaoMetas({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -26,7 +27,7 @@ export default function GestaoMetas({ userData }) {
             <Target color={colors?.success || '#10b981'} size={28} />
             Gestão Estratégica de Metas (Net Adds)
           </h2>
-          <p style={styles.subtitle}>Planejamento 360º: Canais de Venda, Distribuição por Cidades e Churn.</p>
+          <p style={styles.subtitle}>Planejamento 360º: Canais de Venda, Distribuição por Cidades, Churn e Simulação.</p>
         </div>
 
         <div style={styles.headerActions}>
@@ -60,7 +61,14 @@ export default function GestaoMetas({ userData }) {
           onClick={() => setActiveTab('churn')} 
           style={activeTab === 'churn' ? {...styles.activeTab, color: '#ef4444', borderBottomColor: '#ef4444'} : styles.tab}
         >
-          <TrendingDown size={16} style={{marginRight: '6px'}} /> 3. Churn e Crescimento Alvo
+          <TrendingDown size={16} style={{marginRight: '6px'}} /> 3. Churn e Alvo
+        </button>
+        {/* NOVA 4ª ABA */}
+        <button 
+          onClick={() => setActiveTab('simulador')} 
+          style={activeTab === 'simulador' ? {...styles.activeTab, color: '#10b981', borderBottomColor: '#10b981'} : styles.tab}
+        >
+          <Sliders size={16} style={{marginRight: '6px'}} /> 4. Simulador S&OP
         </button>
       </div>
 
@@ -69,6 +77,7 @@ export default function GestaoMetas({ userData }) {
         {activeTab === 'canais' && <TabMetasCanais selectedMonth={selectedMonth} isMaster={isMaster} userData={userData} />}
         {activeTab === 'cidades' && <TabMetasCidades selectedMonth={selectedMonth} isMaster={isMaster} userData={userData} />}
         {activeTab === 'churn' && <TabMetasChurn selectedMonth={selectedMonth} isMaster={isMaster} userData={userData} />}
+        {activeTab === 'simulador' && <TabSimuladorSOP selectedMonth={selectedMonth} userData={userData} />}
       </div>
 
       <style>{`
