@@ -1,29 +1,35 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { 
-  ChevronRight, LogOut, Menu, Zap, Bell, ChevronDown, 
-  Settings, UserCircle, Moon, Sun, Activity, 
-  TrendingUp, Clock, MapPin, X, Flame
+  ChevronRight, LogOut, Menu, Zap, ChevronDown, 
+  Settings, UserCircle, Moon, Sun, X, CheckCircle2, 
+  AlertCircle, Activity 
 } from "lucide-react";
-import * as Tooltip from "@radix-ui/react-tooltip";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { db } from "../firebase";
-import { collection, onSnapshot, query, limit, orderBy } from "firebase/firestore";
 
-// IMPORTAÇÃO DOS ESTILOS GLOBAIS
-import { styles as global, colors } from "../styles/globalStyles";
-
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// IMPORTAÇÃO DO NOVO COMPONENTE SEPARADO
+import RadarLive from './RadarLive';
 
 export default function LayoutGlobal({ children, userData, menuItems, activeTab, onTabChange, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [radarOpen, setRadarOpen] = useState(true);
-  const [recentActions, setRecentActions] = useState([]);
+  const [radarOpen, setRadarOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
-  // --- NOVA INTELIGÊNCIA DA SANFONA (MÚLTIPLAS ABERTAS) ---
-  const [expandedSections, setExpandedSections] = useState([]); // Agora é uma Array (lista)
+  // 1. GERENCIADOR GLOBAL DE NOTIFICAÇÕES (TOAST)
+  useEffect(() => {
+    window.showToast = (message, type = 'success') => {
+      setToast({ show: true, message, type });
+      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+    };
+  }, []);
 
-  // Agrupa os itens do menu por seção
+  // 2. TROCA DE TEMA (CLARO/ESCURO)
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
+  // 3. AGRUPAMENTO DO MENU POR SEÇÕES
   const groupedMenu = useMemo(() => {
     return menuItems.reduce((acc, item) => {
       const section = item.section || 'Geral';
@@ -33,165 +39,47 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
     }, {});
   }, [menuItems]);
 
-  // Mantém a sanfona aberta na seção da aba ativa sem fechar as outras
-  useEffect(() => {
-    const activeItem = menuItems.find(i => i.id === activeTab);
-    if (activeItem && activeItem.section) {
-      setExpandedSections(prev => {
-        if (!prev.includes(activeItem.section)) {
-          return [...prev, activeItem.section];
-        }
-        return prev;
-      });
-    }
-  }, [activeTab, menuItems]);
-
-  // Abre e fecha clicando, permitindo várias ao mesmo tempo
-  const toggleSection = (sectionName) => {
-    setExpandedSections(prev => 
-      prev.includes(sectionName) 
-        ? prev.filter(s => s !== sectionName) // Se já está aberto, remove da lista (fecha)
-        : [...prev, sectionName]              // Se não está, adiciona à lista (abre)
-    );
-  };
-  // -------------------------------------
-
-  // ESCUTA EM TEMPO REAL PARA O RADAR (COLUNA DIREITA)
-  useEffect(() => {
-    // Escuta os últimos 10 leads criados no sistema
-    const leadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'leads');
-    const unsub = onSnapshot(leadsRef, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Ordena por criação e pega os últimos 8
-      const sorted = docs
-        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-        .slice(0, 8);
-      setRecentActions(sorted);
-    });
-
-    return () => unsub();
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-  };
-
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: '100vh', 
-      width: '100vw', 
-      overflow: 'hidden', 
-      backgroundColor: 'var(--bg-app)',
-      fontFamily: "'Manrope', sans-serif"
-    }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', backgroundColor: 'var(--bg-app)', fontFamily: "'Manrope', sans-serif" }}>
       
-      {/* 1. SIDEBAR ESQUERDA (MENU) */}
+      {/* --- SIDEBAR ESQUERDA --- */}
       <aside style={{
-        width: sidebarOpen ? '280px' : '80px',
+        width: sidebarOpen ? '260px' : '80px',
         backgroundColor: 'var(--bg-panel)',
         borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'flex', flexDirection: 'column',
         transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        zIndex: 50
+        zIndex: 100
       }}>
-        {/* LOGO AREA */}
         <div style={{ padding: '25px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ 
-            minWidth: '40px', height: '40px', borderRadius: '10px', 
-            background: 'var(--text-brand)', display: 'flex', 
-            alignItems: 'center', justifyContent: 'center' 
-          }}>
-            <Zap size={24} color="white" />
-          </div>
-          {sidebarOpen && <span style={{ fontWeight: '900', fontSize: '20px', color: 'var(--text-main)', letterSpacing: '-1px' }}>OQUEI <span style={{fontWeight: '400', opacity: 0.6}}>Geral</span></span>}
+          <Zap size={24} color="var(--text-brand)" fill="var(--text-brand)" />
+          {sidebarOpen && <span style={{ fontWeight: '900', color: 'var(--text-main)', fontSize: '18px', letterSpacing: '-1px' }}>OQUEI CRM</span>}
         </div>
-
-        {/* MENU ITEMS COM SANFONA */}
-        <nav style={{ flex: 1, padding: '10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }} className="hide-scrollbar">
-          {Object.entries(groupedMenu).map(([sectionName, items]) => {
-            // Verifica se esta seção específica está dentro do Array de seções abertas
-            const isExpanded = !sidebarOpen || expandedSections.includes(sectionName);
-            
-            return (
-              <div key={sectionName} style={{ marginBottom: '5px' }}>
-                
-                {/* CABEÇALHO DA SEÇÃO */}
-                {sidebarOpen ? (
-                  <button 
-                    onClick={() => toggleSection(sectionName)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 15px',
-                      background: 'transparent',
-                      border: 'none',
-                      color: isExpanded ? 'var(--text-brand)' : 'var(--text-muted)',
-                      fontWeight: '900',
-                      textTransform: 'uppercase',
-                      cursor: 'pointer',
-                      transition: '0.2s',
-                      letterSpacing: '0.5px'
-                    }}
-                  >
-                    <span style={{ fontSize: '11px' }}>{sectionName}</span>
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </button>
-                ) : (
-                  /* LINHA DIVISÓRIA (QUANDO MENU ESTÁ FECHADO) */
-                  <div style={{ height: '1px', background: 'var(--border)', margin: '15px 15px 10px 15px' }} title={sectionName} />
-                )}
-
-                {/* ITENS DA SEÇÃO */}
-                <div style={{
-                  maxHeight: isExpanded ? '1000px' : '0px',
-                  overflow: 'hidden',
-                  transition: 'max-height 0.3s ease-in-out',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px'
+        
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '10px' }} className="hide-scrollbar">
+          {Object.entries(groupedMenu).map(([section, items]) => (
+            <div key={section} style={{ marginBottom: '15px' }}>
+              {sidebarOpen && <div style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', padding: '10px', textTransform: 'uppercase' }}>{section}</div>}
+              {items.map(item => (
+                <button key={item.id} onClick={() => onTabChange(item.id)} style={{
+                  width: '100%', display: 'flex', alignItems: 'center', padding: '12px', gap: '12px',
+                  background: activeTab === item.id ? 'var(--bg-primary-light)' : 'transparent',
+                  color: activeTab === item.id ? 'var(--text-brand)' : 'var(--text-muted)',
+                  border: 'none', borderRadius: '12px', cursor: 'pointer', transition: '0.2s'
                 }}>
-                  {items.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => onTabChange(item.id)}
-                      title={!sidebarOpen ? item.label : ''} // Tooltip natural ao passar o rato se fechado
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: sidebarOpen ? '12px 15px' : '12px 0',
-                        justifyContent: sidebarOpen ? 'flex-start' : 'center', // Centraliza ícones se fechado
-                        borderRadius: '12px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        gap: sidebarOpen ? '12px' : '0',
-                        backgroundColor: activeTab === item.id ? 'var(--bg-primary-light)' : 'transparent',
-                        color: activeTab === item.id ? 'var(--text-brand)' : 'var(--text-muted)',
-                        transition: '0.2s'
-                      }}
-                    >
-                      <item.icon size={20} strokeWidth={activeTab === item.id ? 2.5 : 2} />
-                      {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: activeTab === item.id ? '800' : '600' }}>{item.label}</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+                  <item.icon size={20} />
+                  {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: '600' }}>{item.label}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
         </nav>
 
-        {/* FOOTER SIDEBAR */}
+        {/* BOTÃO SAIR (LOGOUT) */}
         <div style={{ padding: '20px', borderTop: '1px solid var(--border)' }}>
           <button onClick={onLogout} style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'flex-start' : 'center', gap: '12px',
-            background: 'transparent', border: 'none', color: '#ef4444', 
-            cursor: 'pointer', padding: sidebarOpen ? '10px' : '10px 0'
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'flex-start' : 'center',
+            gap: '12px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '10px'
           }}>
             <LogOut size={20} />
             {sidebarOpen && <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Sair da Conta</span>}
@@ -199,172 +87,104 @@ export default function LayoutGlobal({ children, userData, menuItems, activeTab,
         </div>
       </aside>
 
-      {/* 2. CONTEÚDO PRINCIPAL (MEIO) */}
-      <main style={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        overflow: 'hidden',
-        position: 'relative'
-      }}>
-        {/* HEADER TOPBAR */}
-        <header style={{
-          height: '70px',
-          padding: '0 30px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid var(--border)',
-          backgroundColor: 'var(--bg-panel)'
+      {/* --- ÁREA PRINCIPAL --- */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        
+        {/* TOPBAR (HEADER) */}
+        <header style={{ 
+          height: '70px', padding: '0 30px', display: 'flex', 
+          alignItems: 'center', justifyContent: 'space-between', 
+          borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-panel)', zIndex: 90 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <button onClick={() => setSidebarOpen(!sidebarOpen)} style={local.headerIconBtn}><Menu size={20}/></button>
-            <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              {activeTab.replace('_', ' ')}
-            </h2>
+            <h2 style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{activeTab.replace('_', ' ')}</h2>
           </div>
-
+          
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            {/* BOTÃO MODO CLARO/ESCURO */}
-            <button onClick={toggleTheme} style={local.headerIconBtn}>
+            {/* BOTÃO TEMA */}
+            <button onClick={toggleTheme} style={local.headerIconBtn} title="Alterar Tema">
               {theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
             </button>
             
-            {/* BOTÃO DE CONFIGURAÇÕES */}
+            {/* BOTÃO CONFIGURAÇÕES */}
             <button onClick={() => onTabChange('configuracoes')} style={local.headerIconBtn} title="Configurações">
               <Settings size={20} />
             </button>
 
-            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border)' }}></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '13px', fontWeight: '900', color: 'var(--text-main)' }}>{userData?.name || 'Utilizador'}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold' }}>{userData?.role?.toUpperCase()}</div>
-              </div>
-              <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <UserCircle size={24} color="var(--text-brand)" />
-              </div>
-            </div>
+            {/* BOTÃO RADAR LIVE */}
             <button onClick={() => setRadarOpen(!radarOpen)} style={{
               ...local.headerIconBtn,
               backgroundColor: radarOpen ? 'var(--bg-primary-light)' : 'transparent',
               color: radarOpen ? 'var(--text-brand)' : 'var(--text-muted)'
-            }}>
+            }} title="Atividade em Tempo Real">
               <Activity size={20}/>
             </button>
+
+            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border)' }} />
+            
+            {/* PERFIL USUÁRIO */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>{userData?.name || 'Usuário'}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{userData?.role?.toUpperCase()}</div>
+              </div>
+              <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 <UserCircle size={22} color="var(--text-brand)" />
+              </div>
+            </div>
           </div>
         </header>
 
-        {/* CONTENT AREA */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }} className="custom-scrollbar">
-          {children}
+        {/* ÁREA DE CONTEÚDO (SCROLL E CENTRALIZAÇÃO BALANCEADA) */}
+        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: 'var(--bg-app)', padding: '40px 0' }} className="custom-scrollbar">
+          <div style={{ 
+            width: '95%', 
+            maxWidth: '1400px', 
+            margin: '0 auto', 
+            zoom: '0.85', 
+            WebkitZoom: '0.85',
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'stretch' // Mantém o conteúdo alinhado à esquerda dentro do container centralizado
+          }}>
+            {children}
+          </div>
         </div>
       </main>
 
-      {/* 3. HUB OQUEI RADAR (COLUNA FIXA DIREITA) */}
-      {radarOpen && (
-        <aside style={{
-          width: '320px',
-          backgroundColor: 'var(--bg-panel)',
-          borderLeft: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'transform 0.3s ease',
-          animation: 'slideInRight 0.4s ease-out'
-        }}>
-          {/* RADAR HEADER */}
-          <div style={{ padding: '25px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={local.pulseContainer}>
-                <div style={local.pulseCircle}></div>
-                <div style={local.pulseRing}></div>
-              </div>
-              <h3 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>RADAR <span style={{color: 'var(--text-brand)'}}>LIVE</span></h3>
-            </div>
-            <button onClick={() => setRadarOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18}/></button>
-          </div>
+      {/* --- COMPONENTE RADAR LIVE (SEPARADO) --- */}
+      <RadarLive 
+        isOpen={radarOpen} 
+        onClose={() => setRadarOpen(false)} 
+        userData={userData} 
+      />
 
-          {/* RADAR CONTENT */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }} className="hide-scrollbar">
-            
-            {/* KPI RÁPIDO DO RADAR */}
-            <div style={local.radarKpi}>
-               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                 <TrendingUp size={16} color="#10b981" />
-                 <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)' }}>Vendas Hoje</span>
-               </div>
-               <div style={{ fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', marginTop: '8px' }}>
-                 {recentActions.filter(l => l.status === 'Contratado' || l.status === 'Instalado').length}
-               </div>
-            </div>
+      {/* --- SISTEMA DE NOTIFICAÇÕES (TOAST) --- */}
+      <div style={{
+        position: 'fixed', 
+        top: toast.show ? '30px' : '-100px', 
+        left: '50%', 
+        transform: 'translateX(-50%)',
+        background: 'rgba(23, 23, 23, 0.95)', 
+        backdropFilter: 'blur(10px)',
+        border: `1px solid ${toast.type === 'error' ? '#ef4444' : '#2563eb'}`,
+        padding: '12px 24px', 
+        borderRadius: '50px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '12px',
+        zIndex: 9999, 
+        transition: '0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)', 
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+      }}>
+        {toast.type === 'success' ? <CheckCircle2 size={18} color="#10b981" /> : <AlertCircle size={18} color="#ef4444" />}
+        <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>{toast.message}</span>
+      </div>
 
-            <div style={{ marginTop: '25px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Atividade Recente</span>
-                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-muted)' }}>LIVE</span>
-              </div>
-
-              {/* LISTA DE AÇÕES NO RADAR */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {recentActions.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', opacity: 0.5 }}>
-                     <Clock size={32} style={{ margin: '0 auto 10px' }} />
-                     <p style={{ fontSize: '12px' }}>Aguardando atividade...</p>
-                  </div>
-                ) : (
-                  recentActions.map((action, idx) => (
-                    <div key={action.id} style={{
-                      padding: '12px', borderRadius: '14px', background: 'var(--bg-card)', border: '1px solid var(--border)',
-                      animation: `fadeInUp 0.3s ease-out ${idx * 0.05}s backward`
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ 
-                          fontSize: '9px', fontWeight: '900', padding: '2px 6px', borderRadius: '4px',
-                          background: action.status === 'Novo' ? '#3b82f620' : '#10b98120',
-                          color: action.status === 'Novo' ? '#3b82f6' : '#10b981',
-                          textTransform: 'uppercase'
-                        }}>{action.status || 'Negociação'}</span>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Agora mesmo</span>
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '4px' }}>{action.customerName}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        <MapPin size={10} /> {action.cityId}
-                      </div>
-                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'var(--bg-app)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 'bold', color: 'var(--text-brand)' }}>
-                          {action.attendantName?.[0]}
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: '600' }}>{action.attendantName?.split(' ')[0]} registou lead</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* RADAR FOOTER */}
-          <div style={{ padding: '20px', background: 'var(--bg-app)', margin: '15px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Flame size={16} color="#ef4444" />
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>Estado da Rede</span>
-             </div>
-             <div style={{ marginTop: '10px', height: '4px', width: '100%', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ width: '92%', height: '100%', background: '#10b981' }}></div>
-             </div>
-             <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px' }}>Operação estável em 14 clusters.</p>
-          </div>
-        </aside>
-      )}
-
-      {/* ESTILOS DE ANIMAÇÃO */}
       <style>{`
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
       `}</style>
     </div>
@@ -376,29 +196,5 @@ const local = {
     width: '40px', height: '40px', borderRadius: '10px', border: 'none',
     backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
-  },
-  pulseContainer: { position: 'relative', width: '10px', height: '10px' },
-  pulseCircle: { width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10b981', position: 'relative', zIndex: 2 },
-  pulseRing: {
-    position: 'absolute', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10b981',
-    animation: 'pulse 2s infinite', zIndex: 1
-  },
-  radarKpi: {
-    background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-app) 100%)',
-    padding: '20px', borderRadius: '20px', border: '1px solid var(--border)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
   }
 };
-
-// Injeção de Keyframes Globais
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 0.8; }
-      70% { transform: scale(3); opacity: 0; }
-      100% { transform: scale(1); opacity: 0; }
-    }
-  `;
-  document.head.appendChild(style);
-}

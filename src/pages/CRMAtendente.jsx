@@ -5,14 +5,14 @@ import {
   PlusCircle, Users, BookOpen, Wallet, BookMarked, 
   Globe, Target, Package, Zap, Megaphone, TrendingUp, 
   RefreshCw, FileCheck, Share2, CalendarDays, Link as LinkIcon, 
-  Info, AlertTriangle, Store, CheckCircle2
+  Info, AlertTriangle, Store, CheckCircle2, FileSpreadsheet // Adicionado ícone para Relatório
 } from 'lucide-react';
 
 import LayoutGlobal from '../components/LayoutGlobal';
 import { styles as global } from '../styles/globalStyles';
-
 import NovoLead from './NovoLead';
 import MeusLeads from './MeusLeads';
+import RelatorioLeads from '../components/RelatorioLeads'; // NOVA PÁGINA IMPORTADA
 import ColinhasAtendente from './ColinhasAtendente';
 import DesencaixeAtendente from './DesencaixeAtendente';
 import ManualAtendente from './ManualAtendente';
@@ -126,6 +126,7 @@ export default function CRMAtendente({ userData }) {
     { id: 'inicio', label: 'Início', icon: Globe, section: 'Geral', color: '#10b981' },
     { id: 'nova_venda', label: 'Registrar Lead', icon: PlusCircle, highlight: true, section: 'Comercial', color: '#2563eb' },
     { id: 'clientes', label: 'Meu Funil', icon: Users, section: 'Comercial', color: '#10b981' },
+    { id: 'relatorio_leads', label: 'Relatório Mensal', icon: FileSpreadsheet, section: 'Comercial', color: '#8b5cf6' }, // NOVO ITEM
     { id: 'rh', label: 'Solicitações RH', icon: FileCheck, section: 'Ferramentas', color: '#f59e0b' },
     { id: 'colinhas', label: 'Colinhas', icon: BookMarked, section: 'Ferramentas', color: '#8b5cf6' },
     { id: 'desencaixe', label: 'Caixa da Loja', icon: Wallet, section: 'Ferramentas', color: '#10b981' },
@@ -241,7 +242,7 @@ export default function CRMAtendente({ userData }) {
     };
 
     return (
-      <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
+      <div style={{ animation: 'fadeIn 0.4s ease-out', width: '100%' }}>
         <div style={local.readonlyBanner}>
            <Info size={18}/> MODO LEITURA: Consulte o calendário de folgas, férias e atestados de toda a rede Oquei.
         </div>
@@ -273,6 +274,7 @@ export default function CRMAtendente({ userData }) {
           </div>
         </div>
 
+        {/* CONTAINER DO CALENDÁRIO COM LARGURA MÁXIMA PARA NÃO ESTICAR DEMAIS */}
         <div style={local.calendarGrid}>
           <div style={local.calendarHeaderRow}>
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, idx) => (
@@ -317,6 +319,7 @@ export default function CRMAtendente({ userData }) {
       case 'inicio': return <DashboardInicio />;
       case 'nova_venda': return <NovoLead userData={userData} onNavigate={setActiveTab} />;
       case 'clientes': return <MeusLeads userData={userData} onNavigate={setActiveTab} />;
+      case 'relatorio_leads': return <RelatorioLeads userData={userData} />; // ROTA ADICIONADA
       case 'rh': return <RhAtendente userData={userData} />;
       case 'colinhas': return <ColinhasAtendente userData={userData} />;
       case 'desencaixe': return <DesencaixeAtendente userData={userData} />;
@@ -350,26 +353,21 @@ export default function CRMAtendente({ userData }) {
     >
       <style>
         {`
-          /* INJEÇÃO DE NOVA FONTE - FINA E ELEGANTE (MANROPE) */
           @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
-          
-          * {
-            font-family: 'Manrope', sans-serif !important;
-          }
-
+          * { font-family: 'Manrope', sans-serif !important; }
           .readonly-mode form, 
           .readonly-mode button:not(.tab-btn), 
           .readonly-mode input:not([type="month"]), 
           .readonly-mode select { pointer-events: none !important; }
-          .readonly-mode .allow-click { pointer-events: auto !important; }
         `}
       </style>
-      {renderContent()}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: '100%' }}>
+         {renderContent()}
+      </div>
     </LayoutGlobal>
   );
 }
 
-// ESTILOS LOCAIS (Específicos desta página)
 const local = {
   heroSection: { background: 'var(--bg-panel)', padding: '40px', borderRadius: '24px', marginBottom: '35px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
   heroTitle: { fontSize: '32px', fontWeight: '800', margin: '0 0 10px 0', letterSpacing: '-0.02em', color: 'var(--text-main)' },
@@ -378,20 +376,16 @@ const local = {
   heroBadgeLabel: { display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: 'var(--text-muted)' },
   heroBadgeValue: { fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' },
   heroBadgeSmall: { background: 'var(--bg-app)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '700', border: `1px solid var(--border)`, color: 'var(--text-main)' },
-  
   actionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' },
   actionCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: `1px solid var(--border)`, borderRadius: '20px', padding: '30px 20px', cursor: 'pointer', transition: 'all 0.3s', textAlign: 'center', boxShadow: 'var(--shadow-sm)' },
-  
   readonlyBanner: { background: 'var(--bg-primary-light)', border: `1px solid var(--border)`, padding: '12px 20px', borderRadius: '12px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-brand)', fontWeight: 'bold', fontSize: '13px' },
-
-  calendarGrid: { background: 'var(--bg-card)', borderRadius: '16px', overflow: 'hidden', border: `1px solid var(--border)` },
+  calendarGrid: { background: 'var(--bg-card)', borderRadius: '16px', overflow: 'hidden', border: `1px solid var(--border)`, width: '100%', maxWidth: '1200px' },
   calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-panel)', borderBottom: `1px solid var(--border)` },
   calendarHeaderCell: { textAlign: 'center', padding: '12px', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' },
   calendarDaysRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
   calendarCellEmpty: { background: 'var(--bg-app)', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)` },
   calendarCell: { minHeight: '120px', padding: '10px', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)`, transition: 'background 0.2s' },
   calendarDayNum: { fontWeight: '800', fontSize: '14px', marginBottom: '8px', display: 'block' },
-  
   absenceTag: { padding: '6px 8px', borderRadius: '8px', border: '1px solid', display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2', fontSize: '11px', marginBottom: '6px' },
   tagAlert: { background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
   tagWarning: { background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },

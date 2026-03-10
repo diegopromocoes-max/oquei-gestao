@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { auth } from '../firebase';
 import { signOut as authSignOut } from 'firebase/auth';
+import { Users } from 'lucide-react';
 import { 
   Store, BookOpen, Clock, TrendingUp, Zap, Globe, Megaphone, 
   FileCheck, CalendarClock, Wallet, LayoutGrid, UserX, Activity, 
@@ -41,6 +42,7 @@ import JapaSupervisor from './JapaSupervisor';
 import LinksUteis from './LinksUteis';
 import Configuracoes from './Configuracoes';
 import CatalogoRoteadores from './CatalogoRoteadores';
+import { GestaoAtendentes } from './GestaoColaboradores';
 
 export default function PainelCoordenador({ userData }) {
   const [activeView, setActiveView] = useState('dashboard');
@@ -58,14 +60,16 @@ export default function PainelCoordenador({ userData }) {
 
     // --- GESTÃO (Módulos de Coordenação + Operação) ---
     { id: 'admin_supervisores', label: 'Supervisores', icon: UserPlus, section: 'Gestão', color: colors?.purple || '#8b5cf6' },
+    { id: 'atendentes', label: 'Time de Vendas', icon: Users, section: 'Gestão' },
+    { id: 'supervisores', label: 'Supervisores', icon: Users, section: 'Administração' },
     { id: 'estrutura', label: 'Estrutura Lojas', icon: MapPin, section: 'Gestão', color: colors?.primary || '#3b82f6' },
     { id: 'produtos', label: 'Produtos/SVA', icon: ShoppingBag, section: 'Gestão', color: colors?.warning || '#f59e0b' },
     { id: 'lojas_view', label: 'Portfolio Lojas', icon: Store, section: 'Gestão' },
     { id: 'faltas', label: 'Faltas Globais', icon: UserX, section: 'Gestão' },
     { id: 'rh_requests', label: 'Pedidos RH', icon: FileCheck, section: 'Gestão' },
     { id: 'gestao_metas', label: 'Gestão de Metas', icon: Target, section: 'Gestão', color: colors?.success || '#10b981' },
-    // NOVO BOTÃO ADICIONADO AQUI:
-{ id: 'apuracao_resultados', label: 'Apuração de Resultados', icon: UploadCloud, section: 'Gestão', color: colors?.primary || '#3b82f6' },
+    { id: 'apuracao_resultados', label: 'Apuração de Resultados', icon: UploadCloud, section: 'Gestão', color: colors?.primary || '#3b82f6' },
+    
     // --- SISTEMAS ---
     { id: 'vendas', label: 'Painel Vendas', icon: TrendingUp, section: 'Sistemas', color: colors?.success || '#10b981' },
     { id: 'war_room', label: 'Sala de Guerra', icon: Flame, section: 'Sistemas', color: colors?.danger || '#ef4444' },
@@ -98,11 +102,11 @@ export default function PainelCoordenador({ userData }) {
 
       // Gestão Master
       case 'admin_supervisores': return <GestaoSupervisores />;
+      case 'atendentes': return <GestaoAtendentes />;
       case 'estrutura': return <GestaoEstrutura />;
       case 'produtos': return <GestaoProdutos />;
       case 'gestao_metas': return <GestaoMetas userData={userData} />;
-      // NOVA RENDERIZAÇÃO ADICIONADA AQUI:
-case 'apuracao_resultados': return <ApuracaoResultados userData={userData} />;
+      case 'apuracao_resultados': return <ApuracaoResultados userData={userData} />;
       
       // Gestão Geral
       case 'lojas_view': return <LojasOquei isEditingAllowed={true} />;
