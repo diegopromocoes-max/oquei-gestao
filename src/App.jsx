@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-// Importação de todos os painéis do sistema
+// ✅ IMPORTAÇÃO DO DESIGN SYSTEM
+import { injectGlobalCSS, colors, styles as global } from './styles/globalStyles';
+import { Spinner, Btn, Page, Card } from './components/ui';
+
+// Importação das páginas
 import Login from './pages/Login';
 import PainelCoordenador from './pages/PainelCoordenador';
 import PainelSupervisor from './pages/PainelSupervisor';
@@ -15,6 +19,11 @@ export default function App() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ INICIALIZA O CSS GLOBAL (Variáveis, Reset e Temas)
+  useEffect(() => {
+    injectGlobalCSS();
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -23,7 +32,7 @@ export default function App() {
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
-            // Normaliza a role para evitar problemas de maiúsculas/espaços
+            // Normaliza a role
             data.role = data.role ? data.role.toLowerCase().trim() : 'guest';
             setUserData(data);
           } else {
@@ -42,26 +51,34 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ✅ LOADING PADRONIZADO
   if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', color: '#64748b', fontFamily: 'sans-serif' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
-          <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTop: '4px solid #2563eb', borderRadius: '50%' }} />
-          <h2 style={{ fontSize: '16px', fontWeight: 'bold' }}>A inicializar o Ecossistema Oquei...</h2>
+      <div style={{ 
+        display: 'flex', height: '100vh', width: '100vw', 
+        justifyContent: 'center', alignItems: 'center', 
+        backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' 
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <Spinner />
+          <p style={{ marginTop: '16px', fontWeight: '800', fontSize: '14px', letterSpacing: '0.05em' }}>
+            INICIALIZANDO ECOSSISTEMA OQUEI...
+          </p>
         </div>
       </div>
     );
   }
 
-  // Direcionamento correto consoante o cargo
+  // Helpers de Roteamento
   const getRoleRoute = (role) => {
-    if (role === 'coordinator' || role === 'coordenador') return "/coordenador";
-    if (role === 'supervisor') return "/supervisor";
-    if (role === 'attendant' || role === 'atendente') return "/atendente";
+    const r = String(role).toLowerCase();
+    if (r === 'coordinator' || r === 'coordenador') return "/coordenador";
+    if (r === 'supervisor') return "/supervisor";
+    if (r === 'attendant' || r === 'atendente') return "/atendente";
     return "/unauthorized";
   };
 
-  // Proteção das Rotas
+  // Componente de Proteção
   const PrivateRoute = ({ children, allowedRoles }) => {
     if (!user) return <Navigate to="/login" replace />;
 
@@ -83,7 +100,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ROTA DE LOGIN */}
         <Route path="/login" element={
           user && userData ? (
             <Navigate to={getRoleRoute(userData.role)} replace />
@@ -92,7 +108,6 @@ export default function App() {
           )
         } />
 
-        {/* ✅ TODAS AS ROTAS AGORA ESTÃO ATIVAS ✅ */}
         <Route path="/coordenador/*" element={
           <PrivateRoute allowedRoles={['coordinator']}>
             <PainelCoordenador />
@@ -111,21 +126,26 @@ export default function App() {
           </PrivateRoute>
         } />
 
-        {/* ROTA DE SEGURANÇA (Acesso Restrito) */}
+        {/* ✅ PÁGINA UNAUTHORIZED PADRONIZADA */}
         <Route path="/unauthorized" element={
-          <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'sans-serif', background: '#f8fafc', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <h1 style={{ color: '#ef4444', fontSize: '28px', fontWeight: 'bold' }}>Acesso Restrito</h1>
-            <p style={{ color: '#64748b', marginTop: '10px', maxWidth: '400px', lineHeight: '1.5' }}>
-              A sua conta (<strong>{user?.email}</strong>) não possui uma função reconhecida pelo sistema.
-              <br/><br/>Cargo atual registado: <strong style={{color: '#1e293b'}}>{userData?.role || 'Nenhum'}</strong>
-            </p>
-            <button onClick={() => auth.signOut()} style={{ padding: '12px 25px', cursor: 'pointer', marginTop: '20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
-              Voltar ao Login
-            </button>
+          <div style={{ 
+            height: '100vh', display: 'flex', alignItems: 'center', 
+            justifyContent: 'center', backgroundColor: 'var(--bg-app)' 
+          }}>
+            <Card style={{ maxWidth: '450px', textAlign: 'center' }} accent={colors.danger}>
+              <h1 style={{ ...global.pageTitle, color: colors.danger }}>Acesso Restrito</h1>
+              <p style={{ ...global.pageSubtitle, margin: '15px 0 25px' }}>
+                A conta <strong>{user?.email}</strong> não possui permissões para acessar esta área.
+                <br /><br />
+                Cargo atual: <span style={{ color: 'var(--text-brand)', fontWeight: 'bold' }}>{userData?.role?.toUpperCase() || 'NENHUM'}</span>
+              </p>
+              <Btn variant="primary" onClick={() => signOut(auth)} style={{ width: '100%' }}>
+                Sair e Tentar Outra Conta
+              </Btn>
+            </Card>
           </div>
         } />
 
-        {/* ROTA PADRÃO (Fallback) */}
         <Route path="*" element={<Navigate to={user && userData ? getRoleRoute(userData.role) : "/login"} replace />} />
       </Routes>
     </BrowserRouter>

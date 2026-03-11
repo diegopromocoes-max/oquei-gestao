@@ -1,23 +1,22 @@
 import React, { useState } from 'react';
 import { auth } from '../firebase';
 import { signOut as authSignOut } from 'firebase/auth';
-import { Users } from 'lucide-react';
 import { 
   Store, BookOpen, Clock, TrendingUp, Zap, Globe, Megaphone, 
   FileCheck, CalendarClock, Wallet, LayoutGrid, UserX, Activity, 
   Tv, Flame, Settings, Gift, HeartHandshake, MonitorPlay, 
-  MapPin, UserPlus, ShoppingBag, Router, Target, UploadCloud
+  MapPin, Users, UserPlus, ShoppingBag, Router, Target, UploadCloud
 } from 'lucide-react';
 
-// IMPORTAÇÃO DO DESIGN SYSTEM (A Mágica da Barra Lateral Fixa)
+// ✅ IMPORTAÇÃO DO DESIGN SYSTEM
 import LayoutGlobal from '../components/LayoutGlobal';
-import { colors } from '../styles/globalStyles';
+import { colors, Page, Empty } from '../components/ui';
 
 // IMPORTAÇÃO DO NOVO DASHBOARD MASTER
 import DashboardCoordenador from './DashboardCoordenador'; 
 
 // IMPORTAÇÃO DOS MÓDULOS MASTER (Exclusivos Coordenação)
-import { GestaoSupervisores } from './GestaoColaboradores';
+import { GestaoSupervisores, GestaoAtendentes } from './GestaoColaboradores';
 import GestaoEstrutura from './GestaoEstrutura';
 import GestaoProdutos from './GestaoProdutos';
 import GestaoMetas from './GestaoMetas';
@@ -42,51 +41,49 @@ import JapaSupervisor from './JapaSupervisor';
 import LinksUteis from './LinksUteis';
 import Configuracoes from './Configuracoes';
 import CatalogoRoteadores from './CatalogoRoteadores';
-import { GestaoAtendentes } from './GestaoColaboradores';
 
 export default function PainelCoordenador({ userData }) {
   const [activeView, setActiveView] = useState('dashboard');
 
-  // A LISTA DE COMPRAS: O LayoutGlobal constrói o menu baseado nisto.
+  // ✅ LISTA SEM CORES HARDCODED (Utiliza o import { colors } do ui.jsx)
   const MENU_ITEMS = [
     // --- PRINCIPAL ---
-    { id: 'dashboard', label: 'Visão Master', icon: Globe, section: 'Principal', color: colors?.warning || '#f59e0b' },
-    { id: 'comunicados', label: 'Comunicados', icon: Megaphone, section: 'Principal', color: colors?.primary || '#3b82f6' },
-    { id: 'wallboard', label: 'Modo TV', icon: Tv, section: 'Principal', color: colors?.cyan || '#06b6d4' },
+    { id: 'dashboard', label: 'Visão Master', icon: Globe, section: 'Principal', color: colors.warning },
+    { id: 'comunicados', label: 'Comunicados', icon: Megaphone, section: 'Principal', color: colors.primary },
+    { id: 'wallboard', label: 'Modo TV', icon: Tv, section: 'Principal', color: colors.info },
 
     // --- INTELIGÊNCIA ---
-    { id: 'hub_oquei', label: 'HubOquei Radar', icon: Zap, section: 'Inteligência', color: colors?.cyan || '#06b6d4' },
-    { id: 'churn', label: 'Laboratório Churn', icon: Activity, section: 'Inteligência', color: colors?.purple || '#8b5cf6' },
+    { id: 'hub_oquei', label: 'HubOquei Radar', icon: Zap, section: 'Inteligência', color: colors.info },
+    { id: 'churn', label: 'Laboratório Churn', icon: Activity, section: 'Inteligência', color: colors.purple },
 
-    // --- GESTÃO (Módulos de Coordenação + Operação) ---
-    { id: 'admin_supervisores', label: 'Supervisores', icon: UserPlus, section: 'Gestão', color: colors?.purple || '#8b5cf6' },
+    // --- GESTÃO ---
+    { id: 'admin_supervisores', label: 'Supervisores', icon: UserPlus, section: 'Gestão', color: colors.purple },
     { id: 'atendentes', label: 'Time de Vendas', icon: Users, section: 'Gestão' },
-    { id: 'supervisores', label: 'Supervisores', icon: Users, section: 'Administração' },
-    { id: 'estrutura', label: 'Estrutura Lojas', icon: MapPin, section: 'Gestão', color: colors?.primary || '#3b82f6' },
-    { id: 'produtos', label: 'Produtos/SVA', icon: ShoppingBag, section: 'Gestão', color: colors?.warning || '#f59e0b' },
+    { id: 'estrutura', label: 'Estrutura Lojas', icon: MapPin, section: 'Gestão', color: colors.primary },
+    { id: 'produtos', label: 'Produtos/SVA', icon: ShoppingBag, section: 'Gestão', color: colors.warning },
     { id: 'lojas_view', label: 'Portfolio Lojas', icon: Store, section: 'Gestão' },
     { id: 'faltas', label: 'Faltas Globais', icon: UserX, section: 'Gestão' },
     { id: 'rh_requests', label: 'Pedidos RH', icon: FileCheck, section: 'Gestão' },
-    { id: 'gestao_metas', label: 'Gestão de Metas', icon: Target, section: 'Gestão', color: colors?.success || '#10b981' },
-    { id: 'apuracao_resultados', label: 'Apuração de Resultados', icon: UploadCloud, section: 'Gestão', color: colors?.primary || '#3b82f6' },
+    { id: 'gestao_metas', label: 'Gestão de Metas', icon: Target, section: 'Gestão', color: colors.success },
+    { id: 'apuracao_resultados', label: 'Apuração de Resultados', icon: UploadCloud, section: 'Gestão', color: colors.primary },
     
     // --- SISTEMAS ---
-    { id: 'vendas', label: 'Painel Vendas', icon: TrendingUp, section: 'Sistemas', color: colors?.success || '#10b981' },
-    { id: 'war_room', label: 'Sala de Guerra', icon: Flame, section: 'Sistemas', color: colors?.danger || '#ef4444' },
-    { id: 'banco_horas', label: 'Banco de Horas', icon: Clock, section: 'Sistemas', color: colors?.warning || '#f59e0b' },
-    { id: 'desencaixe', label: 'Caixa Local', icon: Wallet, section: 'Sistemas', color: colors?.success || '#10b981' },
+    { id: 'vendas', label: 'Painel Vendas', icon: TrendingUp, section: 'Sistemas', color: colors.success },
+    { id: 'war_room', label: 'Sala de Guerra', icon: Flame, section: 'Sistemas', color: colors.danger },
+    { id: 'banco_horas', label: 'Banco de Horas', icon: Clock, section: 'Sistemas', color: colors.warning },
+    { id: 'desencaixe', label: 'Caixa Local', icon: Wallet, section: 'Sistemas', color: colors.success },
 
     // --- MARKETING ---
-    { id: 'japa', label: 'Ações do Japa', icon: Gift, section: 'Marketing', color: '#ff4757' },
-    { id: 'patrocinio', label: 'Patrocínio', icon: HeartHandshake, section: 'Marketing', color: '#ffa502' },
-    { id: 'solicitar_campanha', label: 'Solicitar Campanha', icon: Megaphone, section: 'Marketing', color: colors?.warning || '#f59e0b' },
-    { id: 'conteudos_digitais', label: 'Conteúdos Digitais', icon: MonitorPlay, section: 'Marketing', color: colors?.cyan || '#06b6d4' },
+    { id: 'japa', label: 'Ações do Japa', icon: Gift, section: 'Marketing', color: colors.rose },
+    { id: 'patrocinio', label: 'Patrocínio', icon: HeartHandshake, section: 'Marketing', color: colors.amber },
+    { id: 'solicitar_campanha', label: 'Solicitar Campanha', icon: Megaphone, section: 'Marketing', color: colors.warning },
+    { id: 'conteudos_digitais', label: 'Conteúdos Digitais', icon: MonitorPlay, section: 'Marketing', color: colors.info },
 
     // --- AGENDA ---
     { id: 'reunioes', label: 'Agenda', icon: CalendarClock, section: 'Agenda' },
 
     // --- FERRAMENTAS / UTILITÁRIOS ---
-    { id: 'roteadores', label: 'Catálogo Roteadores', icon: Router, section: 'Ferramentas', color: colors?.cyan || '#06b6d4' },
+    { id: 'roteadores', label: 'Catálogo Roteadores', icon: Router, section: 'Ferramentas', color: colors.info },
     { id: 'configuracoes', label: 'Configurações S&OP', icon: Settings, section: 'Ferramentas' },
     { id: 'links', label: 'Links Úteis', icon: LayoutGrid, section: 'Ferramentas' },
   ];
@@ -123,7 +120,13 @@ export default function PainelCoordenador({ userData }) {
       case 'japa': return <JapaSupervisor userData={userData} />;
       case 'patrocinio': return <PatrocinioSupervisor userData={userData} />;
       case 'solicitar_campanha': return <SolicitarCampanha userData={userData} />;
-      case 'conteudos_digitais': return <div style={{padding: '40px', textAlign: 'center'}}><h3>Repositório de Conteúdos Digitais</h3><p>Em breve...</p></div>;
+      // ✅ SUBSTITUIÇÃO DE INLINE STYLE PELO COMPONENTE DO DESIGN SYSTEM
+      case 'conteudos_digitais': 
+        return (
+          <Page title="Conteúdos Digitais">
+            <Empty icon="🎞️" title="Repositório de Conteúdos Digitais" description="Em breve..." />
+          </Page>
+        );
 
       // Utilitários
       case 'reunioes': return <AgendaSupervisor userData={userData} />;
@@ -140,6 +143,7 @@ export default function PainelCoordenador({ userData }) {
   if (activeView === 'wallboard') return <Wallboard userData={userData} onExit={() => setActiveView('dashboard')} />;
 
   return (
+    // ✅ LayoutGlobal é o wrapper correto aqui (substitui o Page porque é a raiz da rota)
     <LayoutGlobal 
       userData={userData}
       menuItems={MENU_ITEMS}

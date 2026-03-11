@@ -78,8 +78,8 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
   };
 
   return (
-    <div className="animated-view" style={{ paddingBottom: '40px', maxWidth: '1400px', margin: '0 auto' }}>
-      
+<div className="animated-view" style={{ paddingBottom: '40px', width: '100%' }}>
+        
       {/* 1. CABEÇALHO IMERSIVO */}
       <div style={styles.heroBanner}>
         <div style={styles.heroContent}>
