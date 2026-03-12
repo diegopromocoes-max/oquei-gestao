@@ -1,24 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { auth } from '../firebase';
+
 import {
   PlusCircle, Users, BookOpen, Wallet, BookMarked, 
-  Globe, Target, Package, Zap, Megaphone, TrendingUp, 
+  Globe, Target, Megaphone, TrendingUp, 
   RefreshCw, FileCheck, Share2, CalendarDays, Link as LinkIcon, 
-  Info, AlertTriangle, Store, CheckCircle2, FileSpreadsheet // Adicionado ícone para Relatório
+  Info, AlertTriangle, Store, FileSpreadsheet, BarChart3
 } from 'lucide-react';
 
 import LayoutGlobal from '../components/LayoutGlobal';
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors, dashboardStyles as local } from '../styles/globalStyles';
+
+// ─── SERVICES (COMPATIBILIZAÇÃO) ─────────────────────────────────────────────
+import { listenAtendenteStats, listenMessages, listenNetworkAbsences } from '../services/atendenteDashboard';
+
+// ─── COMPONENTES / PÁGINAS ───────────────────────────────────────────────────
 import NovoLead from './NovoLead';
 import MeusLeads from './MeusLeads';
-import RelatorioLeads from '../components/RelatorioLeads'; // NOVA PÁGINA IMPORTADA
+import RelatorioLeads from '../components/RelatorioLeads';
 import ColinhasAtendente from './ColinhasAtendente';
 import DesencaixeAtendente from './DesencaixeAtendente';
 import ManualAtendente from './ManualAtendente';
 import RhAtendente from './RhAtendente';
 import JapaSupervisor from './JapaSupervisor';
 import LinksUteis from './LinksUteis';
+import PainelVendas from './PainelVendas'; // 🚀 O Antigo Dashboard foi incorporado aqui!
 
 const KpiCard = ({ title, value, icon: Icon, color }) => {
   const cardColors = {
@@ -60,6 +66,7 @@ const ActionCard = ({ title, desc, icon: Icon, color, onClick }) => (
 export default function CRMAtendente({ userData }) {
   const [activeTab, setActiveTab] = useState('inicio');
   
+  // ─── ESTADOS LIMPOS ──────────────────────────────────────────────────────────
   const [stats, setStats] = useState({ totalLeads: 0, totalSales: 0, planos: 0, svas: 0, migracoes: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
   const [messages, setMessages] = useState([]);
@@ -67,66 +74,40 @@ export default function CRMAtendente({ userData }) {
   const [closedStores, setClosedStores] = useState([]); 
   const [networkAbsences, setNetworkAbsences] = useState([]); 
 
+  // ─── ESCUTA DE DADOS EM TEMPO REAL (VIA SERVICE) ───────────────────────────
   useEffect(() => {
     if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
     const currentMonthPrefix = new Date().toISOString().slice(0, 7);
 
-    const qLeads = query(collection(db, "leads"), where("attendantId", "==", auth.currentUser.uid));
-    const unsubscribeLeads = onSnapshot(qLeads, (snap) => {
-      const allDocs = snap.docs.map(d => d.data());
-      const monthDocs = allDocs.filter(l => l.date && l.date.startsWith(currentMonthPrefix));
-      const sales = monthDocs.filter(l => ['Contratado', 'Instalado'].includes(l.status));
-      
-      setStats({
-        totalLeads: monthDocs.length,
-        totalSales: sales.length,
-        planos: sales.filter(l => l.leadType === 'Plano Novo').length,
-        migracoes: sales.filter(l => l.leadType === 'Migração').length,
-        svas: sales.filter(l => l.leadType === 'SVA').length
-      });
+    const unsubStats = listenAtendenteStats(uid, currentMonthPrefix, (data, err) => {
+      if (data) setStats(data);
       setLoadingStats(false);
-    }, (error) => { console.error("Erro estatísticas: ", error); setLoadingStats(false); });
-
-    const qMsgs = query(collection(db, "messages"));
-    const unsubscribeMsgs = onSnapshot(qMsgs, (msgSnap) => {
-      const msgData = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .filter(m => m.to === 'all' || m.to === userData?.cityId || m.to === auth.currentUser.uid)
-        .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-        .slice(0, 5);
-      setMessages(msgData);
     });
 
-    const qAbsences = query(collection(db, "absences"));
-    const unsubscribeAbsences = onSnapshot(qAbsences, (snap) => {
-      const today = new Date().toISOString().split('T')[0];
-      const closed = [];
-      const allAbs = [];
-      
-      snap.docs.forEach(docSnap => {
-        const data = docSnap.data();
-        allAbs.push({ id: docSnap.id, ...data });
-        if (data.coverageMap) {
-          Object.entries(data.coverageMap).forEach(([date, floater]) => {
-            if (date >= today && floater === 'loja_fechada') {
-              closed.push({ store: data.storeId || data.storeName || 'Desconhecida', date });
-            }
-          });
-        }
-      });
-      
-      closed.sort((a,b) => a.date.localeCompare(b.date));
-      setClosedStores(closed);
-      setNetworkAbsences(allAbs);
+    const unsubMsgs = listenMessages(userData?.cityId, uid, (data) => {
+      setMessages(data);
     });
 
-    return () => { unsubscribeLeads(); unsubscribeMsgs(); unsubscribeAbsences(); };
+    const unsubAbsences = listenNetworkAbsences((data) => {
+      setClosedStores(data.closedStores);
+      setNetworkAbsences(data.allAbsences);
+    });
+
+    return () => { 
+      if (unsubStats) unsubStats(); 
+      if (unsubMsgs) unsubMsgs(); 
+      if (unsubAbsences) unsubAbsences(); 
+    };
   }, [userData?.cityId]); 
 
+  // ─── MENU LATERAL ────────────────────────────────────────────────────────────
   const MENU_ITEMS = [
     { id: 'inicio', label: 'Início', icon: Globe, section: 'Geral', color: '#10b981' },
+    { id: 'graficos', label: 'Meus Gráficos', icon: BarChart3, section: 'Geral', color: '#ec4899' }, // 🚀 NOVA ABA
     { id: 'nova_venda', label: 'Registrar Lead', icon: PlusCircle, highlight: true, section: 'Comercial', color: '#2563eb' },
     { id: 'clientes', label: 'Meu Funil', icon: Users, section: 'Comercial', color: '#10b981' },
-    { id: 'relatorio_leads', label: 'Relatório Mensal', icon: FileSpreadsheet, section: 'Comercial', color: '#8b5cf6' }, // NOVO ITEM
+    { id: 'relatorio_leads', label: 'Relatório Mensal', icon: FileSpreadsheet, section: 'Comercial', color: '#8b5cf6' },
     { id: 'rh', label: 'Solicitações RH', icon: FileCheck, section: 'Ferramentas', color: '#f59e0b' },
     { id: 'colinhas', label: 'Colinhas', icon: BookMarked, section: 'Ferramentas', color: '#8b5cf6' },
     { id: 'desencaixe', label: 'Caixa da Loja', icon: Wallet, section: 'Ferramentas', color: '#10b981' },
@@ -174,8 +155,8 @@ export default function CRMAtendente({ userData }) {
         <div style={local.actionGrid}>
           <ActionCard title="Registrar Lead" desc="Cadastre um novo cliente" icon={PlusCircle} onClick={() => setActiveTab('nova_venda')} color="#2563eb" />
           <ActionCard title="Meu Funil" desc="Acompanhe negociações" icon={Users} onClick={() => setActiveTab('clientes')} color="#10b981" />
+          <ActionCard title="Meus Gráficos" desc="Análise de conversão" icon={BarChart3} onClick={() => setActiveTab('graficos')} color="#ec4899" />
           <ActionCard title="Colinhas" desc="Dicas e scripts" icon={BookMarked} onClick={() => setActiveTab('colinhas')} color="#f59e0b" />
-          <ActionCard title="Acessar Manual" desc="Dúvidas e rotinas" icon={BookOpen} onClick={() => setActiveTab('manual')} color="#8b5cf6" />
         </div>
 
         <div style={{...global.card, marginTop: '40px'}}>
@@ -274,7 +255,6 @@ export default function CRMAtendente({ userData }) {
           </div>
         </div>
 
-        {/* CONTAINER DO CALENDÁRIO COM LARGURA MÁXIMA PARA NÃO ESTICAR DEMAIS */}
         <div style={local.calendarGrid}>
           <div style={local.calendarHeaderRow}>
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, idx) => (
@@ -314,12 +294,14 @@ export default function CRMAtendente({ userData }) {
     );
   };
 
+  // ─── RENDERIZADOR CENTRAL DAS ABAS ───────────────────────────────────────────
   const renderContent = () => {
     switch (activeTab) {
       case 'inicio': return <DashboardInicio />;
+      case 'graficos': return <PainelVendas userData={userData} />; // 🚀 NOVO ROTEAMENTO
       case 'nova_venda': return <NovoLead userData={userData} onNavigate={setActiveTab} />;
       case 'clientes': return <MeusLeads userData={userData} onNavigate={setActiveTab} />;
-      case 'relatorio_leads': return <RelatorioLeads userData={userData} />; // ROTA ADICIONADA
+      case 'relatorio_leads': return <RelatorioLeads userData={userData} />;
       case 'rh': return <RhAtendente userData={userData} />;
       case 'colinhas': return <ColinhasAtendente userData={userData} />;
       case 'desencaixe': return <DesencaixeAtendente userData={userData} />;
@@ -367,27 +349,3 @@ export default function CRMAtendente({ userData }) {
     </LayoutGlobal>
   );
 }
-
-const local = {
-  heroSection: { background: 'var(--bg-panel)', padding: '40px', borderRadius: '24px', marginBottom: '35px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
-  heroTitle: { fontSize: '32px', fontWeight: '800', margin: '0 0 10px 0', letterSpacing: '-0.02em', color: 'var(--text-main)' },
-  heroSub: { fontSize: '15px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.5', fontWeight: '500' },
-  heroBadge: { background: 'var(--bg-app)', padding: '15px 25px', borderRadius: '16px', textAlign: 'center', border: `1px solid var(--border)` },
-  heroBadgeLabel: { display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: 'var(--text-muted)' },
-  heroBadgeValue: { fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' },
-  heroBadgeSmall: { background: 'var(--bg-app)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '700', border: `1px solid var(--border)`, color: 'var(--text-main)' },
-  actionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' },
-  actionCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: `1px solid var(--border)`, borderRadius: '20px', padding: '30px 20px', cursor: 'pointer', transition: 'all 0.3s', textAlign: 'center', boxShadow: 'var(--shadow-sm)' },
-  readonlyBanner: { background: 'var(--bg-primary-light)', border: `1px solid var(--border)`, padding: '12px 20px', borderRadius: '12px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-brand)', fontWeight: 'bold', fontSize: '13px' },
-  calendarGrid: { background: 'var(--bg-card)', borderRadius: '16px', overflow: 'hidden', border: `1px solid var(--border)`, width: '100%', maxWidth: '1200px' },
-  calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-panel)', borderBottom: `1px solid var(--border)` },
-  calendarHeaderCell: { textAlign: 'center', padding: '12px', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  calendarDaysRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
-  calendarCellEmpty: { background: 'var(--bg-app)', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)` },
-  calendarCell: { minHeight: '120px', padding: '10px', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)`, transition: 'background 0.2s' },
-  calendarDayNum: { fontWeight: '800', fontSize: '14px', marginBottom: '8px', display: 'block' },
-  absenceTag: { padding: '6px 8px', borderRadius: '8px', border: '1px solid', display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2', fontSize: '11px', marginBottom: '6px' },
-  tagAlert: { background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
-  tagWarning: { background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
-  tagSuccess: { background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
-};

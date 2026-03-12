@@ -822,3 +822,27 @@ export function numero(valor) {
 export function data(dateStr) {
   return new Intl.DateTimeFormat('pt-BR').format(new Date(dateStr));
 }
+
+export const dashboardStyles = {
+  heroSection: { background: 'var(--bg-panel)', padding: '40px', borderRadius: '24px', marginBottom: '35px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
+  heroTitle: { fontSize: '32px', fontWeight: '800', margin: '0 0 10px 0', letterSpacing: '-0.02em', color: 'var(--text-main)' },
+  heroSub: { fontSize: '15px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.5', fontWeight: '500' },
+  heroBadge: { background: 'var(--bg-app)', padding: '15px 25px', borderRadius: '16px', textAlign: 'center', border: `1px solid var(--border)` },
+  heroBadgeLabel: { display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: 'var(--text-muted)' },
+  heroBadgeValue: { fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' },
+  heroBadgeSmall: { background: 'var(--bg-app)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '700', border: `1px solid var(--border)`, color: 'var(--text-main)' },
+  actionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' },
+  actionCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: `1px solid var(--border)`, borderRadius: '20px', padding: '30px 20px', cursor: 'pointer', transition: 'all 0.3s', textAlign: 'center', boxShadow: 'var(--shadow-sm)' },
+  readonlyBanner: { background: 'var(--bg-primary-light)', border: `1px solid var(--border)`, padding: '12px 20px', borderRadius: '12px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-brand)', fontWeight: 'bold', fontSize: '13px' },
+  calendarGrid: { background: 'var(--bg-card)', borderRadius: '16px', overflow: 'hidden', border: `1px solid var(--border)`, width: '100%', maxWidth: '1200px' },
+  calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-panel)', borderBottom: `1px solid var(--border)` },
+  calendarHeaderCell: { textAlign: 'center', padding: '12px', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  calendarDaysRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
+  calendarCellEmpty: { background: 'var(--bg-app)', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)` },
+  calendarCell: { minHeight: '120px', padding: '10px', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)`, transition: 'background 0.2s' },
+  calendarDayNum: { fontWeight: '800', fontSize: '14px', marginBottom: '8px', display: 'block' },
+  absenceTag: { padding: '6px 8px', borderRadius: '8px', border: '1px solid', display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: '1.2', fontSize: '11px', marginBottom: '6px' },
+  tagAlert: { background: '#ef4444', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
+  tagWarning: { background: '#f59e0b', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
+  tagSuccess: { background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '9px', width: 'fit-content', marginTop: '4px' },
+};

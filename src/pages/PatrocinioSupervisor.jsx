@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 
 import { Page, Card, Btn, Badge, colors } from '../components/ui';
-import TabAvaliacaoPatrocinio from './TabAvaliacaoPatrocinio';
-import DashboardPatrocinios from './DashboardPatrocinios'; 
+import TabAvaliacaoPatrocinio from '../components/TabAvaliacaoPatrocinio';
+import DashboardPatrocinios from '../components/DashboardPatrocinios'; 
 
 export default function PatrocinioSupervisor({ userData }) {
   const [activeTab, setActiveTab] = useState('nova'); 
