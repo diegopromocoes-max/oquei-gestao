@@ -1,39 +1,9 @@
-export const styles = {
-  layout: { display: 'flex', height: '100vh', backgroundColor: '#fcfdfe', overflow: 'hidden' },
-  sidebar: { backgroundColor: '#ffffff', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)', zIndex: 100 },
-  logoArea: { height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #f1f5f9', padding: '0 20px' },
-  nav: { flex: 1, padding: '15px', overflowY: 'auto' },
-  navSection: { fontSize: '10px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', margin: '20px 0 8px 12px' },
-  footer: { padding: '24px', borderTop: '1px solid #f1f5f9' },
-  logoutBtn: { display: 'flex', alignItems: 'center', gap: '14px', width: '100%', padding: '14px', borderRadius: '14px', border: 'none', backgroundColor: '#fff1f2', color: '#e11d48', cursor: 'pointer', fontWeight: '800' },
-  main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  header: { height: '80px', backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px' },
-  menuIconBtn: { backgroundColor: '#f8fafc', border: 'none', cursor: 'pointer', color: '#64748b', padding: '10px', borderRadius: '10px' },
-  avatar: { width: '42px', height: '42px', borderRadius: '50%', backgroundColor: '#2563eb', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900' },
-  contentScroll: { padding: '30px', overflowY: 'auto', flex: 1 },
-  heroSection: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '40px', borderRadius: '24px', color: 'white', marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  heroRefreshBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', padding: '12px', borderRadius: '12px', color: 'white', cursor: 'pointer' },
-  kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '40px' },
-  kpiCard: { backgroundColor: '#ffffff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' },
-  kpiLabel: { fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', margin: 0 },
-  kpiValue: { fontSize: '32px', fontWeight: '900', color: '#0f172a', margin: '4px 0 0 0' },
-  actionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '15px', marginBottom: '40px' },
-  actionMenuBtn: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '24px 15px', cursor: 'pointer', transition: 'all 0.2s' },
-  dashboardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: '30px' },
-  dashboardCard: { background: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', height: '100%', minHeight: '300px', display: 'flex', flexDirection: 'column' },
-  cardHeaderSmall: { padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fcfcfc' },
-  cardBodyScroll: { padding: '0', overflowY: 'auto', maxHeight: '350px', flex: 1 },
-  miniAlertItem: { display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '16px 24px', borderBottom: '1px solid #f8fafc' },
-  miniAlertItemRed: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '16px 24px', background: '#fef2f2', borderBottom: '1px solid #fee2e2' },
-  miniAgendaItem: { display: 'flex', alignItems: 'center', gap: '15px', padding: '16px 24px', borderBottom: '1px solid #f8fafc' },
-  badgeCount: { background: '#ef4444', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '900', marginLeft: 'auto' },
-  checkBtn: { border: 'none', background: 'transparent', cursor: 'pointer', color: '#10b981' },
-  resolveBtn: { border: 'none', background: '#fff1f2', color: '#e11d48', fontSize: '11px', fontWeight: 'bold', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' },
-  emptyState: { fontSize: '13px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic', marginTop: '50px' },
-  sectionHeader: { fontSize: '18px', fontWeight: '900', color: '#1e293b', marginBottom: '20px' },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(5px)' },
-  modalBox: { backgroundColor: 'white', padding: '32px', borderRadius: '28px', maxWidth: '500px', width: '90%', position: 'relative' },
-  modalClose: { position: 'absolute', top: '20px', right: '20px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' },
-  btnSecondary: { backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '12px', padding: '12px 20px', fontSize: '14px', fontWeight: 'bold' },
-  primaryBtn: { padding: '12px 20px', borderRadius: '12px', border: 'none', color: '#ffffff', backgroundColor: '#2563eb', fontWeight: 'bold' }
-};
+// ============================================================
+//  src/globalStyles.js — ARQUIVO LEGADO
+//  Re-exporta tudo de src/styles/globalStyles.js
+//
+//  Este arquivo existe apenas para compatibilidade.
+//  NÃO importe diretamente daqui em páginas novas.
+//  Use sempre: import { ... } from '../styles/globalStyles'
+// ============================================================
+export * from './styles/globalStyles';

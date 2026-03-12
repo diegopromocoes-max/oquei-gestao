@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../../firebase';
-import { collection, doc, onSnapshot, query, where, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where, setDoc, getDocs } from 'firebase/firestore';
 import {
   PieChart, MapPin, Users, TrendingDown,
   Lock, Unlock, ArrowRight, TrendingUp,
@@ -46,11 +46,23 @@ function SmartSlider({ value, onChange, min, max, step, accentColor, historicalV
   const histPct = historicalValue != null ? Math.min(Math.max(((historicalValue - min) / (max - min)) * 100, 0), 100) : null;
   const clientValue = baseClients ? Math.ceil(baseClients * (value / 100)) : 0;
 
-  const handleClientInput = (raw) => {
+const handleClientInput = (raw) => {
+    if (!baseClients) return;
+    
+    // 1. Permite que o usuário apague o campo para digitar do zero
+    if (raw === '') {
+      onChange(min); 
+      return;
+    }
+    
     const n = parseInt(raw, 10);
-    if (isNaN(n) || !baseClients) return;
+    if (isNaN(n)) return;
+
+    // 2. Calcula a porcentagem real sem arredondamento forçado
+    // Removemos o Math.round(... / 10) para evitar que o número "pule"
     const pct = Math.min(Math.max((n / baseClients) * 100, min), max);
-    onChange(Math.round(pct * 10) / 10);
+    
+    onChange(pct);
   };
 
   return (
@@ -159,6 +171,7 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
   const [churnPercent, setChurnPercent] = useState(0.0);
   const [distMethod, setDistMethod] = useState(DIST_METHODS.AUTO);
   const [savingLock, setSavingLock] = useState(false);
+  const [historicalMix, setHistoricalMix] = useState(null);
 
   // AI Insights state
   const [insightState, setInsightState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
@@ -244,37 +257,60 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
     return { ...c, baseAtual, potencial, history };
   }, [selectedCityId, cities, allResults, monthlyBases]);
 
-  // ── Derived: base metrics ──────────────────────────────────────────────────
+// ── Derived: base metrics ──────────────────────────────────────────────────
   const baseMetrics = useMemo(() => {
     if (!cityData) return null;
     const safeDivide = (n, d) => (d && d !== 0 ? n / d : 0);
     const baseInicial = Number(cityData.baseAtual ?? 0);
+    
     const metaNet = Math.ceil(baseInicial * (growthPercent / 100));
     const expectedChurn = Math.ceil(baseInicial * (churnPercent / 100));
     const metaBruta = metaNet + expectedChurn;
 
     const last3 = cityData.history.slice(0, 3);
-    const avgGross = last3.length
-      ? last3.reduce((a, m) => a + Number(m.grossAdds ?? 0), 0) / last3.length : 0;
-    const avgChurnAbs = last3.length
-      ? last3.reduce((a, m) => a + Number(m.churnTotal ?? 0), 0) / last3.length : 0;
+
+    // 🚀 PROCESSAMENTO DO HISTÓRICO REAL (Mapeando os campos corretos)
+    const processedHistory = last3.map(m => {
+      let gross = 0;
+      if (m.vendas) {
+        // Soma todas as vendas de todos os canais do mês
+        Object.values(m.vendas).forEach(canal => {
+          Object.values(canal).forEach(val => gross += Number(val || 0));
+        });
+      }
+      const churn = Number(m.cancelamentos || 0); // Campo correto da apuração
+      const net = gross - churn;
+      const base = Number(m.baseStart || baseInicial || 1);
+      return { gross, churn, net, base };
+    });
+
+    const avgGross = processedHistory.length 
+      ? processedHistory.reduce((a, h) => a + h.gross, 0) / processedHistory.length : 0;
+    
+    const avgChurnAbs = processedHistory.length 
+      ? processedHistory.reduce((a, h) => a + h.churn, 0) / processedHistory.length : 0;
+
     const avgChurnPct = safeDivide(avgChurnAbs, baseInicial) * 100;
-    const avgNetPct = last3.length
-      ? last3.reduce((a, m) => a + safeDivide(Number(m.netAdds ?? 0), Number(m.baseStart ?? 0)) * 100, 0) / last3.length : 0;
+
+    const avgNetPct = processedHistory.length
+      ? processedHistory.reduce((a, h) => a + safeDivide(h.net, h.base) * 100, 0) / processedHistory.length : 0;
 
     const potReal = cityData.potencial > 0 ? cityData.potencial : baseInicial * 2;
     const penetration = safeDivide(baseInicial, potReal) * 100;
 
-    // Trend: is growth accelerating or decelerating?
-    const trendDirection = last3.length >= 2
-      ? (Number(last3[0].netAdds ?? 0) >= Number(last3[1].netAdds ?? 0) ? 'aceleração' : 'desaceleração')
+    const trendDirection = processedHistory.length >= 2
+      ? (processedHistory[0].net >= processedHistory[1].net ? 'aceleração' : 'desaceleração')
       : 'estável';
 
-    // Net history for sparkline
-    const netHistory = last3.map(m => safeDivide(Number(m.netAdds ?? 0), Number(m.baseStart ?? 1)) * 100).reverse();
-    const churnHistory = last3.map(m => safeDivide(Number(m.churnTotal ?? 0), Number(m.baseStart ?? 1)) * 100).reverse();
+    // Sparklines (Mini gráficos)
+    const netHistory = processedHistory.map(h => safeDivide(h.net, h.base) * 100).reverse();
+    const churnHistory = processedHistory.map(h => safeDivide(h.churn, h.base) * 100).reverse();
 
-    return { baseInicial, metaNet, expectedChurn, metaBruta, avgGross, avgChurnAbs, avgChurnPct, avgNetPct, penetration, trendDirection, netHistory, churnHistory, last3 };
+    return { 
+      baseInicial, metaNet, expectedChurn, metaBruta, 
+      avgGross, avgChurnAbs, avgChurnPct, avgNetPct, 
+      penetration, trendDirection, netHistory, churnHistory, last3 
+    };
   }, [cityData, growthPercent, churnPercent]);
 
   // ── Derived: strategic matrix ──────────────────────────────────────────────
@@ -335,30 +371,123 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
     return alerts;
   }, [baseMetrics, growthPercent, churnPercent]);
 
+  
+  
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!selectedCityId || !channels.length) return;
+
+      // 1. Identifica os 3 meses anteriores ao selecionado
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const prevMonths = [1, 2, 3].map(offset => {
+        const d = new Date(year, month - 1 - offset, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      });
+
+      try {
+        const resultsSnap = await getDocs(collection(db, 'city_results'));
+        const allResults = resultsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        let totals = {};
+        let totalGeral = 0;
+
+        channels.forEach(ch => {
+          let somaCanal = 0;
+          prevMonths.forEach(mId => {
+            const doc = allResults.find(r => r.id === `${mId}_${selectedCityId}`);
+            if (doc?.vendas) {
+              // Busca no objeto de vendas pelo ID ou Nome do canal (blindagem de erro)
+              const key = Object.keys(doc.vendas).find(k => k === ch.id || k.toLowerCase() === ch.name.toLowerCase());
+              if (key) {
+                Object.values(doc.vendas[key]).forEach(v => somaCanal += Number(v || 0));
+              }
+            }
+          });
+          totals[ch.id] = somaCanal;
+          totalGeral += somaCanal;
+        });
+
+        if (totalGeral > 0) {
+          const calculatedMix = Object.fromEntries(Object.entries(totals).map(([id, val]) => [id, val / totalGeral]));
+          setHistoricalMix(calculatedMix);
+        } else {
+          setHistoricalMix(null);
+        }
+      } catch (err) {
+        console.error("Erro ao processar histórico para modo Auto:", err);
+      }
+    };
+    fetchHistory();
+  }, [selectedMonth, selectedCityId, channels]);
+  
   // ── Derived: channel mix ───────────────────────────────────────────────────
   const channelMix = useMemo(() => {
-    if (!baseMetrics || !channels.length) return { metasPorCanal: {}, mix: {}, originalGoals: {}, dataSource: '' };
+    // 🛡️ TRAVA DE SEGURANÇA: Se não houver métricas ou canais, para aqui e retorna vazio
+    if (!baseMetrics || !channels.length) {
+      return { metasPorCanal: {}, mix: {}, originalGoals: {}, dataSource: '' };
+    }
 
     const cityGoals = monthlyGoalsData[selectedCityId] || {};
-    let channelTotals = {}; let totalGeral = 0;
+    let channelTotals = {}; 
+    let totalGeral = 0;
+
     Object.entries(cityGoals).forEach(([channelId, productsObj]) => {
       const sum = Object.values(productsObj).reduce((a, v) => a + Number(v ?? 0), 0);
-      if (sum > 0) { channelTotals[channelId] = sum; totalGeral += sum; }
+      if (sum > 0) { 
+        channelTotals[channelId] = sum; 
+        totalGeral += sum; 
+      }
     });
 
     const dirMix = totalGeral > 0
       ? Object.fromEntries(Object.entries(channelTotals).map(([id, v]) => [id, v / totalGeral]))
       : null;
+    
     const equalMix = Object.fromEntries(channels.map(ch => [ch.id, 1 / channels.length]));
 
     let mix, dataSource;
-    if (distMethod === DIST_METHODS.EQUAL) { mix = equalMix; dataSource = 'Distribuição Igualitária'; }
-    else if (distMethod === DIST_METHODS.DIRETORIA) { mix = dirMix ?? equalMix; dataSource = dirMix ? 'Metas da Diretoria' : 'Igualitário (sem dados da diretoria)'; }
-    else { mix = dirMix ?? equalMix; dataSource = dirMix ? 'Metas da Diretoria (Auto)' : 'Igualitário (Auto)'; }
 
-    const metasPorCanal = Object.fromEntries(
-      Object.entries(mix).map(([id, pct]) => [id, Math.round(baseMetrics.metaBruta * pct)])
-    );
+    if (distMethod === DIST_METHODS.EQUAL) { 
+      mix = equalMix; 
+      dataSource = 'Distribuição Igualitária'; 
+    }
+    else if (distMethod === DIST_METHODS.DIRETORIA) { 
+      mix = dirMix ?? equalMix; 
+      dataSource = dirMix ? 'Metas da Diretoria (Aba 2)' : 'Igualitário (sem metas)'; 
+    }
+    else if (distMethod === DIST_METHODS.AUTO) { 
+      // 🚀 AQUI A MÁGICA ACONTECE:
+      // Se tiver histórico de 3 meses, usa ele. Se não tiver, tenta Aba 2. 
+      // Se não tiver nada, divide igualitário.
+      mix = historicalMix ?? dirMix ?? equalMix; 
+      
+      if (historicalMix) dataSource = 'Automático (Média Real 3M)';
+      else if (dirMix) dataSource = 'Automático (Meta Aba 2)';
+      else dataSource = 'Automático (Distribuição Igualitária)';
+    }
+
+    // 🚀 LÓGICA DE DISTRIBUIÇÃO DE RESTOS (Para a soma bater sempre o total exato)
+    const totalMetaBruta = baseMetrics.metaBruta; // Agora é seguro ler pois passamos pela trava acima
+    
+    const itensComResto = Object.entries(mix).map(([id, pct]) => {
+      const valorBruto = totalMetaBruta * pct;
+      return {
+        id,
+        valorInteiro: Math.floor(valorBruto),
+        resto: valorBruto - Math.floor(valorBruto)
+      };
+    });
+
+    const somaAtual = itensComResto.reduce((acc, item) => acc + item.valorInteiro, 0);
+    const diferenca = totalMetaBruta - somaAtual;
+
+    // Ordena pelos maiores restos para distribuir o arredondamento
+    itensComResto.sort((a, b) => b.resto - a.resto);
+
+    const metasPorCanal = {};
+    itensComResto.forEach((item, index) => {
+      metasPorCanal[item.id] = item.valorInteiro + (index < diferenca ? 1 : 0);
+    });
 
     return { metasPorCanal, mix, originalGoals: channelTotals, dataSource };
   }, [baseMetrics, monthlyGoalsData, channels, distMethod, selectedCityId]);

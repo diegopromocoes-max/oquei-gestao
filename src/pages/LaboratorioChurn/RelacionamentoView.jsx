@@ -7,7 +7,7 @@ import {
   Headset, AlertTriangle, UserX, 
   TrendingDown, ShieldAlert
 } from 'lucide-react';
-import { styles } from '../../styles/globalStyles'; // Importação Global
+import { styles } from './styles'; // Usa o styles.js local do LaboratorioChurn
 
 // Paleta de cores dinâmica para os motivos (até 8 motivos diferentes)
 const DYNAMIC_COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#06b6d4', '#64748b'];

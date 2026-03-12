@@ -5,8 +5,18 @@ import {
 } from 'lucide-react';
 import { styles } from './styles';
 
-export default function RadarView({ processedData, selectedCity, setSelectedCity, actionPlans, setShowPlanModal }) {
+export default function RadarView({ processedData = [], selectedCity, setSelectedCity, actionPlans = [], setShowPlanModal }) {
   
+  // Guard: aguarda dados carregarem antes de processar
+  if (!processedData || processedData.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px', color: 'var(--text-muted)' }}>
+        <Activity size={32} color="var(--text-muted)" />
+        <p style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>Carregando dados das praças...</p>
+      </div>
+    );
+  }
+
   // Ordenação para colocar praças negativas no topo (Atenção imediata)
   const sortedData = [...processedData].sort((a, b) => a.netAdds - b.netAdds);
 

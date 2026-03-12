@@ -677,6 +677,95 @@ export const styles = {
     margin: '0 4px',
   },
 
+  // ── ALIASES DE LEGADO (GestaoColaboradores e outros) ─────
+  title: {
+    fontSize: '26px', fontWeight: '900', margin: 0,
+    letterSpacing: '-0.02em', color: 'var(--text-main)',
+  },
+  subtitle: {
+    fontSize: '14px', color: 'var(--text-muted)', margin: '4px 0 0',
+  },
+  header: {
+    display: 'flex', justifyContent: 'space-between',
+    alignItems: 'center', flexWrap: 'wrap',
+    gap: '20px', marginBottom: '30px',
+  },
+  toolbar: {
+    display: 'flex', alignItems: 'center',
+    gap: '10px', flexWrap: 'wrap',
+  },
+  iconHeader: {
+    display: 'flex', alignItems: 'center', gap: '16px',
+  },
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    background: 'var(--bg-panel)', border: '1px solid var(--border)',
+    borderRadius: '10px', padding: '10px 14px',
+  },
+  searchInput: {
+    background: 'transparent', border: 'none', outline: 'none',
+    fontSize: '14px', color: 'var(--text-main)',
+    fontFamily: "'Manrope', sans-serif", flex: 1,
+  },
+  closeBtn: {
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    color: 'var(--text-muted)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
+    padding: '4px', borderRadius: '6px',
+  },
+  gridCards: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '16px',
+  },
+
+  // ── LABORATÓRIO CHURN (e módulos similares) ──────────────
+  loadingState: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    height: '60vh', fontSize: '14px', fontWeight: '600',
+    color: 'var(--text-muted)',
+  },
+  headerContainer: {
+    display: 'flex', justifyContent: 'space-between',
+    alignItems: 'center', flexWrap: 'wrap', gap: '20px',
+    marginBottom: '28px',
+  },
+  iconBox: {
+    background: 'var(--bg-panel)', padding: '12px',
+    borderRadius: '16px', border: '1px solid var(--border)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  pageTitle: {
+    fontSize: '24px', fontWeight: '900', margin: 0,
+    letterSpacing: '-0.02em', color: 'var(--text-main)',
+  },
+  dateBadge: {
+    fontSize: '13px', color: 'var(--text-muted)',
+    margin: '3px 0 0', fontWeight: '500',
+  },
+  filterPill: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    background: 'var(--bg-panel)', border: '1px solid var(--border)',
+    borderRadius: '12px', padding: '10px 16px',
+  },
+  filterInput: {
+    background: 'transparent', border: 'none', outline: 'none',
+    fontSize: '14px', fontWeight: '700', color: 'var(--text-main)',
+    fontFamily: "'Manrope', sans-serif", colorScheme: 'dark',
+    cursor: 'pointer',
+  },
+  grid4: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px', marginBottom: '24px',
+  },
+  mainCard: {
+    background: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: '18px', padding: '22px 24px',
+    display: 'flex', flexDirection: 'column', gap: '10px',
+    boxShadow: 'var(--shadow-sm)',
+  },
+
   // ── FLEX HELPERS ─────────────────────────────────────────
   row: {
     display: 'flex',

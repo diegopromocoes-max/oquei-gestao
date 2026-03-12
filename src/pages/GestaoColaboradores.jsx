@@ -270,3 +270,11 @@ export const GestaoAtendentes = () => {
     </div>
   );
 };
+
+// ==============================================================
+// DEFAULT EXPORT — necessário para React.lazy() funcionar
+// O PainelCoordenador usa lazy(() => import('./GestaoColaboradores'))
+// e acessa .GestaoSupervisores / .GestaoAtendentes via .then()
+// Este export default permite o import direto com named exports
+// ==============================================================
+export default { GestaoSupervisores, GestaoAtendentes };

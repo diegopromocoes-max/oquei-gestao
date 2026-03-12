@@ -6,7 +6,7 @@
 //
 //  REGRAS OBRIGATÓRIAS:
 //  ✅ Importe componentes de '../components/ui'
-//  ✅ Importe estilos de '../globalStyles'
+//  ✅ Importe estilos de '../styles/globalStyles'
 //  ✅ NUNCA defina `const styles = {}` dentro de uma página
 //  ✅ NUNCA use cores hardcoded (#fff, #2563eb) — use colors.*
 //  ✅ NUNCA copie styles de outra página — extraia para ui.jsx
@@ -22,7 +22,7 @@ import {
 } from '../components/ui';
 
 // ── 2. ESTILOS ESTRUTURAIS — apenas para layouts específicos
-import { styles, colors, moeda, numero, data } from '../globalStyles';
+import { styles, colors, moeda, numero, data } from '../styles/globalStyles';
 
 // ── 3. SERVIÇOS — nunca chame Firebase diretamente na página
 // import { useVendasDoMes } from '../services/vendas';
