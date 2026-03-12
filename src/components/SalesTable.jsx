@@ -1,57 +1,53 @@
 import React from 'react';
-import { Store } from 'lucide-react';
+import { LayoutList } from 'lucide-react';
 
 export default function SalesTable({ storeData }) {
   return (
-    <div id="relatorio-consolidado" style={styles.tableCard}>
-      <div style={styles.tableHeader}>
-         <h3 style={styles.tableTitle}><Store size={20} color="#059669" /> Relatório Consolidado (Filtro Aplicado)</h3>
-      </div>
-      <div style={{overflowX: 'auto'}}>
-        <table style={styles.table}>
-          <thead>
-            <tr style={styles.thRow}>
-              <th style={styles.th}>Unidade / Loja</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Meta Planos</th>
-              <th style={{...styles.th, textAlign: 'center', background: '#eff6ff', color: '#1e3a8a'}}>Vendas (Planos)</th>
-              <th style={{...styles.th, textAlign: 'center'}}>Projeção (Planos)</th>
-              <th style={{...styles.th, textAlign: 'center', background: '#ecfdf5', color: '#064e3b'}}>Instalações</th>
-              <th style={{...styles.th, textAlign: 'center', background: '#fff7ed', color: '#9a3412'}}>SVA Fechado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {storeData.length === 0 ? <tr><td colSpan="6" style={{textAlign: 'center', padding: '30px', color: '#94a3b8'}}>Nenhuma loja encontrada para o filtro selecionado.</td></tr> : storeData.map((s, idx) => {
-              const percVendas = s.metaPlanos > 0 ? Math.floor((s.salesPlanos / s.metaPlanos) * 100) : 0;
-              return (
-                <tr key={idx} style={styles.tr}>
-                  <td style={{...styles.td, fontWeight: 'bold', color: '#1e293b'}}>{s.city}</td>
-                  <td style={{...styles.td, textAlign: 'center', color: '#64748b', fontWeight: 'bold'}}>{s.metaPlanos}</td>
-                  <td style={{...styles.td, textAlign: 'center', background: '#eff6ff'}}>
-                    <div style={{display: 'flex', flexDirection: 'column'}}>
-                      <span style={{fontSize: '15px', fontWeight: '900', color: '#2563eb'}}>{s.salesPlanos}</span>
-                      <span style={{fontSize: '10px', color: '#3b82f6', fontWeight: 'bold'}}>{percVendas}% da Meta</span>
-                    </div>
-                  </td>
-                  <td style={{...styles.td, textAlign: 'center', color: '#64748b', fontWeight: 'bold'}}>{s.projSales}</td>
-                  <td style={{...styles.td, textAlign: 'center', background: '#ecfdf5'}}><span style={{fontSize: '15px', fontWeight: '900', color: '#10b981'}}>{s.installedPlanos}</span></td>
-                  <td style={{...styles.td, textAlign: 'center', background: '#fff7ed'}}><span style={{fontSize: '14px', fontWeight: 'bold', color: '#ea580c'}}>{s.salesSVA}</span></td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+    <div style={{ animation: 'slideIn 0.6s ease-out 0.8s forwards', opacity: 0, marginTop: '40px' }}>
+      <div style={{ background: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+        <div style={{ padding: '20px 25px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <LayoutList size={18} color="#64748b" />
+          <h3 style={{ fontSize: '15px', fontWeight: '900', margin: 0, color: '#1e293b' }}>Consolidado por Operação</h3>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ background: '#f8fafc' }}>
+              <tr>
+                <th style={tStyle.th}>Unidade</th>
+                <th style={tStyle.th}>Vendas</th>
+                <th style={tStyle.th}>Meta</th>
+                <th style={tStyle.th}>Gap</th>
+                <th style={tStyle.th}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {storeData.map((s, i) => {
+                const gap = s.metaPlanos - s.salesPlanos;
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={tStyle.td}><strong>{s.city}</strong></td>
+                    <td style={tStyle.td}>{s.salesPlanos}</td>
+                    <td style={tStyle.td}>{s.metaPlanos}</td>
+                    <td style={{...tStyle.td, color: gap <= 0 ? '#10b981' : '#ef4444'}}>
+                       {gap <= 0 ? 'Meta Atingida' : `${gap} p/ meta`}
+                    </td>
+                    <td style={tStyle.td}>
+                       <div style={{width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden'}}>
+                          <div style={{width: `${Math.min((s.salesPlanos/s.metaPlanos)*100, 100)}%`, height: '100%', background: s.salesPlanos >= s.metaPlanos ? '#10b981' : '#3b82f6'}} />
+                       </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-const styles = {
-  tableCard: { background: 'white', borderRadius: '28px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 10px rgba(0, 0, 0, 0.02)' },
-  tableHeader: { padding: '25px 30px', background: '#fcfcfc', borderBottom: '1px solid #f1f5f9' },
-  tableTitle: { fontSize: '16px', fontWeight: '900', color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  thRow: { background: '#f8fafc', borderBottom: '1px solid #e2e8f0' },
-  th: { padding: '16px 20px', textAlign: 'left', fontSize: '11px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  tr: { borderBottom: '1px solid #f1f5f9', transition: '0.2s' },
-  td: { padding: '16px 20px', fontSize: '14px', verticalAlign: 'middle' }
+const tStyle = {
+  th: { padding: '15px 25px', textAlign: 'left', fontSize: '11px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  td: { padding: '18px 25px', fontSize: '13px', color: '#334155' }
 };

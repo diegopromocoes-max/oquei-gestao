@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo } from 'react';
+import { auth } from '../firebase';
 import { 
   FileSpreadsheet, Search, Filter, Download, 
-  ChevronDown, ArrowUpDown, MapPin, Zap, 
+  ArrowUpDown, MapPin, Zap, Layers, FileText,
   Calendar, CheckCircle, Clock, XCircle, AlertCircle 
 } from 'lucide-react';
 
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors } from '../styles/globalStyles';
+import { listenMyLeads } from '../services/leads';
 
 export default function RelatorioLeads({ userData }) {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // ─── ESTADOS DE FILTRO ───
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [categoryFilter, setCategoryFilter] = useState('Todas'); // NOVO FILTRO
 
   // Lógica para pegar o primeiro e último dia do mês atual
   const now = new Date();
@@ -21,198 +24,246 @@ export default function RelatorioLeads({ userData }) {
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
   useEffect(() => {
-    fetchLeads();
-  }, [userData]);
+    let unsubscribeSnapshot;
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setLoading(true);
+        unsubscribeSnapshot = listenMyLeads(user.uid, (leadsData) => {
+          // Filtro local para garantir que a tabela exiba apenas vendas Deste Mês
+          const thisMonthLeads = leadsData.filter(lead => {
+            const leadDate = new Date(lead.date || (lead.createdAt?.seconds * 1000) || Date.now());
+            return leadDate >= firstDay && leadDate <= lastDay;
+          });
 
-  const fetchLeads = async () => {
-    setLoading(true);
-    try {
-      if (!auth.currentUser) return;
+          setLeads(thisMonthLeads);
+          setLoading(false);
+        });
+      } else {
+        setLeads([]);
+        setLoading(false);
+      }
+    });
 
-      const leadsRef = collection(db, "leads");
-      // Filtra apenas leads deste atendente
-      const q = query(
-        leadsRef, 
-        where("attendantId", "==", auth.currentUser.uid),
-        orderBy("createdAt", "desc")
-      );
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
+  }, []);
 
-      const snap = await getDocs(q);
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // ─── LISTA DINÂMICA DE CATEGORIAS ───
+  // Lê todos os leads carregados e extrai as categorias únicas
+  const availableCategories = useMemo(() => {
+    const cats = leads.map(l => l.categoryName || 'Outros');
+    return ['Todas', ...new Set(cats)];
+  }, [leads]);
+
+  // ─── FILTROS EM TEMPO REAL ───
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      const matchesSearch = lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || lead.customerPhone?.includes(searchTerm);
+      const matchesStatus = statusFilter === 'Todos' || lead.status === statusFilter;
+      const matchesCategory = categoryFilter === 'Todas' || (lead.categoryName || 'Outros') === categoryFilter;
       
-      // Filtro local adicional para garantir que seja deste mês (caso o campo date seja string)
-      const thisMonthLeads = list.filter(lead => {
-        const leadDate = new Date(lead.date || lead.createdAt?.seconds * 1000);
-        return leadDate >= firstDay && leadDate <= lastDay;
-      });
-
-      setLeads(thisMonthLeads);
-    } catch (error) {
-      console.error("Erro ao buscar relatório:", error);
-    }
-    setLoading(false);
-  };
-
-  // Lógica de Filtro em Tempo Real
-  const filteredLeads = leads.filter(lead => {
-    const matchesSearch = lead.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'Todos' || lead.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus && matchesCategory;
+    }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)); // Ordena do mais recente para o mais antigo
+  }, [leads, searchTerm, statusFilter, categoryFilter]);
 
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'Instalado': return { bg: '#05966915', color: '#059669', icon: <CheckCircle size={14}/> };
-      case 'Contratado': return { bg: '#10b98115', color: '#10b981', icon: <Zap size={14}/> };
-      case 'Em negociação': return { bg: '#f59e0b15', color: '#f59e0b', icon: <Clock size={14}/> };
-      case 'Descartado': return { bg: '#ef444415', color: '#ef4444', icon: <XCircle size={14}/> };
-      default: return { bg: '#3b82f615', color: '#3b82f6', icon: <AlertCircle size={14}/> };
+      case 'Instalado': return { bg: 'rgba(16, 185, 129, 0.1)', color: colors.success, icon: <CheckCircle size={14}/> };
+      case 'Contratado': return { bg: 'rgba(59, 130, 246, 0.1)', color: colors.primary, icon: <Zap size={14}/> };
+      case 'Em negociação': return { bg: 'rgba(245, 158, 11, 0.1)', color: colors.warning, icon: <Clock size={14}/> };
+      case 'Descartado': return { bg: 'rgba(239, 68, 68, 0.1)', color: colors.danger, icon: <XCircle size={14}/> };
+      default: return { bg: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', icon: <AlertCircle size={14}/> };
     }
   };
 
+  // ─── EXPORTAÇÃO CSV ───
+  const handleExportCSV = () => {
+    const headers = "Data,Cliente,Telefone,Unidade,Categoria,Plano,Status,Valor(R$)\n";
+    const rows = filteredLeads.map(l => {
+      const dataStr = l.date ? l.date.split('-').reverse().join('/') : 'N/D';
+      return `${dataStr},"${l.customerName}","${l.customerPhone}","${l.cityName || l.cityId}","${l.categoryName || 'Outros'}","${l.productName}",${l.status},${Number(l.productPrice || 0).toFixed(2)}`;
+    }).join("\n");
+    
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a'); 
+    a.href = url; 
+    a.download = `oquei_meus_leads_${now.toISOString().slice(0,7)}.csv`; 
+    a.click();
+  };
+
+  // ─── EXPORTAÇÃO PDF ───
+  const handleExportPDF = () => {
+    const printStyle = document.createElement('style');
+    printStyle.id = 'print-styles';
+    printStyle.innerHTML = `
+      @media print {
+        body * { visibility: hidden; }
+        #printable-report, #printable-report * { visibility: visible; }
+        #printable-report { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+        .no-print { display: none !important; }
+        /* Tira o fundo do body para não gastar tinta desnecessária */
+        body { background: white !important; } 
+      }
+    `;
+    document.head.appendChild(printStyle);
+    window.print();
+    setTimeout(() => document.getElementById('print-styles')?.remove(), 1000);
+  };
+
   return (
-    <div style={{ animation: 'fadeIn 0.5s ease-out', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="animated-view animate-fadeIn" style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', paddingBottom: '40px' }}>
       
-      {/* CABEÇALHO DO RELATÓRIO */}
-      <div style={global.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ ...global.iconHeader, background: '#8b5cf6' }}>
-            <FileSpreadsheet size={28} color="white" />
-          </div>
-          <div>
-            <h1 style={global.title}>Meus Leads do Mês</h1>
-            <p style={global.subtitle}>Relatório detalhado de todas as suas captações em {now.toLocaleString('pt-BR', { month: 'long' })}.</p>
-          </div>
-        </div>
+      <div id="printable-report" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
-        {/* BOTÃO EXPORTAR (Mockup) */}
-        <button onClick={() => window.showToast("Função disponível na versão Pro", "info")} style={local.exportBtn}>
-          <Download size={18} /> Exportar CSV
-        </button>
-      </div>
-
-      {/* BARRA DE FILTROS */}
-      <div style={local.filterBar}>
-        <div style={local.searchWrapper}>
-          <Search size={18} color="var(--text-muted)" />
-          <input 
-            placeholder="Buscar cliente pelo nome..." 
-            style={local.searchInput}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        {/* ─── CABEÇALHO HUB OQUEI STYLE ─── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '24px 30px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', flexWrap: 'wrap', gap: '20px' }}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 16px rgba(139, 92, 246, 0.35)` }}>
+              <FileSpreadsheet size={28} color="white" />
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>Meus Leads do Mês</h1>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginTop: '4px' }}>
+                Relatório de captações em {now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}.
+              </p>
+            </div>
+          </div>
+          
+          <div className="no-print" style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={handleExportCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '13px', fontWeight: '900', cursor: 'pointer', transition: '0.2s' }}>
+              <Download size={16} /> CSV
+            </button>
+            <button onClick={handleExportPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '13px', fontWeight: '900', cursor: 'pointer', transition: '0.2s', boxShadow: 'var(--shadow-sm)' }}>
+              <FileText size={16} /> Salvar PDF
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <Filter size={18} color="var(--text-muted)" />
-          <select 
-            style={local.selectFilter}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="Todos">Todos os Status</option>
-            <option value="Em negociação">Em Negociação</option>
-            <option value="Contratado">Contratado</option>
-            <option value="Instalado">Instalado</option>
-            <option value="Descartado">Descartado</option>
-          </select>
-        </div>
-      </div>
+        {/* ─── BARRA DE FILTROS ─── */}
+        <div className="no-print" style={{ display: 'flex', gap: '15px', background: 'var(--bg-card)', padding: '15px', borderRadius: '16px', border: '1px solid var(--border)', flexWrap: 'wrap' }}>
+          
+          <div style={{ flex: 1, minWidth: '250px', position: 'relative' }}>
+            <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input 
+              placeholder="Buscar por nome ou telefone..." 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+              style={{...global.input, paddingLeft: '48px', height: '48px', borderRadius: '12px', width: '100%'}} 
+            />
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', position: 'relative', width: '220px' }}>
+            <Layers size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }} />
+            <select 
+              style={{...global.select, paddingLeft: '48px', height: '48px', borderRadius: '12px', width: '100%', cursor: 'pointer'}}
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              {availableCategories.map(cat => (
+                <option key={cat} value={cat}>{cat === 'Todas' ? 'Todas as Categorias' : cat}</option>
+              ))}
+            </select>
+          </div>
 
-      {/* TABELA DE LEADS */}
-      <div style={{ ...global.card, padding: '0', overflow: 'hidden', border: '1px solid var(--border)' }}>
-        <table style={local.table}>
-          <thead>
-            <tr>
-              <th style={local.th}>Data <ArrowUpDown size={12} /></th>
-              <th style={local.th}>Cliente</th>
-              <th style={local.th}>Cidade / Unidade</th>
-              <th style={local.th}>Plano / Serviço</th>
-              <th style={local.th}>Status</th>
-              <th style={{ ...local.th, textAlign: 'right' }}>Valor Estimado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="6" style={local.loadingTd}>Carregando seus dados...</td></tr>
-            ) : filteredLeads.length === 0 ? (
-              <tr><td colSpan="6" style={local.emptyTd}>Nenhum lead encontrado para este filtro.</td></tr>
-            ) : (
-              filteredLeads.map((lead) => {
-                const style = getStatusStyle(lead.status);
-                return (
-                  <tr key={lead.id} style={local.tr}>
-                    <td style={local.td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Calendar size={14} color="var(--text-muted)" />
-                        {new Date(lead.date).toLocaleDateString('pt-BR')}
-                      </div>
-                    </td>
-                    <td style={{ ...local.td, fontWeight: '800', color: 'var(--text-main)' }}>{lead.customerName}</td>
-                    <td style={local.td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <MapPin size={14} color="var(--text-muted)" /> {lead.cityId}
-                      </div>
-                    </td>
-                    <td style={local.td}>{lead.productName}</td>
-                    <td style={local.td}>
-                      <span style={{ 
-                        ...local.badge, 
-                        backgroundColor: style.bg, 
-                        color: style.color 
-                      }}>
-                        {style.icon} {lead.status}
-                      </span>
-                    </td>
-                    <td style={{ ...local.td, textAlign: 'right', fontWeight: 'bold' }}>
-                      R$ {Number(lead.productPrice || 0).toFixed(2)}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', position: 'relative', width: '220px' }}>
+            <Filter size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }} />
+            <select 
+              style={{...global.select, paddingLeft: '48px', height: '48px', borderRadius: '12px', width: '100%', cursor: 'pointer'}}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="Todos">Todos os Status</option>
+              <option value="Em negociação">Em Negociação</option>
+              <option value="Contratado">Contratado</option>
+              <option value="Instalado">Instalado</option>
+              <option value="Descartado">Descartado</option>
+            </select>
+          </div>
 
-      {/* RESUMO NO RODAPÉ */}
-      <div style={local.footerStats}>
-        <div style={local.statItem}>
-          <span style={local.statLabel}>Total de Leads</span>
-          <span style={local.statValue}>{filteredLeads.length}</span>
         </div>
-        <div style={local.statItem}>
-          <span style={local.statLabel}>Conversão (Vendas)</span>
-          <span style={{ ...local.statValue, color: '#10b981' }}>
-            {filteredLeads.filter(l => l.status === 'Contratado' || l.status === 'Instalado').length}
-          </span>
+
+        {/* ─── TABELA DE LEADS ─── */}
+        <div style={{ ...global.card, padding: '0', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)' }}>Data <ArrowUpDown size={12} style={{marginLeft: '4px', verticalAlign: 'middle'}}/></th>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)' }}>Cliente</th>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)' }}>Categoria</th>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)' }}>Plano Solicitado</th>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)' }}>Status</th>
+                  <th style={{ padding: '20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)', textAlign: 'right' }}>Valor Estimado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="6" style={{ padding: '80px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '15px', fontWeight: '800' }}>Carregando seus dados...</td></tr>
+                ) : filteredLeads.length === 0 ? (
+                  <tr><td colSpan="6" style={{ padding: '80px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '15px', fontWeight: '800' }}>Nenhum lead encontrado para este filtro.</td></tr>
+                ) : (
+                  filteredLeads.map((lead) => {
+                    const style = getStatusStyle(lead.status);
+                    return (
+                      <tr key={lead.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-panel)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                        <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '800' }}>
+                          {lead.date ? lead.date.split('-').reverse().join('/') : '--/--/----'}
+                        </td>
+                        <td style={{ padding: '16px 20px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '4px' }}>{lead.customerName}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>{lead.customerPhone}</div>
+                        </td>
+                        <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '800' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Layers size={14} color="var(--text-muted)" /> {lead.categoryName || 'Outros'}
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-main)', fontWeight: '800' }}>
+                          {lead.productName || 'Não Informado'}
+                        </td>
+                        <td style={{ padding: '16px 20px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '900', backgroundColor: style.bg, color: style.color }}>
+                            {style.icon} {lead.status || 'Novo'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '15px', fontWeight: '900', color: lead.status === 'Contratado' || lead.status === 'Instalado' ? colors.success : 'var(--text-main)' }}>
+                          R$ {Number(lead.productPrice || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div style={local.statItem}>
-          <span style={local.statLabel}>Receita Potencial</span>
-          <span style={local.statValue}>
-            R$ {filteredLeads.reduce((acc, curr) => acc + Number(curr.productPrice || 0), 0).toFixed(2)}
-          </span>
+
+        {/* ─── RESUMO FINANCEIRO NO RODAPÉ ─── */}
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginTop: '10px' }}>
+          <div style={{ flex: 1, background: 'var(--bg-card)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Leads na Seleção</span>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', marginTop: '5px' }}>{filteredLeads.length}</div>
+          </div>
+          
+          <div style={{ flex: 1, background: 'var(--bg-card)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', borderLeft: `4px solid ${colors.success}` }}>
+            <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conversão (Vendas)</span>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: colors.success, marginTop: '5px' }}>
+              {filteredLeads.filter(l => l.status === 'Contratado' || l.status === 'Instalado').length}
+            </div>
+          </div>
+          
+          <div style={{ flex: 1, background: 'var(--bg-card)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receita Potencial (Seleção)</span>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', marginTop: '5px' }}>
+              R$ {filteredLeads.reduce((acc, curr) => acc + Number(curr.productPrice || 0), 0).toFixed(2)}
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   );
 }
-
-const local = {
-  exportBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' },
-  filterBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '20px', flexWrap: 'wrap' },
-  searchWrapper: { flex: 1, minWidth: '300px', display: 'flex', alignItems: 'center', gap: '12px', padding: '0 15px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '14px' },
-  searchInput: { flex: 1, border: 'none', padding: '12px 0', backgroundColor: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '14px' },
-  selectFilter: { padding: '10px 15px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '14px', outline: 'none', cursor: 'pointer' },
-  table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', backgroundColor: 'var(--bg-panel)' },
-  th: { padding: '18px 20px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid var(--border)', background: 'rgba(0,0,0,0.02)' },
-  td: { padding: '16px 20px', fontSize: '14px', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' },
-  tr: { transition: '0.2s' },
-  loadingTd: { padding: '100px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' },
-  emptyTd: { padding: '100px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' },
-  badge: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800' },
-  footerStats: { display: 'flex', gap: '40px', marginTop: '30px', padding: '25px', backgroundColor: 'var(--bg-panel)', borderRadius: '20px', border: '1px solid var(--border)' },
-  statItem: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  statLabel: { fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  statValue: { fontSize: '20px', fontWeight: '900', color: 'var(--text-main)' },
-};
