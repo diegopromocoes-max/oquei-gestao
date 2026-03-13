@@ -1,15 +1,22 @@
-import React, { useState, lazy, Suspense } from 'react';
+// ============================================================
+//  PainelSupervisor.jsx — Oquei Gestão
+//  Sprint 1 — Tarefa 1.3: React.lazy() + lazyNamed()
+//  Sprint 1 — Tarefa 1.7: URL params via useModuleNav
+// ============================================================
+
+import React, { lazy, Suspense } from 'react';
 import { auth } from '../firebase';
 import { signOut as authSignOut } from 'firebase/auth';
-import { 
-  Store, Clock, TrendingUp, Zap, Globe, Megaphone, 
-  FileCheck, CalendarClock, Wallet, LayoutGrid, UserX, Activity, 
-  Tv, Flame, Settings, Gift, HeartHandshake, MonitorPlay, 
+import {
+  Store, Clock, TrendingUp, Zap, Globe, Megaphone,
+  FileCheck, CalendarClock, Wallet, LayoutGrid, UserX, Activity,
+  Tv, Flame, Settings, Gift, HeartHandshake, MonitorPlay,
   MapPin, Users, UserPlus, ShoppingBag, Router, Target, UploadCloud
 } from 'lucide-react';
 
 import LayoutGlobal from '../components/LayoutGlobal';
-import { colors, Spinner } from '../components/ui';
+import { colors, Page, Empty, Spinner } from '../components/ui';
+import { useModuleNav } from '../hooks/useModuleNav';
 
 // ── Lazy loader helper para named exports ──────────────────────
 const lazyNamed = (importFn, name) =>
@@ -42,6 +49,7 @@ const LinksUteis            = lazy(() => import('./LinksUteis'));
 const Configuracoes         = lazy(() => import('./Configuracoes'));
 const CatalogoRoteadores    = lazy(() => import('./CatalogoRoteadores'));
 
+// ── Fallback de carregamento ───────────────────────────────────
 const ModuleFallback = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
     <Spinner />
@@ -49,7 +57,9 @@ const ModuleFallback = () => (
 );
 
 export default function PainelSupervisor({ userData }) {
-  const [activeView, setActiveView] = useState('dashboard');
+  // 1.7 — Navegação sincronizada com URL
+  // Ao recarregar: /supervisor/patrocinio → volta direto pro Patrocínio
+  const [activeView, setActiveView] = useModuleNav('dashboard');
 
   const MENU_ITEMS = [
     { id: 'dashboard',           label: 'Visão Geral',            icon: Globe,          section: 'Principal',    color: colors.warning },
@@ -101,7 +111,12 @@ export default function PainelSupervisor({ userData }) {
       case 'japa':                return <JapaSupervisor userData={userData} />;
       case 'patrocinio':          return <PatrocinioSupervisor userData={userData} />;
       case 'solicitar_campanha':  return <SolicitarCampanha userData={userData} />;
-      case 'conteudos_digitais':  return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>🎞️ Conteúdos Digitais — Em breve</div>;
+      case 'conteudos_digitais':
+        return (
+          <Page title="Conteúdos Digitais">
+            <Empty icon="🎞️" title="Repositório de Conteúdos Digitais" description="Em breve..." />
+          </Page>
+        );
       case 'reunioes':            return <AgendaSupervisor userData={userData} />;
       case 'comunicados':         return <Comunicados userData={userData} />;
       case 'links':               return <LinksUteis userData={userData} />;
@@ -111,6 +126,7 @@ export default function PainelSupervisor({ userData }) {
     }
   };
 
+  // Wallboard é fullscreen — renderiza fora do LayoutGlobal
   if (activeView === 'wallboard') {
     return (
       <Suspense fallback={<ModuleFallback />}>

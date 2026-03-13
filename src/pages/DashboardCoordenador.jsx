@@ -99,23 +99,23 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
 
       {/* 2. KPIs GLOBAIS E PERFORMANCE */}
       <div style={styles.kpiGrid}>
-        <MetricCard title="Vendas Globais" value={stats.vendasMes} sub="Fechadas este mês" color={colors?.success || '#10b981'} icon={TrendingUp} />
-        <MetricCard title="Lojas Ativas" value={stats.cidades} sub="Unidades na Rede" color={colors?.primary || '#3b82f6'} icon={Store} />
-        <MetricCard title="Gestores" value={stats.supervisores} sub="Supervisores Ativos" color={colors?.purple || '#8b5cf6'} icon={UserPlus} />
-        <MetricCard title="Avisos RH" value={stats.alertasRh} sub="Pendentes de Ação" color={stats.alertasRh > 0 ? (colors?.danger || '#ef4444') : (colors?.warning || '#f59e0b')} icon={ShieldAlert} />
+        <MetricCard title="Vendas Globais" value={stats.vendasMes} sub="Fechadas este mês" color={colors?.success || colors.success} icon={TrendingUp} />
+        <MetricCard title="Lojas Ativas" value={stats.cidades} sub="Unidades na Rede" color={colors?.primary || colors.primary} icon={Store} />
+        <MetricCard title="Gestores" value={stats.supervisores} sub="Supervisores Ativos" color={colors?.purple || colors.purple} icon={UserPlus} />
+        <MetricCard title="Avisos RH" value={stats.alertasRh} sub="Pendentes de Ação" color={stats.alertasRh > 0 ? (colors?.danger || colors.danger) : (colors?.warning || colors.warning)} icon={ShieldAlert} />
       </div>
 
       <div style={styles.progressSection}>
         <div style={styles.progressHeader}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Target size={20} color={colors?.primary || '#3b82f6'} /> Pacing de Vendas (Rede Global)
+            <Target size={20} color={colors?.primary || colors.primary} /> Pacing de Vendas (Rede Global)
           </h3>
           <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)' }}>
             {stats.vendasMes} / <span style={{ color: 'var(--text-main)' }}>{metaGlobal} Meta</span>
           </span>
         </div>
         <div style={styles.progressBarBg}>
-          <div style={{ ...styles.progressBarFill, width: `${percentualMeta}%`, background: percentualMeta >= 100 ? (colors?.success || '#10b981') : (colors?.primary || '#3b82f6') }} />
+          <div style={{ ...styles.progressBarFill, width: `${percentualMeta}%`, background: percentualMeta >= 100 ? (colors?.success || colors.success) : (colors?.primary || colors.primary) }} />
         </div>
         <p style={{ margin: '10px 0 0 0', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textAlign: 'right' }}>
           {percentualMeta}% do objetivo alcançado
@@ -130,10 +130,10 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
           
           {/* Card: Solicitações de RH */}
           <div style={styles.cardPanel}>
-            <h3 style={styles.cardHeaderTitle}><FileText size={18} color={colors?.primary || '#3b82f6'} /> SOLICITAÇÕES DE RH</h3>
+            <h3 style={styles.cardHeaderTitle}><FileText size={18} color={colors?.primary || colors.primary} /> SOLICITAÇÕES DE RH</h3>
             {rhPendentes.length === 0 ? (
               <div style={styles.emptyStateBox}>
-                <FileCheck size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} />
+                <FileCheck size={24} color="var(--border)" style={{ marginBottom: '10px' }} />
                 <span>A caixa de entrada de RH está vazia. Excelente trabalho!</span>
               </div>
             ) : (
@@ -154,17 +154,17 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
 
           {/* Card: Faltas e Escala */}
           <div style={styles.cardPanel}>
-            <h3 style={styles.cardHeaderTitle}><UserCheck size={18} color={colors?.success || '#10b981'} /> FALTAS E ESCALA</h3>
+            <h3 style={styles.cardHeaderTitle}><UserCheck size={18} color={colors?.success || colors.success} /> FALTAS E ESCALA</h3>
             {faltasHoje.length === 0 ? (
-              <div style={{ ...styles.emptyStateBox, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}>
-                <CheckCircle2 size={24} color="#10b981" style={{ marginBottom: '10px' }} />
+              <div style={{ ...styles.emptyStateBox, background: colors.successLight, color: colors.success, border: '1px solid #a7f3d0' }}>
+                <CheckCircle2 size={24} color={colors.success} style={{ marginBottom: '10px' }} />
                 <strong style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>Cobertura Completa</strong>
                 <span style={{ fontSize: '12px' }}>A operação global iniciou sem baixas reportadas hoje.</span>
               </div>
             ) : (
               <div style={styles.listContainer}>
                 {faltasHoje.map((falta, i) => (
-                  <div key={i} style={{ ...styles.listItem, borderLeft: '3px solid #ef4444' }}>
+                  <div key={i} style={{ ...styles.listItem, borderLeft: `3px solid ${colors.danger}` }}>
                     <div>
                       <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)' }}>{falta.attendantName || 'Colaborador'}</strong>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ausente hoje ({falta.clusterId || 'Sem Loja'})</span>
@@ -179,7 +179,7 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
         {/* Coluna Direita: Rotinas Operacionais */}
         <div style={styles.cardPanel}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ ...styles.cardHeaderTitle, marginBottom: 0 }}><ListChecks size={18} color={colors?.warning || '#f59e0b'} /> ROTINAS OPERACIONAIS</h3>
+            <h3 style={{ ...styles.cardHeaderTitle, marginBottom: 0 }}><ListChecks size={18} color={colors?.warning || colors.warning} /> ROTINAS OPERACIONAIS</h3>
             <span style={{ fontSize: '11px', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer' }}>Editar Rotinas</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -189,7 +189,7 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
                 onClick={() => toggleRotina(rotina.id)}
                 style={{ ...styles.routineCheckItem, background: rotina.done ? 'var(--bg-app)' : 'var(--bg-card)', opacity: rotina.done ? 0.6 : 1 }}
               >
-                <div style={{ width: '20px', height: '20px', borderRadius: '6px', border: `2px solid ${rotina.done ? (colors?.success || '#10b981') : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: rotina.done ? (colors?.success || '#10b981') : 'transparent', transition: '0.2s' }}>
+                <div style={{ width: '20px', height: '20px', borderRadius: '6px', border: `2px solid ${rotina.done ? (colors?.success || colors.success) : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: rotina.done ? (colors?.success || colors.success) : 'transparent', transition: '0.2s' }}>
                   {rotina.done && <CheckCircle2 size={14} color="white" />}
                 </div>
                 <div>
@@ -207,20 +207,20 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
       <div style={{ marginBottom: '40px' }}>
         <h3 style={styles.sectionHeaderShortcut}>Sistemas de Inteligência</h3>
         <div style={styles.shortcutGrid}>
-          <ShortcutCard title="HubOquei Radar" icon={Zap} color={colors?.cyan || '#06b6d4'} onClick={() => setActiveView('hub_oquei')} />
-          <ShortcutCard title="Laboratório Churn" icon={Activity} color={colors?.purple || '#8b5cf6'} onClick={() => setActiveView('churn')} />
-          <ShortcutCard title="Sala de Guerra" icon={Flame} color={colors?.danger || '#ef4444'} onClick={() => setActiveView('war_room')} />
-          <ShortcutCard title="Painel de Vendas" icon={TrendingUp} color={colors?.success || '#10b981'} onClick={() => setActiveView('vendas')} />
+          <ShortcutCard title="HubOquei Radar" icon={Zap} color={colors?.cyan || colors.info} onClick={() => setActiveView('hub_oquei')} />
+          <ShortcutCard title="Laboratório Churn" icon={Activity} color={colors?.purple || colors.purple} onClick={() => setActiveView('churn')} />
+          <ShortcutCard title="Sala de Guerra" icon={Flame} color={colors?.danger || colors.danger} onClick={() => setActiveView('war_room')} />
+          <ShortcutCard title="Painel de Vendas" icon={TrendingUp} color={colors?.success || colors.success} onClick={() => setActiveView('vendas')} />
         </div>
       </div>
 
       <div>
         <h3 style={styles.sectionHeaderShortcut}>Administração e Estrutura</h3>
         <div style={styles.shortcutGrid}>
-          <ShortcutCard title="Gestão de Estrutura" icon={MapPin} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('estrutura')} />
-          <ShortcutCard title="Gestão de Equipa" icon={UserPlus} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('admin_supervisores')} />
-          <ShortcutCard title="Aprovações de RH" icon={FileCheck} color={colors?.warning || '#f59e0b'} onClick={() => setActiveView('rh_requests')} />
-          <ShortcutCard title="Comunicados" icon={Megaphone} color={colors?.primary || '#3b82f6'} onClick={() => setActiveView('comunicados')} />
+          <ShortcutCard title="Gestão de Estrutura" icon={MapPin} color={colors?.primary || colors.primary} onClick={() => setActiveView('estrutura')} />
+          <ShortcutCard title="Gestão de Equipa" icon={UserPlus} color={colors?.primary || colors.primary} onClick={() => setActiveView('admin_supervisores')} />
+          <ShortcutCard title="Aprovações de RH" icon={FileCheck} color={colors?.warning || colors.warning} onClick={() => setActiveView('rh_requests')} />
+          <ShortcutCard title="Comunicados" icon={Megaphone} color={colors?.primary || colors.primary} onClick={() => setActiveView('comunicados')} />
         </div>
       </div>
 
@@ -266,12 +266,12 @@ const ShortcutCard = ({ title, icon: Icon, color, onClick }) => (
 // ==========================================
 const styles = {
   heroBanner: { 
-    background: `linear-gradient(135deg, ${colors?.primary || '#3b82f6'} 0%, #1e40af 100%)`, 
+    background: `linear-gradient(135deg, ${colors?.primary || colors.primary} 0%, #1e40af 100%)`, 
     borderRadius: '24px', padding: '35px 40px', display: 'flex', justifyContent: 'space-between', 
-    alignItems: 'flex-start', color: 'white', marginBottom: '30px', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.2)'
+    alignItems: 'flex-start', color: '#ffffff', marginBottom: '30px', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.2)'
   },
   heroContent: { flex: 1 },
-  heroRefreshBtn: { background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '12px', borderRadius: '14px', color: 'white', cursor: 'pointer', backdropFilter: 'blur(10px)', transition: 'background 0.2s' },
+  heroRefreshBtn: { background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '12px', borderRadius: '14px', color: '#ffffff', cursor: 'pointer', backdropFilter: 'blur(10px)', transition: 'background 0.2s' },
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' },
   
   progressSection: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '20px', padding: '25px', marginBottom: '30px', boxShadow: 'var(--shadow-sm)' },

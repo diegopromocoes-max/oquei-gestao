@@ -17,18 +17,27 @@ import { X, ChevronDown, ChevronUp, AlertCircle,
          CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
-// CORES — use nas páginas: accent={colors.primary}
+// CORES — use nas páginas: accent=colors.primary
 // ─────────────────────────────────────────────────────────────
 export const colors = {
-  primary: '#2563eb',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger:  '#ef4444',
-  purple:  '#7c3aed',
-  info:    '#06b6d4',
-  neutral: '#64748b',
-  amber:   '#f59e0b',
-  rose:    '#f43f5e',
+  primary:      '#2563eb',
+  success:      '#10b981',
+  warning:      '#f59e0b',
+  danger:       '#ef4444',
+  purple:       '#7c3aed',
+  info:         '#06b6d4',
+  neutral:      '#64748b',
+  amber:        '#f59e0b',
+  rose:         '#f43f5e',
+  sky:          '#0ea5e9',
+  emerald:      '#10b981',
+  primaryHover: '#1d4ed8',
+  primaryLight: 'rgba(37, 99, 235, 0.12)',
+  successLight: 'rgba(16, 185, 129, 0.12)',
+  warningLight: 'rgba(245, 158, 11, 0.12)',
+  dangerLight:  'rgba(239, 68, 68, 0.12)',
+  purpleLight:  'rgba(124, 58, 237, 0.12)',
+  infoLight:    'rgba(6, 182, 212, 0.12)',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -81,10 +90,10 @@ const S = {
   th:           { padding: '13px 18px', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border)', textAlign: 'left', whiteSpace: 'nowrap' },
   td:           { padding: '13px 18px', fontSize: '13px', color: 'var(--text-main)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle' },
 
-  btnPrimary:   { background: 'var(--text-brand, #2563eb)', color: '#fff', border: 'none', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  btnPrimary:   { background: 'var(--text-brand, #2563eb)', color: '#ffffff', border: 'none', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
   btnSecondary: { background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-md, rgba(255,255,255,0.15))', padding: '11px 20px', borderRadius: '10px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
-  btnDanger:    { background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
-  btnSuccess:   { background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  btnDanger:    { background: 'rgba(239,68,68,0.1)', color: colors.danger, border: '1px solid rgba(239,68,68,0.25)', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  btnSuccess:   { background: 'rgba(16,185,129,0.1)', color: colors.success, border: '1px solid rgba(16,185,129,0.25)', padding: '11px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
   btnIcon:      { width: '36px', height: '36px', borderRadius: '9px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
 
   field:    { display: 'flex', flexDirection: 'column', gap: '6px' },
@@ -196,7 +205,7 @@ export function KpiCard({ label, valor, delta, icon, accent = colors.primary, su
       {delta !== undefined && (
         <div style={{ display:'inline-flex', alignItems:'center', padding:'3px 9px', borderRadius:'50px', fontSize:'12px', fontWeight:'800', alignSelf:'flex-start',
           background: isPos ? 'rgba(16,185,129,0.12)' : isNeg ? 'rgba(239,68,68,0.12)' : 'rgba(100,116,139,0.12)',
-          color:      isPos ? '#10b981' : isNeg ? '#ef4444' : '#64748b',
+          color:      isPos ? colors.success : isNeg ? colors.danger : colors.neutral,
         }}>
           {delta}
         </div>
@@ -269,13 +278,13 @@ export function DataTable({ columns = [], data = [], loading = false, emptyMsg =
 // BADGE
 // ─────────────────────────────────────────────────────────────
 const BADGE_COLORS = {
-  primary: { bg:'rgba(37,99,235,0.15)',   text:'#3b82f6' },
-  success: { bg:'rgba(16,185,129,0.15)',  text:'#10b981' },
-  warning: { bg:'rgba(245,158,11,0.15)',  text:'#f59e0b' },
-  danger:  { bg:'rgba(239,68,68,0.15)',   text:'#ef4444' },
-  purple:  { bg:'rgba(124,58,237,0.15)',  text:'#7c3aed' },
-  info:    { bg:'rgba(6,182,212,0.15)',   text:'#06b6d4' },
-  neutral: { bg:'rgba(100,116,139,0.15)', text:'#64748b' },
+  primary: { bg:'rgba(37,99,235,0.15)',   text:colors.primary },
+  success: { bg:'rgba(16,185,129,0.15)',  text:colors.success },
+  warning: { bg:'rgba(245,158,11,0.15)',  text:colors.warning },
+  danger:  { bg:'rgba(239,68,68,0.15)',   text:colors.danger },
+  purple:  { bg:'rgba(124,58,237,0.15)',  text:colors.purple },
+  info:    { bg:'rgba(6,182,212,0.15)',   text:colors.info },
+  neutral: { bg:'rgba(100,116,139,0.15)', text:colors.neutral },
 };
 const STATUS_TO_COLOR = {
   'ativo':'success', 'inativo':'neutral', 'pendente':'warning',
@@ -384,10 +393,10 @@ export function Spinner({ size = 22, centered = false }) {
 // INFO BOX
 // ─────────────────────────────────────────────────────────────
 const IB = {
-  info:    { bg:'rgba(6,182,212,0.08)',  border:'rgba(6,182,212,0.35)',  accent:'#06b6d4', Icon:Info           },
-  warning: { bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.35)', accent:'#f59e0b', Icon:AlertTriangle   },
-  success: { bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.35)', accent:'#10b981', Icon:CheckCircle2    },
-  danger:  { bg:'rgba(239,68,68,0.08)',  border:'rgba(239,68,68,0.35)',  accent:'#ef4444', Icon:AlertCircle     },
+  info:    { bg:'rgba(6,182,212,0.08)',  border:'rgba(6,182,212,0.35)',  accent:colors.info, Icon:Info           },
+  warning: { bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.35)', accent:colors.warning, Icon:AlertTriangle   },
+  success: { bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.35)', accent:colors.success, Icon:CheckCircle2    },
+  danger:  { bg:'rgba(239,68,68,0.08)',  border:'rgba(239,68,68,0.35)',  accent:colors.danger, Icon:AlertCircle     },
 };
 export function InfoBox({ type = 'info', children }) {
   const c = IB[type] || IB.info;

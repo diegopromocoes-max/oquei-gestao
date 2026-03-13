@@ -4,6 +4,7 @@ import {
   Legend, PieChart, Pie, Cell, BarChart, Bar, ReferenceLine, LineChart, Line, ComposedChart
 } from 'recharts';
 import { 
+import { colors } from '../components/ui';
   TrendingUp, Target, Trophy, MapPin, Zap, 
   Clock, Flame, Users, Store, UserX, AlertTriangle, 
   ArrowUpCircle, ArrowDownCircle, ShieldCheck, ChevronDown, ChevronUp, AlertOctagon, Filter, Globe, Activity,
@@ -128,15 +129,15 @@ export default function Wallboard({ userData, onExit }) {
       const data = payload[0].payload;
       const color = data.solidColor;
       return (
-        <div style={{ background: 'rgba(22, 25, 59, 0.95)', padding: '15px', borderRadius: '12px', border: '1px solid #2d325a', color: 'white', backdropFilter: 'blur(10px)' }}>
+        <div style={{ background: 'rgba(22, 25, 59, 0.95)', padding: '15px', borderRadius: '12px', border: '1px solid #2d325a', color: '#ffffff', backdropFilter: 'blur(10px)' }}>
           <p style={{ margin: '0 0 10px 0', fontWeight: '900', fontSize: '15px' }}>{data.city}</p>
           <div style={{display:'flex', justifyContent:'space-between', gap:'20px', marginBottom:'5px'}}>
-            <span style={{ fontSize: '12px', color: '#8b8fa3' }}>Base Dia 1:</span>
-            <strong style={{color:'white', fontSize:'13px'}}>{data.baseStart}</strong>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Base Dia 1:</span>
+            <strong style={{color: '#ffffff', fontSize:'13px'}}>{data.baseStart}</strong>
           </div>
           <div style={{display:'flex', justifyContent:'space-between', gap:'20px', marginBottom:'10px', borderBottom:'1px solid #2d325a', paddingBottom:'10px'}}>
-            <span style={{ fontSize: '12px', color: '#8b8fa3' }}>Base Hoje:</span>
-            <strong style={{color:'white', fontSize:'13px'}}>{data.currentBase}</strong>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Base Hoje:</span>
+            <strong style={{color: '#ffffff', fontSize:'13px'}}>{data.currentBase}</strong>
           </div>
           <div style={{display:'flex', justifyContent:'space-between', gap:'20px'}}>
             <span style={{ fontSize: '13px', fontWeight: 'bold', color: color }}>Crescimento Líquido:</span>
@@ -265,8 +266,8 @@ export default function Wallboard({ userData, onExit }) {
             )}
           </div>
           <span style={styles.progressBarValues}>
-            <span style={{ color: 'white' }}>{current}</span>
-            <span style={{ fontSize: '11px', color: '#8b8fa3' }}> / {target}</span>
+            <span style={{ color: '#ffffff' }}>{current}</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}> / {target}</span>
           </span>
         </div>
         <div style={styles.progressBarTrack}>
@@ -384,10 +385,10 @@ export default function Wallboard({ userData, onExit }) {
         {/* CENTRO: Saudação, Data e Controles de Rolagem */}
         <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', width: '40%'}}>
            <div style={{display: 'flex', alignItems: 'baseline', gap: '8px'}}>
-             <span style={{fontSize: '14px', fontWeight: 'bold', color: 'white'}}>
+             <span style={{fontSize: '14px', fontWeight: 'bold', color: '#ffffff'}}>
                {greeting}, <span style={{color: '#00f2fe'}}>{firstName}</span>!
              </span>
-             <span style={{fontSize: '11px', color: '#8b8fa3', textTransform: 'capitalize'}}>
+             <span style={{fontSize: '11px', color: 'var(--text-muted)', textTransform: 'capitalize'}}>
                {dateStr}
              </span>
            </div>
@@ -435,7 +436,7 @@ export default function Wallboard({ userData, onExit }) {
               <div style={{...styles.iconGlow, color: '#c471ed', boxShadow: '0 0 10px rgba(196, 113, 237, 0.4)'}}>
                 <Users size={18} />
               </div>
-              <h2 style={{...styles.moduleTitle, color: 'white'}}>Operação e Equipa</h2>
+              <h2 style={{...styles.moduleTitle, color: '#ffffff'}}>Operação e Equipa</h2>
             </div>
             <div style={styles.collapseBtn}>
                {collapsed.operacao ? <ChevronDown size={20} color="#8b8fa3"/> : <ChevronUp size={20} color="#8b8fa3"/>}
@@ -516,7 +517,7 @@ export default function Wallboard({ userData, onExit }) {
               <div style={{...styles.iconGlow, color: '#0ba360', boxShadow: '0 0 10px rgba(11, 163, 96, 0.4)'}}>
                 <TrendingUp size={18} />
               </div>
-              <h2 style={{...styles.moduleTitle, color: 'white'}}>Tração de Vendas e SLA</h2>
+              <h2 style={{...styles.moduleTitle, color: '#ffffff'}}>Tração de Vendas e SLA</h2>
             </div>
             <div style={styles.collapseBtn}>
                {collapsed.vendas ? <ChevronDown size={20} color="#8b8fa3"/> : <ChevronUp size={20} color="#8b8fa3"/>}
@@ -565,14 +566,14 @@ export default function Wallboard({ userData, onExit }) {
                           <div style={{
                             ...styles.sellerAvatar, 
                             background: isFirst ? 'linear-gradient(135deg, #f83600 0%, #f9d423 100%)' : '#1e2042',
-                            color: 'white',
+                            color: '#ffffff',
                             border: isFirst ? 'none' : '1px solid #2d325a'
                           }}>
                             {index + 1}º
                           </div>
                           <div>
                             <h4 style={{margin: 0, fontSize: isFirst ? '15px' : '14px', fontWeight: '900', color: isFirst ? '#f9d423' : 'white'}}>{seller.name}</h4>
-                            <span style={{fontSize: '11px', color: '#8b8fa3', fontWeight: 'bold'}}>{seller.store}</span>
+                            <span style={{fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold'}}>{seller.store}</span>
                           </div>
                         </div>
                         <div style={{fontSize: '22px', fontWeight: '900', color: isFirst ? '#f9d423' : 'white', textShadow: isFirst ? '0 0 10px rgba(249,212,35,0.5)' : 'none'}}>
@@ -597,7 +598,7 @@ export default function Wallboard({ userData, onExit }) {
               <div style={{...styles.iconGlow, color: '#f9d423', boxShadow: '0 0 10px rgba(249, 212, 35, 0.4)'}}>
                 <ShieldCheck size={18} />
               </div>
-              <h2 style={{...styles.moduleTitle, color: 'white'}}>Saúde da Base e Market Share</h2>
+              <h2 style={{...styles.moduleTitle, color: '#ffffff'}}>Saúde da Base e Market Share</h2>
             </div>
             <div style={styles.collapseBtn}>
                {collapsed.churn ? <ChevronDown size={20} color="#8b8fa3"/> : <ChevronUp size={20} color="#8b8fa3"/>}
@@ -618,7 +619,7 @@ export default function Wallboard({ userData, onExit }) {
                  </div>
 
                  <div style={styles.churnReasonCard}>
-                    <h4 style={{fontSize:'12px', fontWeight:'bold', color:'#8b8fa3', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.05em', display:'flex', alignItems:'center', gap:'5px'}}>
+                    <h4 style={{fontSize:'12px', fontWeight:'bold', color: 'var(--text-muted)', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.05em', display:'flex', alignItems:'center', gap:'5px'}}>
                       <Activity size={14}/> Motivos de Evasão (Mês Atual)
                     </h4>
                     <div style={{display:'flex', alignItems:'center', justifyContent:'center', height:'160px'}}>
@@ -637,7 +638,7 @@ export default function Wallboard({ userData, onExit }) {
                             ))}
                           </Pie>
                           <RechartsTooltip 
-                            contentStyle={{backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: 'white', borderRadius: '12px', fontSize:'11px', backdropFilter:'blur(5px)'}} 
+                            contentStyle={{backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', fontSize:'11px', backdropFilter:'blur(5px)'}} 
                             itemStyle={{fontWeight:'bold'}}
                           />
                         </PieChart>
@@ -647,7 +648,7 @@ export default function Wallboard({ userData, onExit }) {
                        {churnData.churnReasons.slice(0,3).map((item, idx) => {
                           const baseColor = item.gradId === 'neon-orange' ? '#f83600' : item.gradId === 'neon-purple' ? '#c471ed' : '#00f2fe';
                           return (
-                            <div key={idx} style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', color:'white', fontWeight:'bold'}}>
+                            <div key={idx} style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', color: '#ffffff', fontWeight:'bold'}}>
                                <div style={{width:'8px', height:'8px', borderRadius:'50%', background: baseColor, boxShadow:`0 0 5px ${baseColor}`}}></div>
                                {item.name}
                             </div>
@@ -661,8 +662,8 @@ export default function Wallboard({ userData, onExit }) {
                 <div style={styles.penetrationChartCard}>
                   <div style={{marginBottom: '15px', display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
                     <div>
-                      <h3 style={{fontSize:'16px', fontWeight:'900', color:'white', margin:0, letterSpacing:'-0.02em'}}>Evolução da Penetração (% HPs Ocupadas)</h3>
-                      <p style={{fontSize:'11px', color:'#8b8fa3', margin:'4px 0 0 0'}}>Expansão de território nos últimos 6 meses</p>
+                      <h3 style={{fontSize:'16px', fontWeight:'900', color: '#ffffff', margin:0, letterSpacing:'-0.02em'}}>Evolução da Penetração (% HPs Ocupadas)</h3>
+                      <p style={{fontSize:'11px', color: 'var(--text-muted)', margin:'4px 0 0 0'}}>Expansão de território nos últimos 6 meses</p>
                     </div>
                   </div>
                   
@@ -673,10 +674,10 @@ export default function Wallboard({ userData, onExit }) {
                           <XAxis dataKey="month" stroke="#8b8fa3" tick={{fill: '#8b8fa3', fontSize: 11, fontWeight:'bold'}} axisLine={false} tickLine={false} />
                           <YAxis stroke="#8b8fa3" tick={{fill: '#8b8fa3', fontSize: 11}} axisLine={false} tickLine={false} tickFormatter={(val) => `${val}%`} />
                           <RechartsTooltip 
-                            contentStyle={{backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: 'white', borderRadius: '12px', backdropFilter:'blur(5px)', fontSize:'12px'}} 
+                            contentStyle={{backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', backdropFilter:'blur(5px)', fontSize:'12px'}} 
                             itemStyle={{fontWeight:'bold'}}
                           />
-                          <Legend wrapperStyle={{fontSize:'11px', fontWeight:'bold', paddingTop:'10px', color:'white'}} />
+                          <Legend wrapperStyle={{fontSize:'11px', fontWeight:'bold', paddingTop:'10px', color: '#ffffff'}} />
                           <Area type="monotone" dataKey="Bady Bassitt" stroke="#00f2fe" fill="url(#neon-cyan-alpha)" strokeWidth={3} style={{filter: 'drop-shadow(0 0 4px rgba(0,242,254,0.5))'}} />
                           <Area type="monotone" dataKey="Nova Granada" stroke="#0ba360" fill="url(#neon-green-alpha)" strokeWidth={3} style={{filter: 'drop-shadow(0 0 4px rgba(11,163,96,0.5))'}} />
                           <Area type="monotone" dataKey="Nova Aliança" stroke="#f64f59" fill="url(#neon-purple-alpha)" strokeWidth={3} style={{filter: 'drop-shadow(0 0 4px rgba(246,79,89,0.5))'}} />
@@ -691,7 +692,7 @@ export default function Wallboard({ userData, onExit }) {
                     const isNegative = city.growth.includes('-');
                     return (
                       <div key={idx} style={styles.cityGrowthRow}>
-                        <span style={{fontSize:'13px', fontWeight:'bold', color:'white'}}>{city.name}</span>
+                        <span style={{fontSize:'13px', fontWeight:'bold', color: '#ffffff'}}>{city.name}</span>
                         <span style={{
                           fontSize:'14px', fontWeight:'900', 
                           color: isNegative ? '#f83600' : '#0ba360', 
@@ -722,7 +723,7 @@ export default function Wallboard({ userData, onExit }) {
               <div style={{...styles.iconGlow, color: '#00f2fe', boxShadow: '0 0 10px rgba(0, 242, 254, 0.4)'}}>
                 <Globe size={18} />
               </div>
-              <h2 style={{...styles.moduleTitle, color: 'white'}}>Monitor Global de Expansão</h2>
+              <h2 style={{...styles.moduleTitle, color: '#ffffff'}}>Monitor Global de Expansão</h2>
             </div>
             <div style={styles.collapseBtn}>
                {collapsed.mega ? <ChevronDown size={20} color="#8b8fa3"/> : <ChevronUp size={20} color="#8b8fa3"/>}
@@ -734,7 +735,7 @@ export default function Wallboard({ userData, onExit }) {
               <div style={styles.megaFilterRow}>
                  <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                    <Filter size={16} color="#8b8fa3" />
-                   <span style={{fontSize:'13px', fontWeight:'bold', color:'white'}}>Filtros:</span>
+                   <span style={{fontSize:'13px', fontWeight:'bold', color: '#ffffff'}}>Filtros:</span>
                  </div>
                  <select 
                    value={megaFilterCluster} 
@@ -756,14 +757,14 @@ export default function Wallboard({ userData, onExit }) {
                  </select>
 
                  {isMegaFiltered && (
-                   <div style={{marginLeft: 'auto', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', background: totalFilteredNetAdds > 0 ? 'rgba(11,163,96,0.15)' : totalFilteredNetAdds < 0 ? 'rgba(248,54,0,0.15)' : 'rgba(249,212,35,0.15)', color: totalFilteredNetAdds > 0 ? '#3cba92' : totalFilteredNetAdds < 0 ? '#f64f59' : '#f9d423', border: `1px solid ${totalFilteredNetAdds > 0 ? '#0ba360' : totalFilteredNetAdds < 0 ? '#f83600' : '#f59e0b'}`}}>
+                   <div style={{marginLeft: 'auto', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', background: totalFilteredNetAdds > 0 ? 'rgba(11,163,96,0.15)' : totalFilteredNetAdds < 0 ? 'rgba(248,54,0,0.15)' : 'rgba(249,212,35,0.15)', color: totalFilteredNetAdds > 0 ? '#3cba92' : totalFilteredNetAdds < 0 ? '#f64f59' : '#f9d423', border: `1px solid ${totalFilteredNetAdds > 0 ? '#0ba360' : totalFilteredNetAdds < 0 ? '#f83600' : colors.warning}`}}>
                      Balanço: {totalFilteredNetAdds > 0 ? '+' : ''}{totalFilteredNetAdds} clientes
                    </div>
                  )}
               </div>
 
               <div style={styles.megaChartWrapper}>
-                 <h3 style={{fontSize:'14px', fontWeight:'bold', color:'#8b8fa3', margin:'0 0 25px 0', textAlign:'center', textTransform:'uppercase', letterSpacing:'0.05em'}}>Crescimento Líquido (Base Dia 1 vs Base Hoje)</h3>
+                 <h3 style={{fontSize:'14px', fontWeight:'bold', color: 'var(--text-muted)', margin:'0 0 25px 0', textAlign:'center', textTransform:'uppercase', letterSpacing:'0.05em'}}>Crescimento Líquido (Base Dia 1 vs Base Hoje)</h3>
                  <div style={{width: '100%', height: '340px'}}>
                    <ResponsiveContainer>
                      <ComposedChart data={filteredMegaData} margin={{ top: 35, right: 20, left: -20, bottom: 10 }}>
@@ -840,15 +841,15 @@ const styles = {
     boxShadow: '0 4px 20px rgba(0,0,0,0.8)'
   },
   logoBadge: { background: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)', padding: '6px', borderRadius: '8px', boxShadow: '0 0 10px rgba(0,242,254,0.4)' },
-  title: { fontSize: '18px', fontWeight: '900', color: 'white', margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase', textShadow: '0 2px 5px rgba(255,255,255,0.2)' }, 
-  subtitle: { fontSize: '10px', color: '#8b8fa3', margin: '0', fontWeight: '600', letterSpacing: '0.1em', textTransform: 'uppercase' },
+  title: { fontSize: '18px', fontWeight: '900', color: '#ffffff', margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase', textShadow: '0 2px 5px rgba(255,255,255,0.2)' }, 
+  subtitle: { fontSize: '10px', color: 'var(--text-muted)', margin: '0', fontWeight: '600', letterSpacing: '0.1em', textTransform: 'uppercase' },
   clockContainer: { display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(22, 25, 59, 0.8)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.5)' },
   clockText: { fontSize: '16px', fontWeight: '900', color: '#00f2fe', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.05em', textShadow: '0 0 8px rgba(0,242,254,0.5)' },
-  exitBtn: { background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '8px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' },
+  exitBtn: { background: 'rgba(239, 68, 68, 0.1)', color: colors.danger, border: '1px solid rgba(239, 68, 68, 0.3)', padding: '8px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' },
 
   // Scroll Controls no Header
   scrollControls: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', background: 'rgba(255,255,255,0.05)', padding: '4px 12px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' },
-  scrollBtn: { background: 'transparent', border: 'none', color: '#8b8fa3', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', transition: 'color 0.2s', outline: 'none' },
+  scrollBtn: { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', transition: 'color 0.2s', outline: 'none' },
 
   scrollArea: {
     flex: 1,
@@ -868,41 +869,41 @@ const styles = {
   mod1Grid: { display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '25px' },
   statusRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
   statusBox: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '16px', padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' },
-  statusValue: { fontSize: '32px', fontWeight: '900', color: 'white', display: 'block', lineHeight: 1, textShadow: '0 2px 10px rgba(255,255,255,0.2)' },
-  statusLabel: { fontSize: '11px', color: '#8b8fa3', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '6px', display: 'block' },
+  statusValue: { fontSize: '32px', fontWeight: '900', color: '#ffffff', display: 'block', lineHeight: 1, textShadow: '0 2px 10px rgba(255,255,255,0.2)' },
+  statusLabel: { fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '6px', display: 'block' },
   
   bancoHorasCard: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '16px', padding: '25px', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' },
-  bhTitle: { fontSize: '15px', color: 'white', fontWeight: '900', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  bhSubTitle: { fontSize: '12px', color: '#8b8fa3', fontWeight: '900', textTransform: 'uppercase', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.05em' },
+  bhTitle: { fontSize: '15px', color: '#ffffff', fontWeight: '900', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  bhSubTitle: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: '900', textTransform: 'uppercase', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.05em' },
   bhRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' },
-  bhName: { fontSize: '14px', color: '#cbd5e1', fontWeight: '700' },
+  bhName: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: '700' },
   bhVal: { fontSize: '14px', fontWeight: '900', textShadow: '0 0 10px currentColor' },
 
   mod2Grid: { display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '25px' },
   globalSpeedGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' },
   globalSpeedCard: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '20px', padding: '25px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', position:'relative' },
-  globalSpeedTitle: { fontSize: '12px', color: '#8b8fa3', fontWeight: '900', textTransform: 'uppercase', margin: '0 0 15px 0', letterSpacing: '0.1em' },
+  globalSpeedTitle: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: '900', textTransform: 'uppercase', margin: '0 0 15px 0', letterSpacing: '0.1em' },
   backlogBadge: { background: 'rgba(249, 212, 35, 0.1)', color: '#f9d423', padding: '4px 10px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold', display:'flex', alignItems:'center', gap:'5px', border: '1px solid rgba(249,212,35,0.3)' },
 
   neonDonutCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-  neonDonutTitle: { fontSize: '12px', color: '#8b8fa3', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em', margin:0 },
+  neonDonutTitle: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em', margin:0 },
   neonDonutWrapper: { position: 'relative', height: '120px', width:'120px', display: 'flex', justifyContent: 'center', marginTop: '10px' },
   neonDonutContent: { position: 'absolute', top: '50%', left:'50%', transform:'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  neonDonutValue: { fontSize: '28px', fontWeight: '900', color: 'white', lineHeight: 1, textShadow: '0 0 10px rgba(255,255,255,0.5)' },
-  neonDonutTarget: { fontSize: '11px', color: '#8b8fa3', fontWeight: 'bold', marginTop:'5px' },
+  neonDonutValue: { fontSize: '28px', fontWeight: '900', color: '#ffffff', lineHeight: 1, textShadow: '0 0 10px rgba(255,255,255,0.5)' },
+  neonDonutTarget: { fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold', marginTop:'5px' },
 
   citiesSpeedGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' },
   cityDashCard: { background: 'rgba(22, 25, 59, 0.4)', backdropFilter: 'blur(5px)', border: '1px solid #2d325a', borderRadius: '16px', padding: '20px', boxShadow: '0 10px 20px rgba(0,0,0,0.3)' },
-  cityDashTitle: { fontSize: '14px', fontWeight: '900', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 15px 0', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' },
+  cityDashTitle: { fontSize: '14px', fontWeight: '900', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 15px 0', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' },
   
   progressBarWrapper: { width: '100%', display: 'flex', flexDirection: 'column' },
   progressBarHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' },
-  progressBarTitle: { fontSize: '11px', color: '#8b8fa3', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  progressBarTitle: { fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' },
   progressBarValues: { fontSize: '15px', fontWeight: '900' },
   progressBarTrack: { width: '100%', height: '8px', background: '#1a1e4a', borderRadius: '4px', overflow: 'hidden' },
 
   rankingCard: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '20px', padding: '25px', height: '100%', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  rankingTitle: { fontSize: '15px', fontWeight: '900', color: 'white', display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 25px 0', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  rankingTitle: { fontSize: '15px', fontWeight: '900', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 25px 0', textTransform: 'uppercase', letterSpacing: '0.05em' },
   sellerList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   sellerItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 15px', borderRadius: '12px', border: '1px solid transparent', transition: 'all 0.3s' },
   sellerAvatar: { width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: '900' },
@@ -910,7 +911,7 @@ const styles = {
   mod3Grid: { display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '25px' },
   netAddsGlobal: { background: 'linear-gradient(135deg, #0ba360 0%, #3cba92 100%)', padding: '25px', borderRadius: '20px', boxShadow: '0 15px 30px rgba(11, 163, 96, 0.3)', position: 'relative', overflow: 'hidden' },
   netAddsLabel: { fontSize: '12px', color: '#ecfdf5', fontWeight: '900', textTransform: 'uppercase', display: 'block', marginBottom: '15px', letterSpacing: '0.05em', position: 'relative', zIndex: 2 },
-  netAddsVal: { fontSize: '56px', fontWeight: '900', color: 'white', lineHeight: 1, textShadow: '0 4px 15px rgba(0,0,0,0.3)', position: 'relative', zIndex: 2 },
+  netAddsVal: { fontSize: '56px', fontWeight: '900', color: '#ffffff', lineHeight: 1, textShadow: '0 4px 15px rgba(0,0,0,0.3)', position: 'relative', zIndex: 2 },
   netAddsGlow: { position: 'absolute', top: '-50%', right: '-20%', width: '180px', height: '180px', background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)', borderRadius: '50%', zIndex: 1 },
   
   churnReasonCard: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '20px', padding: '25px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', flex: 1, display:'flex', flexDirection:'column' },
@@ -921,14 +922,14 @@ const styles = {
   penetrationChartCard: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid #2d325a', borderRadius: '20px', padding: '25px', flex:1, boxShadow: '0 15px 35px rgba(0,0,0,0.5)' },
 
   megaFilterRow: { display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(22, 25, 59, 0.4)', padding: '15px 20px', borderRadius: '16px', marginBottom: '25px', flexWrap: 'wrap', border: '1px solid #2d325a' },
-  megaSelect: { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '10px 15px', borderRadius: '10px', outline: 'none', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" },
+  megaSelect: { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#ffffff', padding: '10px 15px', borderRadius: '10px', outline: 'none', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" },
   megaChartWrapper: { background: 'rgba(22, 25, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '30px', boxShadow: '0 15px 40px rgba(0,0,0,0.5)' },
 
   tickerWrapper: { position: 'fixed', bottom: '25px', left: '40px', right: '40px', zIndex: 100 },
   tickerContainer: { display: 'flex', height: '45px', borderRadius: '12px', overflow: 'hidden', background: 'rgba(10, 11, 26, 0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 30px rgba(0,0,0,0.8)' },
-  tickerLabel: { background: 'linear-gradient(90deg, #f83600 0%, #f9d423 100%)', color: 'white', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '900', letterSpacing: '0.15em', zIndex: 2, boxShadow: '5px 0 15px rgba(0,0,0,0.5)' },
+  tickerLabel: { background: 'linear-gradient(90deg, #f83600 0%, #f9d423 100%)', color: '#ffffff', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '900', letterSpacing: '0.15em', zIndex: 2, boxShadow: '5px 0 15px rgba(0,0,0,0.5)' },
   tickerTrack: { flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', position: 'relative' },
-  tickerText: { whiteSpace: 'nowrap', fontSize: '14px', color: '#cbd5e1', fontWeight: '600', paddingLeft: '100%', animation: 'scrollTicker 25s linear infinite', letterSpacing: '0.05em' }
+  tickerText: { whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', paddingLeft: '100%', animation: 'scrollTicker 25s linear infinite', letterSpacing: '0.05em' }
 };
 
 const styleSheet = document.createElement("style");

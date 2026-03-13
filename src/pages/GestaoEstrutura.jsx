@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 
 import { styles as global } from '../styles/globalStyles';
+import { colors } from '../components/ui';
 
 export default function GestaoEstrutura({ setNotification }) {
   // --- NAVEGAÇÃO ---
@@ -144,7 +145,7 @@ export default function GestaoEstrutura({ setNotification }) {
       
       {/* CABEÇALHO */}
       <div style={global.header}>
-        <div style={{...global.iconHeader, background: '#4f46e5'}}><Network size={28} color="white"/></div>
+        <div style={{...global.iconHeader, background: colors.purple}}><Network size={28} color="white"/></div>
         <div>
           <h1 style={global.title}>Hierarquia e Estrutura</h1>
           <p style={global.subtitle}>Gestão de Canais ➔ Regionais ➔ Lojas Físicas.</p>
@@ -153,13 +154,13 @@ export default function GestaoEstrutura({ setNotification }) {
 
       {/* SISTEMA DE ABAS */}
       <div style={styles.tabsContainer}>
-        <button onClick={() => setActiveTab('canais')} style={activeTab === 'canais' ? {...styles.activeTab, color: '#f59e0b', borderBottomColor: '#f59e0b'} : styles.tab}>
+        <button onClick={() => setActiveTab('canais')} style={activeTab === 'canais' ? {...styles.activeTab, color: colors.warning, borderBottomColor: colors.warning} : styles.tab}>
           <Users size={16} style={{marginRight: '6px'}} /> 1. Canais de Venda
         </button>
-        <button onClick={() => setActiveTab('clusters')} style={activeTab === 'clusters' ? {...styles.activeTab, color: '#4f46e5', borderBottomColor: '#4f46e5'} : styles.tab}>
+        <button onClick={() => setActiveTab('clusters')} style={activeTab === 'clusters' ? {...styles.activeTab, color: colors.purple, borderBottomColor: colors.purple} : styles.tab}>
           <Globe size={16} style={{marginRight: '6px'}} /> 2. Regionais (Clusters)
         </button>
-        <button onClick={() => setActiveTab('cidades')} style={activeTab === 'cidades' ? {...styles.activeTab, color: '#10b981', borderBottomColor: '#10b981'} : styles.tab}>
+        <button onClick={() => setActiveTab('cidades')} style={activeTab === 'cidades' ? {...styles.activeTab, color: colors.success, borderBottomColor: colors.success} : styles.tab}>
           <Building2 size={16} style={{marginRight: '6px'}} /> 3. Lojas / Cidades
         </button>
       </div>
@@ -174,13 +175,13 @@ export default function GestaoEstrutura({ setNotification }) {
           <>
             <div style={{flex: 1, minWidth: '300px', maxWidth: '400px'}}>
               <div style={global.card}>
-                <h3 style={{ ...global.sectionTitle, color: '#f59e0b' }}><Users size={20}/> Novo Canal Matriz</h3>
+                <h3 style={{ ...global.sectionTitle, color: colors.warning }}><Users size={20}/> Novo Canal Matriz</h3>
                 <form onSubmit={addChannel} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <div style={global.field}>
                       <label style={global.label}>Nome do Canal</label>
                       <input style={global.input} placeholder="Ex: Lojas Físicas, PAP, B2B..." value={channelName} onChange={e=>setChannelName(e.target.value)} required />
                     </div>
-                    <button style={{ ...global.btnPrimary, backgroundColor: '#f59e0b' }}>Salvar Canal</button>
+                    <button style={{ ...global.btnPrimary, backgroundColor: colors.warning }}>Salvar Canal</button>
                 </form>
               </div>
             </div>
@@ -193,13 +194,13 @@ export default function GestaoEstrutura({ setNotification }) {
                       <div style={styles.cardHeader}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{...styles.iconBox, background: 'rgba(245, 158, 11, 0.1)'}}>
-                            <Users size={22} color="#f59e0b" />
+                            <Users size={22} color={colors.warning} />
                           </div>
                           <h4 style={{ margin: 0, fontSize: '16px', color: 'var(--text-main)' }}>{ch.name}</h4>
                         </div>
                         <div style={{ display: 'flex', gap: '5px' }}>
                           <button onClick={() => openEdit('channel', ch)} style={styles.actionBtn} title="Editar"><Edit size={16} color="var(--text-brand)"/></button>
-                          <button onClick={() => handleDelete('sales_channels', ch.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color="#ef4444"/></button>
+                          <button onClick={() => handleDelete('sales_channels', ch.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color={colors.danger}/></button>
                         </div>
                       </div>
                     </div>
@@ -217,7 +218,7 @@ export default function GestaoEstrutura({ setNotification }) {
           <>
             <div style={{flex: 1, minWidth: '300px', maxWidth: '400px'}}>
               <div style={global.card}>
-                <h3 style={{ ...global.sectionTitle, color: '#4f46e5' }}><Globe size={20}/> Nova Regional</h3>
+                <h3 style={{ ...global.sectionTitle, color: colors.purple }}><Globe size={20}/> Nova Regional</h3>
                 <form onSubmit={addCluster} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <div style={global.field}>
                       <label style={global.label}>Nome da Regional</label>
@@ -231,7 +232,7 @@ export default function GestaoEstrutura({ setNotification }) {
                       </select>
                       <span style={{fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px'}}>As Regionais normalmente pertencem ao canal "Lojas Físicas".</span>
                     </div>
-                    <button style={{ ...global.btnPrimary, backgroundColor: '#4f46e5' }}>Salvar Regional</button>
+                    <button style={{ ...global.btnPrimary, backgroundColor: colors.purple }}>Salvar Regional</button>
                 </form>
               </div>
             </div>
@@ -246,7 +247,7 @@ export default function GestaoEstrutura({ setNotification }) {
                         <div style={styles.cardHeader}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{...styles.iconBox, background: 'rgba(79, 70, 229, 0.1)'}}>
-                              <Globe size={22} color="#4f46e5" />
+                              <Globe size={22} color={colors.purple} />
                             </div>
                             <div>
                               <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', color: 'var(--text-main)' }}>{cl.name}</h4>
@@ -257,7 +258,7 @@ export default function GestaoEstrutura({ setNotification }) {
                           </div>
                           <div style={{ display: 'flex', gap: '5px' }}>
                             <button onClick={() => openEdit('cluster', cl)} style={styles.actionBtn} title="Editar"><Edit size={16} color="var(--text-brand)"/></button>
-                            <button onClick={() => handleDelete('clusters', cl.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color="#ef4444"/></button>
+                            <button onClick={() => handleDelete('clusters', cl.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color={colors.danger}/></button>
                           </div>
                         </div>
                       </div>
@@ -276,7 +277,7 @@ export default function GestaoEstrutura({ setNotification }) {
           <>
             <div style={{flex: 1, minWidth: '300px', maxWidth: '400px'}}>
               <div style={global.card}>
-                  <h3 style={{ ...global.sectionTitle, color: '#10b981' }}><MapPin size={20} /> Nova Loja / Cidade</h3>
+                  <h3 style={{ ...global.sectionTitle, color: colors.success }}><MapPin size={20} /> Nova Loja / Cidade</h3>
                   <form onSubmit={addCity} style={global.form}>
                       <input style={global.input} placeholder="Nome da Cidade" value={cityName} onChange={e=>setCityName(e.target.value)} required />
                       
@@ -309,7 +310,7 @@ export default function GestaoEstrutura({ setNotification }) {
                         </div>
                       </div>
 
-                      <button style={{ ...global.btnPrimary, backgroundColor: '#10b981', marginTop: '10px' }}>Salvar Cidade</button>
+                      <button style={{ ...global.btnPrimary, backgroundColor: colors.success, marginTop: '10px' }}>Salvar Cidade</button>
                   </form>
               </div>
             </div>
@@ -324,21 +325,21 @@ export default function GestaoEstrutura({ setNotification }) {
                         <div style={styles.cardHeader}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{...styles.iconBox, background: 'rgba(16, 185, 129, 0.1)'}}>
-                              <Building2 size={22} color="#10b981" />
+                              <Building2 size={22} color={colors.success} />
                             </div>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                 <h4 style={{ margin: 0, fontSize: '16px', color: 'var(--text-main)' }}>{c.name}</h4>
-                                {c.active === false && <span style={{fontSize: '9px', background: 'var(--bg-danger-light)', color: '#ef4444', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}>INATIVA</span>}
+                                {c.active === false && <span style={{fontSize: '9px', background: 'var(--bg-danger-light)', color: colors.danger, padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}>INATIVA</span>}
                               </div>
-                              <span style={{...styles.badge, background: '#e0e7ff', color: '#4f46e5'}}>
+                              <span style={{...styles.badge, background: '#e0e7ff', color: colors.purple}}>
                                 Regional: {parentCluster ? parentCluster.name : '⚠️ Nenhuma'}
                               </span>
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: '5px' }}>
                             <button onClick={() => openEdit('city', c)} style={styles.actionBtn} title="Editar"><Edit size={16} color="var(--text-brand)"/></button>
-                            <button onClick={() => handleDelete('cities', c.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color="#ef4444"/></button>
+                            <button onClick={() => handleDelete('cities', c.id)} style={styles.actionBtn} title="Excluir"><Trash2 size={16} color={colors.danger}/></button>
                           </div>
                         </div>
 
@@ -350,7 +351,7 @@ export default function GestaoEstrutura({ setNotification }) {
                             {c.extension && <span style={{display: 'flex', alignItems: 'center', gap: '6px'}}><Phone size={14}/> Ramal: {c.extension}</span>}
                           </div>
                           {(c.lat || c.lon) && (
-                            <span style={{display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981'}}>
+                            <span style={{display: 'flex', alignItems: 'center', gap: '6px', color: colors.success}}>
                               <Navigation size={14}/> Lat: {c.lat || '-'} | Lon: {c.lon || '-'}
                             </span>
                           )}
@@ -430,7 +431,7 @@ export default function GestaoEstrutura({ setNotification }) {
                           </div>
                         </div>
                         <div style={{display: 'flex', alignItems: 'center', gap: '10px', padding: '15px', background: 'var(--bg-panel)', borderRadius: '12px', border: '1px solid var(--border)'}}>
-                          <input type="checkbox" checked={editData.active !== false} onChange={e => setEditData({...editData, active: e.target.checked})} style={{width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer'}} />
+                          <input type="checkbox" checked={editData.active !== false} onChange={e => setEditData({...editData, active: e.target.checked})} style={{width: '18px', height: '18px', accentColor: colors.success, cursor: 'pointer'}} />
                           <span style={{fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)'}}>Loja Ativa na Rede</span>
                         </div>
                       </>
@@ -438,7 +439,7 @@ export default function GestaoEstrutura({ setNotification }) {
 
                     <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
                       <button type="button" onClick={() => {setEditingId(null); setEditingType(null);}} style={{...global.btnSecondary, flex: 1}}>Cancelar</button>
-                      <button type="submit" style={{...global.btnPrimary, background: '#10b981', flex: 2}}>Salvar Alterações</button>
+                      <button type="submit" style={{...global.btnPrimary, background: colors.success, flex: 2}}>Salvar Alterações</button>
                     </div>
                 </form>
             </div>

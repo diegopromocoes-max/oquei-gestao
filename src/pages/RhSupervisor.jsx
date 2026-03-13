@@ -44,11 +44,11 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
   const [supervisors, setSupervisors] = useState([]);
 
   const REQUEST_TYPES = {
-    advertencia: { label: 'Advertência', icon: AlertTriangle, color: '#f59e0b', bg: '#f59e0b15', desc: 'Faltas leves ou reincidência.' },
-    suspensao: { label: 'Suspensão', icon: AlertCircle, color: '#ea580c', bg: '#ea580c15', desc: 'Faltas graves.' },
-    desligamento: { label: 'Desligamento', icon: UserMinus, color: '#ef4444', bg: '#ef444415', desc: 'Rescisão contratual.' },
-    promocao: { label: 'Promoção', icon: TrendingUp, color: '#3b82f6', bg: '#3b82f615', desc: 'Mérito ou cargo.' },
-    atestado: { label: 'Atestado Médico', icon: FileCheck, color: '#db2777', bg: '#db277715', desc: 'Envio de atestado (48h).' },
+    advertencia: { label: 'Advertência', icon: AlertTriangle, color: colors.warning, bg: '#f59e0b15', desc: 'Faltas leves ou reincidência.' },
+    suspensao: { label: 'Suspensão', icon: AlertCircle, color: colors.danger, bg: '#ea580c15', desc: 'Faltas graves.' },
+    desligamento: { label: 'Desligamento', icon: UserMinus, color: colors.danger, bg: '#ef444415', desc: 'Rescisão contratual.' },
+    promocao: { label: 'Promoção', icon: TrendingUp, color: colors.primary, bg: '#3b82f615', desc: 'Mérito ou cargo.' },
+    atestado: { label: 'Atestado Médico', icon: FileCheck, color: colors.rose, bg: '#db277715', desc: 'Envio de atestado (48h).' },
   };
 
   const currentType = REQUEST_TYPES[requestType];
@@ -331,15 +331,15 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
   };
 
   const getTypeBadge = (type) => {
-    let color = '#3b82f6'; let bg = '#3b82f615'; let label = type;
+    let color = colors.primary; let bg = '#3b82f615'; let label = type;
     switch(type) {
-      case 'ferias': label = 'Férias'; color = '#10b981'; bg = '#10b98115'; break;
-      case 'desligamento': label = 'Desligamento'; color = '#ef4444'; bg = '#ef444415'; break;
-      case 'adiantamento': label = 'Adiantamento'; color = '#f59e0b'; bg = '#f59e0b15'; break;
-      case 'advertencia': label = 'Advertência'; color = '#f59e0b'; bg = '#f59e0b15'; break;
-      case 'suspensao': label = 'Suspensão'; color = '#ea580c'; bg = '#ea580c15'; break;
-      case 'promocao': label = 'Promoção'; color = '#3b82f6'; bg = '#3b82f615'; break;
-      case 'atestado': label = 'Atestado'; color = '#db2777'; bg = '#db277715'; break;
+      case 'ferias': label = 'Férias'; color = colors.success; bg = '#10b98115'; break;
+      case 'desligamento': label = 'Desligamento'; color = colors.danger; bg = '#ef444415'; break;
+      case 'adiantamento': label = 'Adiantamento'; color = colors.warning; bg = '#f59e0b15'; break;
+      case 'advertencia': label = 'Advertência'; color = colors.warning; bg = '#f59e0b15'; break;
+      case 'suspensao': label = 'Suspensão'; color = colors.danger; bg = '#ea580c15'; break;
+      case 'promocao': label = 'Promoção'; color = colors.primary; bg = '#3b82f615'; break;
+      case 'atestado': label = 'Atestado'; color = colors.rose; bg = '#db277715'; break;
       default: label = type;
     }
     return <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: `1px solid ${color}30` }}>{label}</span>;
@@ -349,7 +349,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
     <div style={{ ...global.container, maxWidth: '1000px', margin: '0 auto' }}>
       
       <div style={global.header}>
-        <div style={{...global.iconHeader, background: '#db2777'}}><FileCheck size={28} color="white"/></div>
+        <div style={{...global.iconHeader, background: colors.rose}}><FileCheck size={28} color="white"/></div>
         <div>
           <h1 style={global.title}>Departamento de RH</h1>
           <p style={global.subtitle}>Gerencie advertências, atestados e avalie solicitações.</p>
@@ -545,7 +545,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{ background: 'var(--bg-app)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
-                        <div style={{ width: '40px', height: '40px', background: 'var(--text-brand)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                        <div style={{ width: '40px', height: '40px', background: 'var(--text-brand)', color: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                           {(selectedApproval.targetName || selectedApproval.attendantName || 'U')[0]}
                         </div>
                         <div>
@@ -572,8 +572,8 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
                     )}
                     {(selectedApproval.status === 'Pendente' || !selectedApproval.status) && (
                       <div style={{ display: 'flex', gap: '15px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
-                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={{...global.btnPrimary, background: '#ef4444', flex: 1}}><XCircle size={18}/> Rejeitar</button>
-                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={{...global.btnPrimary, background: '#10b981', flex: 1}}><CheckCircle2 size={18}/> Aprovar</button>
+                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={{...global.btnPrimary, background: colors.danger, flex: 1}}><XCircle size={18}/> Rejeitar</button>
+                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={{...global.btnPrimary, background: colors.success, flex: 1}}><CheckCircle2 size={18}/> Aprovar</button>
                       </div>
                     )}
                   </div>
@@ -625,7 +625,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
           <div style={global.modalBox}>
             <div style={global.modalHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} color="#10b981" /> : <ShieldAlert size={24} color="#ef4444" />}
+                {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} color={colors.success} /> : <ShieldAlert size={24} color={colors.danger} />}
                 <h3 style={global.modalTitle}>
                   {actionModal.type === 'aprovar' ? 'Confirmar Aprovação' : 'Rejeitar Solicitação'}
                 </h3>
@@ -640,7 +640,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
             </div>
             <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
               <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} disabled={isProcessing} style={{...global.btnSecondary, flex: 1}}>Cancelar</button>
-              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={{...global.btnPrimary, flex: 2, background: actionModal.type === 'aprovar' ? '#10b981' : '#ef4444'}}>
+              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={{...global.btnPrimary, flex: 2, background: actionModal.type === 'aprovar' ? colors.success : colors.danger}}>
                 {isProcessing ? 'Processando...' : 'Confirmar'} <Send size={16}/>
               </button>
             </div>
@@ -656,7 +656,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 const local = {
   tabsContainer: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', overflowX: 'auto', scrollbarWidth: 'none' },
   tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent' },
-  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: '#db2777', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid #db2777' },
+  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: colors.rose, cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid #db2777' },
   
   rhNoticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', marginBottom: '30px' },
   typeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '30px' },
@@ -676,9 +676,9 @@ const local = {
   detailValue: { fontSize: '15px', fontWeight: '600', color: 'var(--text-main)', margin: 0 },
   observationBox: { background: 'var(--bg-app)', border: '1px solid var(--border)', padding: '15px', borderRadius: '12px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', whiteSpace: 'pre-wrap' },
   
-  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#10b98115', color: '#10b981', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #10b98130' },
-  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ef444415', color: '#ef4444', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #ef444430' },
-  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#f59e0b15', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #f59e0b30' },
+  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#10b98115', color: colors.success, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #10b98130' },
+  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ef444415', color: colors.danger, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #ef444430' },
+  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#f59e0b15', color: colors.warning, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #f59e0b30' },
 
   tableCard: { overflow: 'hidden', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-card)' },
   table: { width: '100%', borderCollapse: 'collapse' },

@@ -12,7 +12,6 @@ import TabAvaliacaoPatrocinio from '../components/TabAvaliacaoPatrocinio';
 <<<<<<< HEAD
 import DashboardPatrocinios from '../components/DashboardPatrocinios';
 =======
-import DashboardPatrocinios from '../components/DashboardPatrocinios'; 
 >>>>>>> 4e8dbd1b0c7b37c62d754bb6a3c5b816afa71fd1
 
 export default function PatrocinioSupervisor({ userData }) {
@@ -171,7 +170,7 @@ export default function PatrocinioSupervisor({ userData }) {
           <button onClick={() => setActiveTab('avaliacao')} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: activeTab === 'avaliacao' ? 'var(--bg-card)' : 'transparent', color: activeTab === 'avaliacao' ? 'var(--text-main)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Target size={16} /> Apurar ROI (Aprovados)
           </button>
-          <button onClick={() => setActiveTab('dashboard')} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: activeTab === 'dashboard' ? colors.primary : 'transparent', color: activeTab === 'dashboard' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button onClick={() => setActiveTab('dashboard')} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: activeTab === 'dashboard' ? colors.primary : 'transparent', color: activeTab === 'dashboard' ? '#ffffff' : 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <PieChart size={16} /> Dashboard de BI
           </button>
         </div>
@@ -221,7 +220,7 @@ export default function PatrocinioSupervisor({ userData }) {
                 <div><label style={{ fontSize: '13px', fontWeight: '900', color: 'var(--text-main)', display: 'block', marginBottom: '10px' }}>Nível de Prioridade</label><div style={{ display: 'flex', gap: '12px' }}>{[1, 2, 3, 4, 5].map(star => (<Star key={star} size={36} fill={star <= form.priority ? colors.warning : "none"} color={star <= form.priority ? colors.warning : "var(--border)"} style={{ cursor: 'pointer' }} onClick={() => setForm({...form, priority: star})} />))}</div></div>
               </div>
 
-              <Btn type="submit" disabled={loading} style={{ background: colors.primary, color: '#fff', padding: '18px', fontSize: '16px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+              <Btn type="submit" disabled={loading} style={{ background: colors.primary, color: '#ffffff', padding: '18px', fontSize: '16px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
                 {loading ? 'Enviando...' : 'Enviar Solicitação para Aprovação'}
               </Btn>
             </form>
@@ -272,7 +271,7 @@ export default function PatrocinioSupervisor({ userData }) {
 
                            {/* BOTÃO PARA APROVADOS (IR PARA APURAÇÃO) */}
                            {req.status === 'Aprovado' && (
-                              <button onClick={() => { setEvalItemId(req.id); setActiveTab('avaliacao'); }} style={{ background: colors.primary, color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '900', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <button onClick={() => { setEvalItemId(req.id); setActiveTab('avaliacao'); }} style={{ background: colors.primary, color: '#ffffff', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '900', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                 <BarChart2 size={14} /> Apurar Resultados
                               </button>
                            )}
@@ -321,7 +320,7 @@ export default function PatrocinioSupervisor({ userData }) {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
               <button onClick={() => setApproveModal({open: false, item: null})} style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', fontWeight: '800', cursor: 'pointer', color: 'var(--text-main)' }}>Cancelar</button>
-              <button onClick={handleApprove} disabled={loading} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: colors.success, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>{loading ? 'Aprovando...' : 'Confirmar Aprovação'}</button>
+              <button onClick={handleApprove} disabled={loading} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: colors.success, color: '#ffffff', fontWeight: '900', cursor: 'pointer' }}>{loading ? 'Aprovando...' : 'Confirmar Aprovação'}</button>
             </div>
           </div>
         </div>
@@ -352,7 +351,7 @@ export default function PatrocinioSupervisor({ userData }) {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
               <button onClick={() => setRejectModal({open: false, item: null})} style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', fontWeight: '800', cursor: 'pointer', color: 'var(--text-main)' }}>Cancelar</button>
-              <button onClick={handleReject} disabled={loading} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: colors.danger, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>{loading ? 'Arquivando...' : 'Confirmar Recusa'}</button>
+              <button onClick={handleReject} disabled={loading} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: colors.danger, color: '#ffffff', fontWeight: '900', cursor: 'pointer' }}>{loading ? 'Arquivando...' : 'Confirmar Recusa'}</button>
             </div>
           </div>
         </div>

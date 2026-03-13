@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
 import { X, MapPin, TrendingUp, Trophy, PartyPopper, Zap, BellRing } from 'lucide-react';
+import { colors } from './ui';
 import confetti from 'canvas-confetti';
 
 export default function RadarLive({ isOpen, onClose, userData }) {
@@ -65,7 +66,7 @@ export default function RadarLive({ isOpen, onClose, userData }) {
       {celebration && isOpen && (
         <div style={local.celebrationOverlay}>
           <div style={celebration.isMeta ? local.metaCard : local.saleCard}>
-            {celebration.isMeta ? <Trophy size={40} color="#fbbf24" /> : <PartyPopper size={40} color="#2563eb" />}
+            {celebration.isMeta ? <Trophy size={40} color="#fbbf24" /> : <PartyPopper size={40} color={colors.primary} />}
             <div style={{ textAlign: 'center' }}>
               <h4 style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>
                 {celebration.isMeta ? '🏆 META BATIDA!' : '🚀 NOVA VENDA!'}
@@ -91,7 +92,7 @@ export default function RadarLive({ isOpen, onClose, userData }) {
           
           <div style={local.content} className="hide-scrollbar">
             <div style={local.kpiBox}>
-              <TrendingUp size={16} color="#10b981" />
+              <TrendingUp size={16} color={colors.success} />
               <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Últimas Atividades</span>
             </div>
 
@@ -126,7 +127,7 @@ const local = {
   content: { flex: 1, overflowY: 'auto', padding: '20px' },
   kpiBox: { background: 'var(--bg-app)', padding: '12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid var(--border)' },
   itemCard: { padding: '12px', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)' },
-  pulseCircle: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' },
+  pulseCircle: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: colors.success, boxShadow: '0 0 8px #10b981' },
   
   celebrationOverlay: {
     position: 'absolute', top: '80px', right: '20px', width: '260px', zIndex: 2000, pointerEvents: 'none'
@@ -137,7 +138,7 @@ const local = {
     boxShadow: '0 10px 30px rgba(0,0,0,0.3)', animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
   },
   metaCard: {
-    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', color: 'white', 
+    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', color: '#ffffff', 
     padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
     boxShadow: '0 10px 30px rgba(245, 158, 11, 0.3)', animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
   }

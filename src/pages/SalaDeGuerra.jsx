@@ -200,7 +200,7 @@ export default function SalaDeGuerra({ userData }) {
               <div style={{ fontSize: '42px', fontWeight: '900', lineHeight: '1', textShadow: '0 2px 5px rgba(0,0,0,0.3)' }}>
                  {clusterStats.tSales} <span style={{fontSize:'20px', opacity:0.7}}>/ {sprint.goal}</span>
               </div>
-              <button onClick={() => setSprint({...sprint, active: false})} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', marginTop: '10px', cursor: 'pointer' }}>Encerrar Sprint</button>
+              <button onClick={() => setSprint({...sprint, active: false})} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#ffffff', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', marginTop: '10px', cursor: 'pointer' }}>Encerrar Sprint</button>
            </div>
         </div>
       )}
@@ -277,7 +277,7 @@ export default function SalaDeGuerra({ userData }) {
                {drillDown.sellers.map((s, i) => (
                  <div key={i} style={local.tr}>
                     <span style={{ fontWeight: '800', color: 'var(--text-main)', display:'flex', gap:8, alignItems: 'center' }}>
-                       {i===0 && <Star size={16} color="#f59e0b" fill="#f59e0b"/>} {s.name}
+                       {i===0 && <Star size={16} color={colors.warning} fill={colors.warning}/>} {s.name}
                     </span>
                     <span style={{ fontWeight: '900', color: colors.primary, fontSize: '16px' }}>{s.sales}</span>
                     <span style={{ fontWeight: 'bold', color: colors.success }}>{((s.sales/s.leads)*100 || 0).toFixed(0)}%</span>
@@ -322,7 +322,7 @@ export default function SalaDeGuerra({ userData }) {
 
                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                  <button onClick={() => setShowSprintModal(false)} style={{ flex: 1, padding: '15px', borderRadius: '12px', background: 'var(--bg-panel)', color: 'var(--text-main)', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Cancelar</button>
-                 <button onClick={() => { setSprint({...sprint, active: true}); setShowSprintModal(false); }} style={{ flex: 2, background: '#f59e0b', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: '900', cursor: 'pointer' }}>
+                 <button onClick={() => { setSprint({...sprint, active: true}); setShowSprintModal(false); }} style={{ flex: 2, background: colors.warning, color: '#ffffff', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: '900', cursor: 'pointer' }}>
                    ATIVAR SPRINT
                  </button>
                </div>
@@ -349,12 +349,12 @@ const local = {
   progressBar: { height: '100%', transition: '1s ease-in-out' },
   
   headerActions: { display: 'flex', gap: '12px' },
-  btnSprint: { background: '#f59e0b', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', gap: '8px', boxShadow: '0 4px 15px rgba(245,158,11,0.3)' },
+  btnSprint: { background: colors.warning, color: '#ffffff', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', gap: '8px', boxShadow: '0 4px 15px rgba(245,158,11,0.3)' },
   btnTV: { background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '12px 20px', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', gap: '8px' },
 
   // Estilo renovado para o Banner do Sprint
-  sprintBanner: { background: 'linear-gradient(90deg, #b91c1c 0%, #ef4444 100%)', padding: '25px 40px', borderRadius: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', color: 'white', boxShadow: '0 15px 35px rgba(239,68,68,0.4)', border: '2px solid #fca5a5' },
-  flashToast: { position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', background: colors.primary, color: 'white', padding: '15px 30px', borderRadius: '50px', fontWeight: '900', zIndex: 10000, display: 'flex', gap: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
+  sprintBanner: { background: 'linear-gradient(90deg, #b91c1c 0%, #ef4444 100%)', padding: '25px 40px', borderRadius: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', color: '#ffffff', boxShadow: '0 15px 35px rgba(239,68,68,0.4)', border: '2px solid #fca5a5' },
+  flashToast: { position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', background: colors.primary, color: '#ffffff', padding: '15px 30px', borderRadius: '50px', fontWeight: '900', zIndex: 10000, display: 'flex', gap: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
   
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
@@ -364,7 +364,7 @@ const local = {
   miniLabel: { fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', display: 'block', marginBottom: '5px', letterSpacing: '0.05em' },
   recoveryText: { color: colors.danger, fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px' },
   successText: { color: colors.success, fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px' },
-  backlogAlert: { background: '#f59e0b15', color: '#f59e0b', padding: '10px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', display: 'flex', gap: '8px', marginBottom: '15px' },
+  backlogAlert: { background: '#f59e0b15', color: colors.warning, padding: '10px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', display: 'flex', gap: '8px', marginBottom: '15px' },
   
   cardActions: { display: 'flex', gap: '10px', marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid var(--border)' },
   btnAction: { width: '100%', background: 'var(--bg-panel)', border: '1px solid var(--border)', padding: '12px', borderRadius: '10px', color: 'var(--text-brand)', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px', transition: '0.2s' },

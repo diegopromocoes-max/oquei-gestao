@@ -147,7 +147,7 @@ export default function LaboratorioChurn({ userData }) {
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '800', transition: 'all 0.2s', whiteSpace: 'nowrap',
                 background: activeTab === tab.id ? colors.primary : 'transparent',
-                color: activeTab === tab.id ? '#fff' : 'var(--text-muted)',
+                color: activeTab === tab.id ? '#ffffff' : 'var(--text-muted)',
                 boxShadow: activeTab === tab.id ? `0 4px 12px ${colors.primary}40` : 'none'
               }}
             >

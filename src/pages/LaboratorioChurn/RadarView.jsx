@@ -4,6 +4,7 @@ import {
   LayoutGrid, Plus, Activity, Target 
 } from 'lucide-react';
 import { styles } from './styles';
+import { colors } from '../../components/ui';
 
 export default function RadarView({ processedData = [], selectedCity, setSelectedCity, actionPlans = [], setShowPlanModal }) {
   
@@ -34,10 +35,10 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
         
         <div style={{ display: 'flex', gap: '15px' }}>
           <div style={local.miniStat}>
-            <span style={{ color: '#10b981' }}>●</span> {processedData.filter(c => c.netAdds >= 0).length} Positivas
+            <span style={{ color: colors.success }}>●</span> {processedData.filter(c => c.netAdds >= 0).length} Positivas
           </div>
           <div style={local.miniStat}>
-            <span style={{ color: '#ef4444' }}>●</span> {processedData.filter(c => c.netAdds < 0).length} Críticas
+            <span style={{ color: colors.danger }}>●</span> {processedData.filter(c => c.netAdds < 0).length} Críticas
           </div>
         </div>
       </div>
@@ -62,13 +63,13 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
             >
               <div style={{ 
                 ...local.statusIndicator, 
-                backgroundColor: isNegative ? '#ef4444' : '#10b981' 
+                backgroundColor: isNegative ? colors.danger : colors.success 
               }} />
 
               <div style={{ padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
                   <strong style={{ fontSize: '16px', color: 'var(--text-main)' }}>{city.city}</strong>
-                  {isNegative ? <ArrowDownRight color="#ef4444" size={20} /> : <ArrowUpRight color="#10b981" size={20} />}
+                  {isNegative ? <ArrowDownRight color={colors.danger} size={20} /> : <ArrowUpRight color={colors.success} size={20} />}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '5px' }}>
@@ -76,7 +77,7 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
                   <span style={{ 
                     fontSize: '32px', 
                     fontWeight: '900', 
-                    color: isNegative ? '#ef4444' : '#10b981' 
+                    color: isNegative ? colors.danger : colors.success 
                   }}>
                     {city.netAdds > 0 ? '+' : ''}{city.netAdds}
                   </span>
@@ -87,13 +88,13 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
                   <div style={{ 
                     ...local.progressBar, 
                     width: `${Math.min(100, Math.max(0, percentage))}%`,
-                    backgroundColor: isNegative ? '#ef4444' : 'var(--primary)'
+                    backgroundColor: isNegative ? colors.danger : 'var(--primary)'
                   }} />
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '11px', fontWeight: 'bold' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>META: {city.targetNetAdds}</span>
-                  <span style={{ color: isNegative ? '#ef4444' : 'var(--text-main)' }}>{percentage}%</span>
+                  <span style={{ color: isNegative ? colors.danger : 'var(--text-main)' }}>{percentage}%</span>
                 </div>
               </div>
             </div>
@@ -106,7 +107,7 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
         <div style={{ 
           ...styles.detailsColumn, 
           marginTop: '20px', 
-          borderTop: `4px solid ${selectedCity.netAdds < 0 ? '#ef4444' : '#10b981'}`,
+          borderTop: `4px solid ${selectedCity.netAdds < 0 ? colors.danger : colors.success}`,
           animation: 'slideUp 0.4s ease-out'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
@@ -126,7 +127,7 @@ export default function RadarView({ processedData = [], selectedCity, setSelecte
             </div>
             <div style={local.detailMiniBox}>
               <span style={styles.globalLabel}>Evasão (Churn)</span>
-              <strong style={{ color: '#ef4444', fontSize: '24px' }}>{selectedCity.cancelations}</strong>
+              <strong style={{ color: colors.danger, fontSize: '24px' }}>{selectedCity.cancelations}</strong>
             </div>
             <div style={local.detailMiniBox}>
               <span style={styles.globalLabel}>Taxa de Churn</span>

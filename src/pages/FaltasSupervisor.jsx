@@ -146,7 +146,7 @@ export default function FaltasSupervisor({ userData }) {
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px'}}>
             <div>
               <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                <span style={{fontSize:'12px', fontWeight:'bold', color: item.type==='ferias' ? 'var(--text-brand)' : '#ef4444', background: item.type==='ferias' ? 'var(--bg-primary-light)' : 'var(--bg-danger-light)', padding:'4px 8px', borderRadius:'6px'}}>
+                <span style={{fontSize:'12px', fontWeight:'bold', color: item.type==='ferias' ? 'var(--text-brand)' : colors.danger, background: item.type==='ferias' ? 'var(--bg-primary-light)' : 'var(--bg-danger-light)', padding:'4px 8px', borderRadius:'6px'}}>
                   {item.type === 'ferias' ? 'FÉRIAS' : 'FALTA'}
                 </span>
                 <h4 style={{fontWeight:'bold', color:'var(--text-main)', margin:0}}>{storeName}</h4>
@@ -158,7 +158,7 @@ export default function FaltasSupervisor({ userData }) {
                 {new Date(item.startDate + 'T12:00:00').toLocaleDateString()} até {new Date(item.endDate + 'T12:00:00').toLocaleDateString()}
               </p>
             </div>
-            <button onClick={() => deleteAbsence(item.id)} style={{border:'none', background:'none', color:'#ef4444', cursor:'pointer'}}><Trash2 size={16}/></button>
+            <button onClick={() => deleteAbsence(item.id)} style={{border:'none', background:'none', color:colors.danger, cursor:'pointer'}}><Trash2 size={16}/></button>
           </div>
 
           <div style={{background:'var(--bg-app)', borderRadius:'12px', padding:'10px', display:'flex', flexDirection:'column', gap:'8px', border: '1px solid var(--border)'}}>
@@ -185,7 +185,7 @@ export default function FaltasSupervisor({ userData }) {
                         borderRadius: '6px',
                         border: !assignedId ? '1px solid #f59e0b' : isClosed ? '1px solid var(--border-danger)' : '1px solid var(--border-success)',
                         background: !assignedId ? '#fffbeb' : isClosed ? 'var(--bg-danger-light)' : 'var(--bg-success-light)',
-                        color: !assignedId ? '#b45309' : isClosed ? '#ef4444' : '#10b981',
+                        color: !assignedId ? '#b45309' : isClosed ? colors.danger : colors.success,
                         fontWeight: 'bold',
                         fontSize: '12px',
                         outline: 'none',
@@ -212,8 +212,8 @@ export default function FaltasSupervisor({ userData }) {
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
           <h3 style={global.sectionTitle}>Próximas Ausências</h3>
           <div style={{display:'flex', gap:'10px'}}>
-             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#ef4444', fontWeight:'bold'}}><AlertCircle size={14}/> Pendente</div>
-             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#10b981', fontWeight:'bold'}}><CheckCircle size={14}/> Coberto</div>
+             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:colors.danger, fontWeight:'bold'}}><AlertCircle size={14}/> Pendente</div>
+             <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:colors.success, fontWeight:'bold'}}><CheckCircle size={14}/> Coberto</div>
           </div>
         </div>
 
@@ -302,7 +302,7 @@ export default function FaltasSupervisor({ userData }) {
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
           <div>
             <h3 style={global.sectionTitle}>Calendário de Escala</h3>
-            {selectedStore && <p style={{fontSize:'12px', color:'var(--text-muted)'}}>Dias Úteis em {monthKey.split('-')[1]}: <strong style={{color:'#10b981'}}>{diasUteisCount}</strong></p>}
+            {selectedStore && <p style={{fontSize:'12px', color:'var(--text-muted)'}}>Dias Úteis em {monthKey.split('-')[1]}: <strong style={{color:colors.success}}>{diasUteisCount}</strong></p>}
           </div>
           <div style={{display:'flex', gap:'10px'}}>
             <input type="month" style={{...(global.input || {}), padding: '8px', width: 'auto'}} value={monthKey} onChange={(e) => setCurrentDate(new Date(e.target.value + '-01T00:00:00'))} />
@@ -322,7 +322,7 @@ export default function FaltasSupervisor({ userData }) {
           <div style={local.calendarContainer}>
             <div style={local.calendarHeader}>
               {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((d, i) => (
-                <div key={d} style={{...local.calendarHeaderCell, color: i === 0 || i === 6 ? '#ef4444' : 'var(--text-muted)'}}>{d}</div>
+                <div key={d} style={{...local.calendarHeaderCell, color: i === 0 || i === 6 ? colors.danger : 'var(--text-muted)'}}>{d}</div>
               ))}
             </div>
             <div style={local.calendarDays}>
@@ -337,7 +337,7 @@ export default function FaltasSupervisor({ userData }) {
                 let bg = 'var(--bg-card)'; 
                 let color = 'var(--text-main)';
                 if (holiday) { bg = 'var(--bg-danger-light)'; color = '#dc2626'; }
-                else if (weekDay === 0) { bg = 'var(--bg-danger-light)'; color = '#ef4444'; }
+                else if (weekDay === 0) { bg = 'var(--bg-danger-light)'; color = colors.danger; }
                 else if (weekDay === 6) { bg = 'rgba(245, 158, 11, 0.1)'; color = '#c2410c'; }
 
                 return (
@@ -354,15 +354,15 @@ export default function FaltasSupervisor({ userData }) {
                     )}
                     {info && (
                       <div style={{marginTop: '5px'}}>
-                        <div style={{fontSize: '9px', fontWeight: 'bold', color: info.type === 'ferias' ? 'var(--text-brand)' : '#ef4444'}}>
+                        <div style={{fontSize: '9px', fontWeight: 'bold', color: info.type === 'ferias' ? 'var(--text-brand)' : colors.danger}}>
                           {info.type === 'ferias' ? 'FÉRIAS' : 'FALTA'}
                         </div>
                         {info.status === 'loja_fechada' ? (
-                          <div style={{background:'#ef4444', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>FECHADA</div>
+                          <div style={{background:colors.danger, color: '#ffffff', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>FECHADA</div>
                         ) : info.status === 'pendente' ? (
-                          <div style={{background:'#f59e0b', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>PENDENTE</div>
+                          <div style={{background:colors.warning, color: '#ffffff', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>PENDENTE</div>
                         ) : (
-                          <div style={{background:'#10b981', color:'white', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>SUB: {getFloaterName(info.status)}</div>
+                          <div style={{background:colors.success, color: '#ffffff', padding:'2px', borderRadius:'3px', fontSize:'9px', textAlign:'center', fontWeight:'bold'}}>SUB: {getFloaterName(info.status)}</div>
                         )}
                       </div>
                     )}
@@ -456,13 +456,13 @@ export default function FaltasSupervisor({ userData }) {
                 }}>
                 <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'4px', fontWeight:'bold'}}>{dateObj.getDate()}/{dateObj.getMonth()+1}</div>
                 {assignedId ? (
-                  <div style={{fontSize:'10px', fontWeight:'bold', color: isClosed ? '#ef4444' : '#059669', background: isClosed ? 'var(--bg-danger-light)' : 'var(--bg-success-light)', padding: '3px 6px', borderRadius: '4px', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                  <div style={{fontSize:'10px', fontWeight:'bold', color: isClosed ? colors.danger : colors.success, background: isClosed ? 'var(--bg-danger-light)' : 'var(--bg-success-light)', padding: '3px 6px', borderRadius: '4px', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                     {isClosed ? 'FECHADA' : getFloaterName(assignedId)}
                   </div>
                 ) : (
-                  <div style={{fontSize:'10px', color:'#f59e0b', background:'#fff7ed', padding:'3px', borderRadius:'4px', textAlign:'center', fontWeight: 'bold'}}>Pendente</div>
+                  <div style={{fontSize:'10px', color:colors.warning, background:'#fff7ed', padding:'3px', borderRadius:'4px', textAlign:'center', fontWeight: 'bold'}}>Pendente</div>
                 )}
-                {isSelected && <div style={{position:'absolute', top:'-6px', right:'-6px', background:'var(--text-brand)', color:'white', borderRadius:'50%', padding:'2px', border:'2px solid var(--bg-card)'}}><Check size={10}/></div>}
+                {isSelected && <div style={{position:'absolute', top:'-6px', right:'-6px', background:'var(--text-brand)', color: '#ffffff', borderRadius:'50%', padding:'2px', border:'2px solid var(--bg-card)'}}><Check size={10}/></div>}
               </div>
             )
           })}
@@ -609,7 +609,7 @@ export default function FaltasSupervisor({ userData }) {
         {activeTab === 'ferias' && (
           <form onSubmit={saveFerias} style={global.form}>
             <div style={local.infoBox}>
-              <Briefcase size={20} color="#10b981" />
+              <Briefcase size={20} color={colors.success} />
               <p style={{margin:0}}>As férias devem ser programadas com <strong>30 dias de antecedência</strong>.</p>
             </div>
             
@@ -650,7 +650,7 @@ export default function FaltasSupervisor({ userData }) {
               floaters={floaters} 
             />
 
-            <button type="submit" style={{...(global.btnPrimary || {}), background: '#10b981'}} disabled={loading}>{loading ? 'Salvando...' : 'Agendar Férias'}</button>
+            <button type="submit" style={{...(global.btnPrimary || {}), background: colors.success}} disabled={loading}>{loading ? 'Salvando...' : 'Agendar Férias'}</button>
           </form>
         )}
 
@@ -667,7 +667,7 @@ const local = {
   
   content: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
   
-  infoBox: { background: 'var(--bg-success-light)', border: '1px solid var(--border-success)', padding: '15px 20px', borderRadius: '12px', display: 'flex', gap: '15px', alignItems: 'center', fontSize: '14px', color: '#10b981' },
+  infoBox: { background: 'var(--bg-success-light)', border: '1px solid var(--border-success)', padding: '15px 20px', borderRadius: '12px', display: 'flex', gap: '15px', alignItems: 'center', fontSize: '14px', color: colors.success },
   section: { padding: '25px', border: '1px solid var(--border)', borderRadius: '16px', background: 'var(--bg-panel)' },
   row: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' },
   
@@ -680,7 +680,7 @@ const local = {
   calendarCellEmpty: { background: 'var(--bg-app)', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)' },
   calendarCell: { minHeight: '100px', padding: '10px', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', cursor: 'pointer', transition: '0.2s', position: 'relative' },
   
-  holidayBadge: { marginTop: '8px', fontSize: '10px', background: 'var(--bg-danger-light)', color: '#ef4444', padding: '4px 6px', borderRadius: '6px', fontWeight: 'bold', display:'flex', justifyContent:'space-between', alignItems:'center', border: '1px solid var(--border-danger)' },
+  holidayBadge: { marginTop: '8px', fontSize: '10px', background: 'var(--bg-danger-light)', color: colors.danger, padding: '4px 6px', borderRadius: '6px', fontWeight: 'bold', display:'flex', justifyContent:'space-between', alignItems:'center', border: '1px solid var(--border-danger)' },
   
   coveragePanel: { marginTop: '20px', background: 'var(--bg-app)', padding: '25px', borderRadius: '20px', border: '1px solid var(--border)' },
   coverageHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap: 'wrap', gap: '10px' },
@@ -689,5 +689,5 @@ const local = {
   
   btnSmallAction: { background: 'var(--bg-primary-light)', color: 'var(--text-brand)', border: '1px solid var(--text-brand)', padding: '6px 12px', borderRadius: '8px', cursor:'pointer', fontSize:'12px', fontWeight: 'bold', transition: '0.2s' },
   btnSmallCancel: { background: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: '8px', cursor:'pointer', fontSize:'12px', fontWeight: 'bold', transition: '0.2s' },
-  btnApply: { background: 'var(--text-brand)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', transition: 'transform 0.2s' },
+  btnApply: { background: 'var(--text-brand)', color: '#ffffff', border: 'none', padding: '12px 24px', borderRadius: '10px', fontSize: '13px', fontWeight: '900', cursor: 'pointer', transition: 'transform 0.2s' },
 };

@@ -16,6 +16,7 @@ import {
   Bell, ChevronDown, ChevronRight, ChevronLeft, Info
 } from "lucide-react";
 import RadarLive from './RadarLive';
+import { colors } from './ui';
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 const SIDEBAR_OPEN      = 240;
@@ -23,10 +24,10 @@ const SIDEBAR_COLLAPSED = 68;
 const TOPBAR_H          = 64;
 
 const PERFIL_CORES = {
-  coordinator: { bg: '#7c3aed', shadow: 'rgba(124,58,237,0.35)', light: 'rgba(124,58,237,0.12)', label: 'Coordinator' },
-  supervisor:  { bg: '#2563eb', shadow: 'rgba(37,99,235,0.35)',  light: 'rgba(37,99,235,0.12)',  label: 'Supervisor'  },
-  atendente:   { bg: '#10b981', shadow: 'rgba(16,185,129,0.35)', light: 'rgba(16,185,129,0.12)', label: 'Atendente'   },
-  default:     { bg: '#2563eb', shadow: 'rgba(37,99,235,0.35)',  light: 'rgba(37,99,235,0.12)',  label: 'Usuário'     },
+  coordinator: { bg: colors.purple, shadow: 'rgba(124,58,237,0.35)', light: 'rgba(124,58,237,0.12)', label: 'Coordinator' },
+  supervisor:  { bg: colors.primary, shadow: 'rgba(37,99,235,0.35)',  light: 'rgba(37,99,235,0.12)',  label: 'Supervisor'  },
+  atendente:   { bg: colors.success, shadow: 'rgba(16,185,129,0.35)', light: 'rgba(16,185,129,0.12)', label: 'Atendente'   },
+  default:     { bg: colors.primary, shadow: 'rgba(37,99,235,0.35)',  light: 'rgba(37,99,235,0.12)',  label: 'Usuário'     },
 };
 
 // ─── LAYOUT GLOBAL ────────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ export default function LayoutGlobal({
     { id: 2, tipo: 'ok',     msg: 'Relatório de março disponível', tempo: '1h'    },
     { id: 3, tipo: 'info',   msg: 'Novo comunicado publicado',      tempo: '2h'    },
   ];
-  const notifCor = { alerta: '#f59e0b', ok: '#10b981', info: '#2563eb' };
+  const notifCor = { alerta: colors.warning, ok: colors.success, info: colors.primary };
   const notifIc  = { alerta: AlertCircle, ok: CheckCircle2, info: Info };
 
   // ─── STYLES ───────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ export default function LayoutGlobal({
     width: '34px', height: '34px', borderRadius: '50%',
     background: pc.bg, display: 'flex', alignItems: 'center',
     justifyContent: 'center', flexShrink: 0,
-    fontSize: '13px', fontWeight: '900', color: '#fff',
+    fontSize: '13px', fontWeight: '900', color: '#ffffff',
     boxShadow: `0 2px 8px ${pc.shadow}`,
   };
 
@@ -194,7 +195,7 @@ export default function LayoutGlobal({
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
           }}>
-            <Zap size={17} color="#fff" fill="#fff" />
+            <Zap size={17} color="#ffffff" fill="#ffffff" />
           </div>
           <span style={{ ...fade, fontWeight: '900', color: 'var(--text-main)', fontSize: '16px', letterSpacing: '-0.5px' }}>
             OQUEI CRM
@@ -304,7 +305,7 @@ export default function LayoutGlobal({
                 </div>
               </div>
               <button onClick={onLogout} title="Sair"
-                style={iconBtn({ color: '#ef4444' })}
+                style={iconBtn({ color: colors.danger })}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <LogOut size={17} />
@@ -379,7 +380,7 @@ export default function LayoutGlobal({
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-app)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <Bell size={18} />
-                <span style={{ position: 'absolute', top: '8px', right: '8px', width: '7px', height: '7px', borderRadius: '50%', background: '#ef4444', border: '2px solid var(--bg-panel)' }} />
+                <span style={{ position: 'absolute', top: '8px', right: '8px', width: '7px', height: '7px', borderRadius: '50%', background: colors.danger, border: '2px solid var(--bg-panel)' }} />
               </button>
 
               {notifOpen && (
@@ -478,16 +479,16 @@ export default function LayoutGlobal({
         <div style={{
           position: 'fixed', top: '28px', left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(15,23,42,0.97)',
-          border: `1px solid ${toast.type === 'error' ? '#ef4444' : '#2563eb'}`,
+          border: `1px solid ${toast.type === 'error' ? colors.danger : colors.primary}`,
           padding: '11px 22px', borderRadius: '50px',
           display: 'flex', alignItems: 'center', gap: '10px',
-          zIndex: 9999, color: 'white',
+          zIndex: 9999, color: '#ffffff',
           boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           fontFamily: "'Manrope', sans-serif",
         }}>
           {toast.type === 'success'
-            ? <CheckCircle2 size={15} color="#10b981" />
-            : <AlertCircle  size={15} color="#ef4444" />}
+            ? <CheckCircle2 size={15} color={colors.success} />
+            : <AlertCircle  size={15} color={colors.danger} />}
           <span style={{ fontWeight: '700', fontSize: '13px' }}>{toast.message}</span>
         </div>
       )}

@@ -200,7 +200,7 @@ export default function HubOquei({ userData }) {
               <h3 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Clock size={18} color={colors.cyan} /> Feed da Operação (Live)
               </h3>
-              <span style={{ fontSize: '11px', background: 'var(--bg-danger-light)', color: '#ef4444', padding: '4px 8px', borderRadius: '6px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '4px', animation: 'pulse 2s infinite' }}>
+              <span style={{ fontSize: '11px', background: 'var(--bg-danger-light)', color: colors.danger, padding: '4px 8px', borderRadius: '6px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '4px', animation: 'pulse 2s infinite' }}>
                 <Flame size={12} /> AO VIVO
               </span>
             </div>
@@ -232,17 +232,17 @@ export default function HubOquei({ userData }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ background: 'var(--bg-card)', padding: '25px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Award size={18} color="#f59e0b" /> Top Performers (Vendas)
+              <Award size={18} color={colors.warning} /> Top Performers (Vendas)
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {liveRanking.length > 0 ? liveRanking.map((vend, idx) => (
                 <div key={vend.nome} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', borderRadius: '12px', background: idx === 0 ? 'linear-gradient(90deg, #f59e0b15 0%, transparent 100%)' : 'transparent', border: idx === 0 ? '1px solid #f59e0b40' : '1px solid transparent' }}>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: idx === 0 ? '#f59e0b' : 'var(--bg-app)', color: idx === 0 ? 'white' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '14px' }}>{idx + 1}º</div>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: idx === 0 ? colors.warning : 'var(--bg-app)', color: idx === 0 ? 'white' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '14px' }}>{idx + 1}º</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>{vend.nome}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{vend.vendas} vendas</div>
                   </div>
-                  {idx === 0 && <Award size={18} color="#f59e0b" />}
+                  {idx === 0 && <Award size={18} color={colors.warning} />}
                 </div>
               )) : <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>Nenhuma venda hoje.</div>}
             </div>
@@ -512,7 +512,7 @@ export default function HubOquei({ userData }) {
         <button onClick={() => setActiveTab('radar')} style={activeTab === 'radar' ? local.navBtnActive : local.navBtn}><Crosshair size={16}/> S&OP Regional</button>
         <button onClick={() => setActiveTab('live')} style={activeTab === 'live' ? local.navBtnActive : local.navBtn}><Zap size={16}/> Operação Live</button>
         <button onClick={() => setActiveTab('alertas')} style={activeTab === 'alertas' ? local.navBtnActive : local.navBtn}>
-          <Bell size={16}/> Alertas {activeAlerts.length > 0 && <span style={{background: colors.danger, color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px'}}>{activeAlerts.length}</span>}
+          <Bell size={16}/> Alertas {activeAlerts.length > 0 && <span style={{background: colors.danger, color: '#ffffff', padding: '2px 6px', borderRadius: '10px', fontSize: '10px'}}>{activeAlerts.length}</span>}
         </button>
         <button onClick={() => setActiveTab('geo')} style={activeTab === 'geo' ? local.navBtnActive : local.navBtn}><Map size={16}/> Zonas de Calor</button>
         <button onClick={() => setActiveTab('safras')} style={activeTab === 'safras' ? local.navBtnActive : local.navBtn}><Layers size={16}/> Safras</button>
@@ -580,7 +580,7 @@ const local = {
   
   geoGrid: { display:'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', alignItems: 'start' },
   mapWrapper: { position: 'relative', height: '500px', background: 'var(--bg-app)', borderRadius: '24px', border: '1px solid var(--border)' },
-  mapOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', borderRadius: '24px', zIndex: 5, textAlign: 'center', padding: '40px', backdropFilter: 'blur(4px)' },
+  mapOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', borderRadius: '24px', zIndex: 5, textAlign: 'center', padding: '40px', backdropFilter: 'blur(4px)' },
   mapSimulator: { background: 'var(--bg-panel)', height: '500px', borderRadius: '24px', border: '1px solid var(--border)', position: 'relative', overflow:'hidden', backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '20px 20px' },
   heatCircle: { position: 'absolute', borderRadius: '50%', display:'flex', alignItems:'center', justifyContent:'center', textAlign: 'center', boxShadow: 'inset 0 0 20px currentColor' },
   heatText: { fontSize: '11px', fontWeight: '900', color: 'var(--text-main)' },
