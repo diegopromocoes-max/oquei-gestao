@@ -30,6 +30,7 @@ const GestaoEstrutura       = lazy(() => import('./GestaoEstrutura'));
 const GestaoProdutos        = lazy(() => import('./GestaoProdutos'));
 const GestaoMetas           = lazy(() => import('./GestaoMetas'));
 const ApuracaoResultados    = lazy(() => import('./ApuracaoResultados'));
+const PlanosCrescimento = lazy(() => import('./PlanosCrescimento/index.jsx'));
 const LojasOquei            = lazy(() => import('./LojasOquei'));
 const FaltasSupervisor      = lazy(() => import('./FaltasSupervisor'));
 const RhSupervisor          = lazy(() => import('./RhSupervisor'));
@@ -75,6 +76,7 @@ export default function PainelCoordenador({ userData }) {
     { id: 'faltas',              label: 'Faltas Globais',         icon: UserX,          section: 'Gestão' },
     { id: 'rh_requests',         label: 'Pedidos RH',             icon: FileCheck,      section: 'Gestão' },
     { id: 'gestao_metas',        label: 'Gestão de Metas',        icon: Target,         section: 'Gestão',       color: colors.success },
+    { id: 'planos_crescimento',  label: 'Planos de Crescimento',  icon: TrendingUp,     section: 'Gestão',       color: colors.success },
     { id: 'apuracao_resultados', label: 'Apuração de Resultados', icon: UploadCloud,    section: 'Gestão',       color: colors.primary },
     { id: 'vendas',              label: 'Painel Vendas',          icon: TrendingUp,     section: 'Sistemas',     color: colors.success },
     { id: 'war_room',            label: 'Sala de Guerra',         icon: Flame,          section: 'Sistemas',     color: colors.danger },
@@ -100,6 +102,7 @@ export default function PainelCoordenador({ userData }) {
       case 'estrutura':           return <GestaoEstrutura />;
       case 'produtos':            return <GestaoProdutos />;
       case 'gestao_metas':        return <GestaoMetas userData={userData} />;
+      case 'planos_crescimento':  return <PlanosCrescimento userData={userData} />;
       case 'apuracao_resultados': return <ApuracaoResultados userData={userData} />;
       case 'lojas_view':          return <LojasOquei isEditingAllowed={true} />;
       case 'faltas':              return <FaltasSupervisor userData={userData} />;

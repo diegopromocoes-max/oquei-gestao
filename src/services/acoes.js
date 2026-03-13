@@ -1,53 +1,71 @@
 import { db } from '../firebase';
-import { collection, doc, setDoc, onSnapshot, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, doc, addDoc, updateDoc, onSnapshot, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 
-export const assinarPlanosAcao = (month, cityId, callback) => {
-  if (!cityId) return () => {};
-  const q = query(
-    collection(db, 'action_plans'), 
-    where('month', '==', month),
-    where('cityId', '==', cityId)
-  );
+// 1. Escuta a lista de responsáveis para o Autocomplete
+export const assinarResponsaveis = (callback) => {
+  const q = query(collection(db, 'responsibles'));
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    callback(list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    callback(list);
   });
 };
 
-export const salvarPlanoAcao = async (acaoId, data, userData) => {
-  const docRef = acaoId ? doc(db, 'action_plans', acaoId) : doc(collection(db, 'action_plans'));
-  
-  const payload = {
-    ...data,
-    updatedAt: new Date().toISOString(),
-    updatedBy: userData?.name || 'Gestor',
+// 2. Cadastra ou atualiza um novo responsável
+export const upsertResponsavel = async (name, sector, userData) => {
+  const normalizedName = name.trim().toLowerCase();
+  const q = query(collection(db, 'responsibles'), where('nameLower', '==', normalizedName));
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    await addDoc(collection(db, 'responsibles'), {
+      name: name.trim(),
+      nameLower: normalizedName,
+      sector: sector.trim(),
+      createdAt: serverTimestamp(),
+      createdBy: userData?.uid || 'system'
+    });
+  }
+};
+
+// 3. Salva o Plano de Ação (Criação e Edição)
+export const salvarPlanoAcao = async (id, payload, userData) => {
+  const dataToSave = {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system'
   };
 
-  if (!acaoId) {
-    // É uma ação nova! Vamos gerar o número sequencial.
-    const q = query(collection(db, 'action_plans'), where('month', '==', data.month), where('cityId', '==', data.cityId));
-    const snap = await getDocs(q);
-    
-    payload.actionNumber = snap.size + 1; // Ex: Se tem 2, essa será a #3
-    payload.createdAt = new Date().toISOString();
-    payload.createdBy = userData?.name || 'Gestor';
+  if (id) {
+    return updateDoc(doc(db, 'action_plans', id), dataToSave);
+  } else {
+    dataToSave.createdAt = serverTimestamp();
+    dataToSave.createdBy = userData?.uid || 'system';
+    return addDoc(collection(db, 'action_plans'), dataToSave);
   }
-
-  await setDoc(docRef, payload, { merge: true });
-  return docRef.id;
 };
 
-// --- SISTEMA DE MEMÓRIA (Autocompletar Inteligente) ---
-export const getMemoriaAcoes = async (tipo) => { 
-  const snap = await getDocs(collection(db, `memory_${tipo}`));
-  return snap.docs.map(d => d.data().text);
-};
+// 4. Escuta os Planos de Ação (Tempo Real, filtrado por Mês e Cidade)
+export const listenActionPlans = (month, cityId, callback) => {
+  if (!month) return () => {};
 
-export const salvarMemoriaAcao = async (tipo, texto) => {
-  if (!texto || texto.trim() === '') return;
-  const q = query(collection(db, `memory_${tipo}`), where('text', '==', texto.trim()));
-  const snap = await getDocs(q);
-  if (snap.empty) {
-    await addDoc(collection(db, `memory_${tipo}`), { text: texto.trim() });
+  let conditions = [
+    where('month', '==', month), 
+    where('planType', '==', 'crescimento')
+  ];
+  
+  if (cityId && cityId !== '__all__') {
+    conditions.push(where('cityId', '==', cityId));
   }
+
+  const q = query(collection(db, 'action_plans'), ...conditions);
+  
+  return onSnapshot(q, (snap) => {
+    let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => {
+      const aDate = a.createdAt || a.startDate || '';
+      const bDate = b.createdAt || b.startDate || '';
+      return String(bDate).localeCompare(String(aDate));
+    });
+    callback(list);
+  });
 };
