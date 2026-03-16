@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   UserPlus, MapPin, Phone, CheckCircle2, 
   ArrowLeft, Loader2, Calendar, Tag, Layers, ChevronRight,
-  User, Home, Clock, Zap, XCircle
+  User, Home, Clock, Zap, XCircle, Activity, Target
 } from 'lucide-react';
+import { collection, query, where, getDocs } from 'firebase/firestore'; 
+import { db } from '../firebase'; 
 
 import { styles as global, colors } from '../styles/globalStyles';
 import { getCities, getCategories, getProducts } from '../services/catalog';
@@ -15,6 +17,9 @@ export default function NovoLead({ userData, onNavigate }) {
   const [cities, setCities] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  
+  // ESTADO: Guarda as ações de crescimento que vêm do banco
+  const [acoesCrescimento, setAcoesCrescimento] = useState([]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -23,6 +28,8 @@ export default function NovoLead({ userData, onNavigate }) {
     cidade: userData?.cityId || '', 
     logradouro: '', numero: '', bairro: '',
     categoria: '', produto: '', status: 'Em negociação', 
+    origem: 'WhatsApp', // NOVO: Guarda a origem principal
+    acaoId: ''          // NOVO: Guarda a ação escolhida (se a origem for Ação)
   });
 
   useEffect(() => {
@@ -38,6 +45,31 @@ export default function NovoLead({ userData, onNavigate }) {
     };
     load();
   }, []);
+
+  // BUSCA AS AÇÕES DE CRESCIMENTO NO FIREBASE
+  useEffect(() => {
+    const fetchAcoes = async () => {
+      try {
+        const q = query(collection(db, 'action_plans'), where('planType', '==', 'crescimento'));
+        const snap = await getDocs(q);
+        
+        const plans = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => p.status === 'Em Andamento' || p.status === 'Finalizada');
+          
+        setAcoesCrescimento(plans);
+      } catch (error) {
+        console.error("Erro ao buscar planos de ação:", error);
+      }
+    };
+    fetchAcoes();
+  }, []);
+
+  // FILTRA AS AÇÕES PARA MOSTRAR APENAS AS DA CIDADE SELECIONADA
+  const acoesDaCidade = useMemo(() => {
+    if (!form.cidade) return [];
+    return acoesCrescimento.filter(p => p.cityId === form.cidade || p.cityId === '__all__');
+  }, [acoesCrescimento, form.cidade]);
 
   const filteredProducts = useMemo(() => {
     if (!form.categoria) return [];
@@ -59,6 +91,11 @@ export default function NovoLead({ userData, onNavigate }) {
         if (window.showToast) window.showToast("Preencha os dados obrigatórios do cliente.", "error");
         return;
       }
+      // Validação: Se escolheu "Ação de Crescimento", é obrigatório selecionar qual foi a ação
+      if (form.origem === 'Ação de Crescimento' && !form.acaoId) {
+        if (window.showToast) window.showToast("Selecione qual foi a ação realizada.", "error");
+        return;
+      }
       setStep(2);
     } else if (step === 2) {
       if (!form.categoria || !form.produto) {
@@ -78,7 +115,14 @@ export default function NovoLead({ userData, onNavigate }) {
       const cat = categories.find(c => c.id === form.categoria) || { id: form.categoria, name: 'Geral' };
       const prod = products.find(p => p.id === form.produto) || { id: form.produto, name: 'Produto Não Especificado', price: 0 };
 
-      await createLead(form, userData, city, cat, prod);
+      // Opcional: Se a origem for Ação, salvamos também o nome da ação para ficar legível no banco
+      const payload = { ...form };
+      if (payload.origem === 'Ação de Crescimento' && payload.acaoId) {
+        const acaoObj = acoesDaCidade.find(a => a.id === payload.acaoId);
+        if (acaoObj) payload.acaoNome = acaoObj.name;
+      }
+
+      await createLead(payload, userData, city, cat, prod);
       
       if (window.showToast) window.showToast("Lead registrado com sucesso!", "success");
       onNavigate('clientes');
@@ -110,7 +154,6 @@ export default function NovoLead({ userData, onNavigate }) {
           </div>
         </div>
         
-        {/* Marcador de Passo no Topo (Opcional, dá um charme extra) */}
         <div style={{ display: 'flex', gap: '8px' }}>
           {[1, 2, 3].map(n => (
             <div key={n} style={{ width: '12px', height: '12px', borderRadius: '50%', background: step >= n ? colors.primary : 'var(--bg-app)', border: `1px solid ${step >= n ? colors.primary : 'var(--border)'}` }} />
@@ -182,6 +225,47 @@ export default function NovoLead({ userData, onNavigate }) {
                   <input style={{...global.input, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} placeholder="(00) 00000-0000" value={form.tel} onChange={handlePhoneChange} />
                 </div>
               </div>
+              
+              {/* CAMPO: ORIGEM PADRÃO */}
+              <div style={global.field}>
+                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: colors.primary}}>Canal de Entrada / Origem</label>
+                <div style={{ position: 'relative' }}>
+                  <Activity size={18} color={colors.primary} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <select 
+                    style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px', border: `1px solid ${colors.primary}50`}} 
+                    value={form.origem} 
+                    onChange={e => setForm({...form, origem: e.target.value, acaoId: ''})} // Limpa a ação se trocar a origem
+                  >
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Telefone">Telefone</option>
+                    <option value="Balcão/Loja">Balcão/Loja</option>
+                    <option value="Indicação">Indicação</option>
+                    <option value="Porta a Porta">Porta a Porta</option>
+                    <option value="Redes Sociais">Redes Sociais</option>
+                    <option value="Ação de Crescimento">Ação de Crescimento</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* APARECE APENAS SE A ORIGEM FOR "Ação de Crescimento" */}
+              {form.origem === 'Ação de Crescimento' && (
+                <div className="animate-fadeIn" style={{...global.field, gridColumn: 'span 2'}}>
+                  <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#f59e0b'}}>Selecione a Ação Realizada</label>
+                  <div style={{ position: 'relative' }}>
+                    <Target size={18} color="#f59e0b" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
+                    <select 
+                      style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px', border: `1px solid #f59e0b80`}} 
+                      value={form.acaoId} 
+                      onChange={e => setForm({...form, acaoId: e.target.value})}
+                    >
+                      <option value="">Selecione qual ação trouxe este cliente...</option>
+                      {acoesDaCidade.length === 0 && <option value="" disabled>Nenhuma ação ativa para esta cidade.</option>}
+                      {acoesDaCidade.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div style={global.field}>
                 <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Bairro</label>

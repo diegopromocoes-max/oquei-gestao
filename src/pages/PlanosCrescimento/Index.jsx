@@ -15,6 +15,7 @@ import ActionCreator from './ActionCreator';
 import ActionTracker from './ActionTracker';
 import ActionFinished from './ActionFinished';
 import ModalEtapas from './ModalEtapas';
+import ModalAuditoria from './ModalAuditoria'; 
 
 export default function PlanosCrescimento({ userData }) {
   const [cities, setCities] = useState([]);
@@ -23,11 +24,16 @@ export default function PlanosCrescimento({ userData }) {
   const [plans, setPlans] = useState([]);
   const [activeTab, setActiveTab] = useState(TAB_LABELS[0]);
   const [responsibles, setResponsibles] = useState([]);
+  
+  // NOVO: Estado para armazenar as bases do mês
+  const [monthlyBases, setMonthlyBases] = useState({});
 
   const [currentId, setCurrentId] = useState(null);
   const [form, setForm] = useState(getInitialForm());
   const [stepsModalOpen, setStepsModalOpen] = useState(false);
   const [stepsPlan, setStepsPlan] = useState(null);
+  
+  const [auditPlan, setAuditPlan] = useState(null);
 
   useEffect(() => {
     const isCoord = userData?.role === 'coordinator' || userData?.role === 'coordenador' || userData?.role === 'master';
@@ -52,14 +58,34 @@ export default function PlanosCrescimento({ userData }) {
     return () => unsub && unsub();
   }, [selectedCityId, selectedMonth]);
 
+  // NOVO: Efeito para buscar as bases do mês na coleção monthly_bases
+  useEffect(() => {
+    if (!selectedMonth) return;
+    const q = query(collection(db, "monthly_bases"), where("month", "==", selectedMonth));
+    const unsub = onSnapshot(q, snap => {
+      const bases = {};
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        bases[data.cityId] = Number(data.baseStart || 0); // Puxa o baseStart!
+      });
+      setMonthlyBases(bases);
+    });
+    return () => unsub();
+  }, [selectedMonth]);
+
+
   const cityMap = useMemo(() => Object.fromEntries(cities.map(c => [c.id, c.name])), [cities]);
   const sectorOptions = useMemo(() => Array.from(new Set(responsibles.map(r => r.sector))).sort(), [responsibles]);
   
+  // CORRIGIDO: Calcula a Base Inicial (D-0) usando os dados do S&OP (monthly_bases)
   const baseD0 = useMemo(() => {
-    if (selectedCityId === ALL_CITIES) return cities.reduce((acc, c) => acc + Number(c.baseAtual || c.base || 0), 0);
-    const c = cities.find(c => c.id === selectedCityId);
-    return Number(c?.baseAtual || c?.base || 0);
-  }, [selectedCityId, cities]);
+    if (selectedCityId === ALL_CITIES) {
+       // Se for "Todas as Cidades", soma o baseStart de todas as cidades filtradas para o usuário
+       return cities.reduce((acc, c) => acc + (monthlyBases[c.id] || 0), 0);
+    }
+    // Se for uma cidade específica, pega o baseStart dela no mês selecionado
+    return monthlyBases[selectedCityId] || 0;
+  }, [selectedCityId, cities, monthlyBases]);
 
   const learnedObjectives = useMemo(() => {
     const dynamic = new Set(BASE_OBJECTIVES);
@@ -98,13 +124,15 @@ export default function PlanosCrescimento({ userData }) {
       <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
 
       <div style={{ marginTop: '24px' }}>
-        {activeTab === TAB_LABELS[0] && <GrowthDashboard plans={plans} baseD0={baseD0} />}
+        {activeTab === TAB_LABELS[0] && <GrowthDashboard plans={plans} baseD0={baseD0} selectedMonth={selectedMonth} />}
         {activeTab === TAB_LABELS[1] && <ActionCreator form={form} setForm={setForm} currentId={currentId} resetForm={resetForm} responsibles={responsibles} sectorOptions={sectorOptions} learnedObjectives={learnedObjectives} userData={userData} selectedCityId={selectedCityId} selectedMonth={selectedMonth} setActiveTab={setActiveTab} />}
         {activeTab === TAB_LABELS[2] && <ActionTracker plans={plans.filter(p => p.status === 'Planejamento' || p.status === 'Em Andamento')} cityMap={cityMap} startEdit={startEdit} setStepsModalOpen={setStepsModalOpen} setStepsPlan={setStepsPlan} />}
-        {activeTab === TAB_LABELS[3] && <ActionFinished plans={plans.filter(p => p.status === 'Finalizada')} cityMap={cityMap} startEdit={startEdit} />}
+        {activeTab === TAB_LABELS[3] && <ActionFinished plans={plans.filter(p => p.status === 'Finalizada')} cityMap={cityMap} openAudit={setAuditPlan} />}
       </div>
 
       {stepsModalOpen && stepsPlan && <ModalEtapas plan={stepsPlan} close={() => {setStepsModalOpen(false); setStepsPlan(null);}} userData={userData} />}
+      
+      {auditPlan && <ModalAuditoria plan={auditPlan} close={() => setAuditPlan(null)} cityMap={cityMap} />}
     </Page>
   );
 }

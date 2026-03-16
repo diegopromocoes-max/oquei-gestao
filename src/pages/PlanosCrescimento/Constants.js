@@ -11,25 +11,23 @@ export const BASE_OBJECTIVES = [
   'Troca de Equipamentos', 'Redução de Churn', 'Campanha de Indicação'
 ];
 
-// ─── CONSTANTES DE CORES ADICIONADAS ───
-export const STATUS_BADGE = { 
-  'Planejamento': 'neutral', 
-  'Em Andamento': 'primary', 
-  'Finalizada': 'success', 
-  'Cancelada': 'danger' 
-};
-
-export const OUTCOME_BADGE = { 
-  'positivo': 'success', 
-  'negativo': 'danger', 
-  'neutro': 'warning' 
-};
+export const STATUS_BADGE = { 'Planejamento': 'neutral', 'Em Andamento': 'primary', 'Finalizada': 'success', 'Cancelada': 'danger' };
+export const OUTCOME_BADGE = { 'positivo': 'success', 'negativo': 'danger', 'neutro': 'warning' };
 
 export function getInitialForm() {
   return {
     name: '', category: 'Marketing', objectives: [], description: '',
     responsibles: [{ name: '', sector: '' }], startDate: '', endDate: '', cost: '', 
     actionFocus: FOCUS_OPTIONS[0], status: 'Planejamento', dynamicMetrics: [], 
-    outcome: 'neutro', replicable: 'nao', resultsSummary: '', actualBaseImpact: ''
+    outcome: 'neutro', replicable: 'nao', resultsSummary: '', actualBaseImpact: '', 
+    objectiveAchieved: '' // <-- NOVO CAMPO
   };
 }
+
+// NOVO: Função que calcula Orçamento Inicial + Acréscimos nas Etapas
+export const calcTotalBudget = (plan) => {
+  const initial = Number(plan.cost || 0);
+  const steps = [...(plan.planningSteps || []), ...(plan.executionSteps || [])];
+  const extra = steps.reduce((acc, s) => acc + Number(s.additionalBudget || 0), 0);
+  return initial + extra;
+};

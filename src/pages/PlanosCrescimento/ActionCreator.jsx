@@ -24,9 +24,15 @@ export default function ActionCreator({ form, setForm, currentId, resetForm, res
       for (const resp of cleanResponsibles) await upsertResponsavel(resp.name, resp.sector, userData);
 
       const payload = { 
-        ...form, responsibles: cleanResponsibles, cost: Number(form.cost || 0),
-        actualBaseImpact: Number(form.actualBaseImpact || 0), returnValue: Number(form.returnValue || 0),
-        cityId: selectedCityId, month: selectedMonth, planType: 'crescimento' 
+        ...form, 
+        responsibles: cleanResponsibles, 
+        cost: Number(form.cost || 0),
+        actualBaseImpact: Number(form.actualBaseImpact || 0), 
+        returnValue: Number(form.returnValue || 0),
+        objectiveResults: form.objectiveResults || {}, // Salva a aferição dos objetivos!
+        cityId: selectedCityId, 
+        month: selectedMonth, 
+        planType: 'crescimento' 
       };
 
       await salvarPlanoAcao(currentId, payload, userData);
@@ -38,6 +44,7 @@ export default function ActionCreator({ form, setForm, currentId, resetForm, res
 
   return (
     <div className="animate-fadeInUp" style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 1.2fr) minmax(350px, 1fr)', gap: '24px' }}>
+      
       <Card title="O Plano Estratégico" subtitle="Defina o escopo, objetivos e envolvidos.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -49,8 +56,8 @@ export default function ActionCreator({ form, setForm, currentId, resetForm, res
             <label style={{ fontSize: '12px', fontWeight: '800', marginBottom: '10px', display: 'block', color: 'var(--text-main)' }}>Objetivos da Ação</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '15px' }}>
               {form.objectives.map(obj => (
-                <div key={obj} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: '50px', fontSize: '12px', fontWeight: 'bold' }}>
-                  {obj} {isEditable && <button onClick={() => setForm({...form, objectives: form.objectives.filter(o => o !== obj)})} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={14}/></button>}
+                <div key={obj} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: '50px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                  {obj} {isEditable && <button onClick={() => setForm({...form, objectives: form.objectives.filter(o => o !== obj)})} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 0 }}><X size={14}/></button>}
                 </div>
               ))}
             </div>
@@ -95,7 +102,7 @@ export default function ActionCreator({ form, setForm, currentId, resetForm, res
             </div>
 
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}><Layers size={16} color={colors.primary}/> KPIs Dinâmicos</h4>
+              <h4 style={{ margin: '0 0 15px 0', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)' }}><Layers size={16} color={colors.primary}/> KPIs Dinâmicos</h4>
               {(form.dynamicMetrics || []).map((metric) => (
                 <div key={metric.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px', marginBottom: '10px', background: 'var(--bg-app)', padding: '12px', borderRadius: '12px', border: '1px solid var(--border)' }}>
                   <div><Input placeholder="Métrica" value={metric.name} onChange={e => setForm({...form, dynamicMetrics: form.dynamicMetrics.map(m => m.id===metric.id ? {...m, name:e.target.value} : m)})} disabled={!isEditable} /></div>
@@ -113,6 +120,25 @@ export default function ActionCreator({ form, setForm, currentId, resetForm, res
         {form.status === 'Finalizada' && (
           <Card title="Debriefing (Pós-Ação)" subtitle="Resultados reais para fechar o ciclo.">
             <div style={{ padding: '20px', background: 'var(--bg-app)', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              
+              {/* NOVA ÁREA DE AFERIÇÃO DE OBJETIVOS */}
+              {form.objectives.length > 0 && (
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid var(--border)' }}>
+                  <h5 style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'var(--text-main)' }}>Aferição de Objetivos Traçados</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+                    {form.objectives.map(obj => (
+                      <Input 
+                        key={obj} 
+                        label={`Resultado alcançado para: ${obj}`} 
+                        placeholder="Ex: Atingimos 5.000 visualizações..."
+                        value={form.objectiveResults?.[obj] || ''} 
+                        onChange={e => setForm({...form, objectiveResults: {...(form.objectiveResults || {}), [obj]: e.target.value}})} 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <Input type="number" label="Impacto na Base (+ Clientes)" value={form.actualBaseImpact} onChange={e => setForm({...form, actualBaseImpact: e.target.value})} />
                 <Select label="Avaliação Final" value={form.outcome} onChange={e => setForm({...form, outcome: e.target.value})} options={OUTCOME_OPTIONS} />

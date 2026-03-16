@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge, Btn, Card, moeda, colors, styles as ui } from '../../components/ui';
 import { OUTCOME_BADGE } from './constants';
 
-export default function ActionFinished({ plans, cityMap, startEdit }) {
+export default function ActionFinished({ plans, cityMap, openAudit }) { // <-- Mudou para openAudit
   return (
     <Card title="Debriefing e Replicação" subtitle="Ações concluídas passam por auditoria de impacto real na base.">
       <div style={{ overflowX: 'auto', marginTop: '20px' }}>
@@ -25,7 +25,11 @@ export default function ActionFinished({ plans, cityMap, startEdit }) {
                 </td>
                 <td style={ui.td}><Badge cor={OUTCOME_BADGE[plan.outcome || 'neutro']}>{plan.outcome?.toUpperCase() || 'Pendente'}</Badge></td>
                 <td style={ui.td}>{plan.replicable === 'sim' ? <Badge cor="success">SIM</Badge> : <Badge cor="danger">NÃO</Badge>}</td>
-                <td style={ui.td}><Btn variant="secondary" size="sm" onClick={() => startEdit(plan)}>Ver Auditoria</Btn></td>
+                
+                {/* BOTÃO ATUALIZADO */}
+                <td style={ui.td}>
+                  <Btn variant="secondary" size="sm" onClick={() => openAudit(plan)}>Ler Relatório</Btn>
+                </td>
               </tr>
             ))}
             {plans.length === 0 && <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum debriefing pendente.</td></tr>}
