@@ -9,10 +9,7 @@ import {
 
 import { Page, Card, Btn, Badge, colors } from '../components/ui';
 import TabAvaliacaoPatrocinio from '../components/TabAvaliacaoPatrocinio';
-<<<<<<< HEAD
 import DashboardPatrocinios from '../components/DashboardPatrocinios';
-=======
->>>>>>> 4e8dbd1b0c7b37c62d754bb6a3c5b816afa71fd1
 
 export default function PatrocinioSupervisor({ userData }) {
   const [activeTab, setActiveTab] = useState('nova'); 

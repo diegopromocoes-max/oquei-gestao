@@ -21,7 +21,9 @@ export const createLead = async (formData, userData, cityDetails, catDetails, pr
     productPrice: Number(prodDetails?.price || 0),
     status: formData.status,
     isMetaBatida: false,
-    origin: 'CRM Interno'
+    origin: formData.origem || 'CRM Interno',
+    originActionId: formData.acaoId || null,
+    originActionName: formData.acaoNome || null,
   });
 };
 
