@@ -1,7 +1,7 @@
 import React from 'react';
-import { Btn, data, Badge } from '../../components/ui';
+import { Btn, data, Badge, moeda } from '../../components/ui';
 
-export default function TaskList({ title, tasks, onComplete, onReopen }) {
+export default function TaskList({ title, tasks, onComplete, onReopen, onDelete }) {
   return (
     <div className="hub-tasklist">
       <div className="hub-tasklist-header">
@@ -19,7 +19,10 @@ export default function TaskList({ title, tasks, onComplete, onReopen }) {
             <div className="hub-task-title">{t.title || t.text || 'Tarefa'}</div>
             <div className="hub-task-meta">
               {t.deadline && <span className="hub-muted">Prazo: {data(t.deadline)}</span>}
-              {t.planName && <Badge cor="neutral">{t.planName}</Badge>}
+              {Number(t.budget || 0) > 0 && <span className="hub-muted">Orcamento: {moeda(Number(t.budget || 0))}</span>}
+              {t.kpiName && <Badge cor="info">KPI: {t.kpiName}</Badge>}
+              {t.kpiResult !== undefined && t.kpiResult !== null && <Badge cor="success">Resultado: {t.kpiResult}</Badge>}
+              {(t.actionName || t.planName) && <Badge cor="neutral">{t.actionName || t.planName}</Badge>}
             </div>
           </div>
           <div className="hub-task-actions">
@@ -27,6 +30,9 @@ export default function TaskList({ title, tasks, onComplete, onReopen }) {
               <Btn size="sm" variant="secondary" onClick={() => onReopen?.(t)}>Reabrir</Btn>
             ) : (
               <Btn size="sm" onClick={() => onComplete?.(t)}>Concluir</Btn>
+            )}
+            {onDelete && (
+              <Btn size="sm" variant="danger" onClick={() => onDelete?.(t)}>Excluir</Btn>
             )}
           </div>
         </div>

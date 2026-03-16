@@ -1,14 +1,20 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Card, Btn, Input, Select, Textarea, Modal, Badge } from '../../components/ui';
+import { Card, Btn, Input, Select, Textarea, Modal, Badge, InfoBox, moeda } from '../../components/ui';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanColumn from '../components/KanbanColumn';
 import PlanCard from '../components/PlanCard';
+import Timeline from '../components/Timeline';
 import { usePlans } from '../hooks/usePlans';
-import { createPlan, updatePlanStatus } from '../services/planService';
-import { createTask, getTasksByPlan } from '../services/taskService';
+import { createPlan, updatePlanStatus, deleteActionPlan } from '../services/planService';
+import { createTask, deleteTask, getTasksByAction, completeTask, reopenTask } from '../services/taskService';
+import { useUsers } from '../hooks/useUsers';
+import { useKpis } from '../hooks/useKpis';
+import { createKpi } from '../services/kpiService';
+import { useTimeline } from '../hooks/useTimeline';
 
 const CATEGORY_OPTIONS = ['Marketing', 'Comercial', 'Operacional', 'Relacionamento', 'Outras'];
 const FOCUS_OPTIONS = ['Vendas Novas', 'Migracoes/Up-Sell', 'Retencao/Anti-Churn', 'Marca', 'Inadimplencia', 'Outro'];
+const KPI_CATEGORIES = ['Vendas', 'Leads', 'Marca', 'Outro'];
 
 const COLUMNS = [
   { id: 'Backlog', title: 'Backlog' },
@@ -18,10 +24,19 @@ const COLUMNS = [
   { id: 'Cancelada', title: 'Cancelada' },
 ];
 
-export default function KanbanPage({ userData, selectedCityId, selectedMonth }) {
-  const plans = usePlans(selectedCityId, selectedMonth);
+export default function KanbanPage({ userData, selectedCityId, selectedMonth, selectedGrowthPlan }) {
+  const plans = usePlans(selectedGrowthPlan?.cityId || selectedCityId, selectedMonth, selectedGrowthPlan?.id);
+  const cityFilter = selectedGrowthPlan?.cityId || selectedCityId || null;
+  const { users } = useUsers({
+    cityId: cityFilter,
+    clusterId: userData?.clusterId || null,
+    fallbackAll: true,
+  });
+  const kpis = useKpis();
   const [draggedPlan, setDraggedPlan] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [finalizePlan, setFinalizePlan] = useState(null);
+  const [finalizeReport, setFinalizeReport] = useState('');
 
   const [form, setForm] = useState({
     name: '',
@@ -32,20 +47,54 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
     startDate: '',
     endDate: '',
     cost: '',
+    responsibleUid: '',
   });
 
   const [openPlan, setOpenPlan] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [taskForm, setTaskForm] = useState({ title: '', deadline: '', responsibleName: '', responsibleUid: '' });
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    deadline: '',
+    responsibleUid: '',
+    budget: '',
+    kpiEnabled: 'no',
+    kpiSelection: '',
+    kpiName: '',
+    kpiCategory: KPI_CATEGORIES[0],
+  });
+  const [finishTask, setFinishTask] = useState(null);
+  const [finishReport, setFinishReport] = useState('');
+  const [finishKpiResult, setFinishKpiResult] = useState('');
+  const timelineEvents = useTimeline({ actionPlanId: openPlan?.id });
+
+  const responsibleOptions = useMemo(() => {
+    return users.map((u) => ({
+      value: u.id,
+      label: `${u.name || u.nome || u.displayName || 'Sem nome'}${u.role ? ` (${u.role})` : ''}`,
+    }));
+  }, [users]);
+
+  const kpiOptions = useMemo(() => {
+    return kpis.map((kpi) => ({
+      value: kpi.id,
+      label: `${kpi.name || 'KPI'}${kpi.category ? ` (${kpi.category})` : ''}`,
+    }));
+  }, [kpis]);
 
   useEffect(() => {
     const load = async () => {
       if (!openPlan) return;
-      const list = await getTasksByPlan(openPlan.id);
+      const list = await getTasksByAction(openPlan.id);
       setTasks(list);
     };
     load();
   }, [openPlan]);
+
+  useEffect(() => {
+    if (!openPlan) return;
+    const latest = plans.find((p) => p.id === openPlan.id);
+    if (latest) setOpenPlan(latest);
+  }, [plans]);
 
   const plansByStatus = useMemo(() => {
     const map = {};
@@ -65,17 +114,23 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
   const handleDrop = async (e, status) => {
     e.preventDefault();
     if (!draggedPlan || draggedPlan.status === status) return;
+    if (status === 'Finalizada') {
+      setFinalizePlan(draggedPlan);
+      setFinalizeReport('');
+      setDraggedPlan(null);
+      return;
+    }
     await updatePlanStatus(draggedPlan.id, status, userData);
     setDraggedPlan(null);
   };
 
   const handleCreatePlan = async () => {
-    if (!selectedCityId || selectedCityId === '__all__') {
-      window.showToast?.('Selecione uma cidade.', 'error');
+    if (!selectedGrowthPlan) {
+      window.showToast?.('Selecione um plano geral antes de criar a acao.', 'error');
       return;
     }
     if (!form.name.trim()) {
-      window.showToast?.('Informe um nome para o plano.', 'error');
+      window.showToast?.('Informe um nome para a acao.', 'error');
       return;
     }
 
@@ -86,6 +141,8 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
         .map((o) => o.trim())
         .filter(Boolean);
 
+      const responsible = users.find((u) => u.id === form.responsibleUid) || {};
+
       await createPlan({
         name: form.name,
         description: form.description,
@@ -95,52 +152,183 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
         startDate: form.startDate,
         endDate: form.endDate,
         cost: Number(form.cost || 0),
-        cityId: selectedCityId,
-        month: selectedMonth,
-        responsibles: [{ name: userData?.name || 'Responsavel', sector: userData?.sector || '' }],
+        cityId: selectedGrowthPlan.cityId,
+        month: selectedGrowthPlan.month || selectedMonth,
+        growthPlanId: selectedGrowthPlan.id,
+        growthPlanName: selectedGrowthPlan.name,
+        responsibles: [{
+          uid: responsible.id || userData?.uid || null,
+          name: responsible.name || responsible.nome || responsible.displayName || userData?.name || userData?.nome || 'Responsavel',
+          role: responsible.role || userData?.role || '',
+          cityId: responsible.cityId || selectedGrowthPlan.cityId,
+        }],
       }, userData);
 
       setForm({
         name: '', description: '', objectives: '', category: CATEGORY_OPTIONS[0],
-        actionFocus: FOCUS_OPTIONS[0], startDate: '', endDate: '', cost: ''
+        actionFocus: FOCUS_OPTIONS[0], startDate: '', endDate: '', cost: '', responsibleUid: ''
       });
 
-      window.showToast?.('Plano criado.', 'success');
+      window.showToast?.('Acao criada.', 'success');
     } catch (err) {
-      window.showToast?.('Erro ao criar plano.', 'error');
+      window.showToast?.('Erro ao criar acao.', 'error');
     }
     setIsSaving(false);
   };
 
   const handleAddTask = async () => {
     if (!openPlan) return;
+    if (openPlan.status === 'Finalizada') {
+      window.showToast?.('Acao finalizada. Reabra para adicionar etapas.', 'error');
+      return;
+    }
     if (!taskForm.title.trim()) {
       window.showToast?.('Informe o titulo da tarefa.', 'error');
       return;
     }
 
-    const responsibleUid = taskForm.responsibleUid || userData?.uid || '';
-    const responsibleName = taskForm.responsibleName || userData?.name || 'Responsavel';
+    const responsible = users.find((u) => u.id === taskForm.responsibleUid) || {};
+    const responsibleUid = responsible.id || userData?.uid || '';
+    const responsibleName = responsible.name || responsible.nome || responsible.displayName || userData?.name || userData?.nome || 'Responsavel';
+    const kpiEnabled = taskForm.kpiEnabled === 'yes';
+    let kpiId = null;
+    let kpiName = null;
+    let kpiCategory = null;
 
-    await createTask(openPlan.id, {
-      title: taskForm.title,
-      deadline: taskForm.deadline || null,
-      cityId: openPlan.cityId,
-      planName: openPlan.name,
-      responsibleUid,
-      responsibleName,
-    }, userData);
+    if (kpiEnabled) {
+      if (!taskForm.kpiSelection) {
+        window.showToast?.('Selecione um KPI ou crie um novo.', 'error');
+        return;
+      }
+      if (taskForm.kpiSelection && taskForm.kpiSelection !== '__new__') {
+        const found = kpis.find((k) => k.id === taskForm.kpiSelection);
+        kpiId = found?.id || null;
+        kpiName = found?.name || null;
+        kpiCategory = found?.category || null;
+      } else {
+        const name = String(taskForm.kpiName || '').trim();
+        if (!name) {
+          window.showToast?.('Informe o nome do KPI.', 'error');
+          return;
+        }
+        const existing = kpis.find((k) => String(k.name || '').toLowerCase() === name.toLowerCase());
+        if (existing) {
+          kpiId = existing.id;
+          kpiName = existing.name;
+          kpiCategory = existing.category || taskForm.kpiCategory;
+        } else {
+          const newId = await createKpi({ name, category: taskForm.kpiCategory }, userData);
+          kpiId = newId;
+          kpiName = name;
+          kpiCategory = taskForm.kpiCategory;
+        }
+      }
+    }
 
-    setTaskForm({ title: '', deadline: '', responsibleName: '', responsibleUid: '' });
-    const list = await getTasksByPlan(openPlan.id);
+    try {
+      await createTask(openPlan.id, {
+        title: taskForm.title,
+        deadline: taskForm.deadline || null,
+        cityId: openPlan.cityId,
+        actionName: openPlan.name,
+        responsibleUid,
+        responsibleName,
+        budget: Number(taskForm.budget || 0),
+        kpiEnabled,
+        kpiId,
+        kpiName,
+        kpiCategory,
+      }, userData);
+
+      setTaskForm({
+        title: '',
+        deadline: '',
+        responsibleUid: '',
+        budget: '',
+        kpiEnabled: 'no',
+        kpiSelection: '',
+        kpiName: '',
+        kpiCategory: KPI_CATEGORIES[0],
+      });
+      const list = await getTasksByAction(openPlan.id);
+      setTasks(list);
+    } catch (err) {
+      window.showToast?.('Nao foi possivel adicionar a etapa.', 'error');
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    await deleteTask(taskId, userData);
+    const list = await getTasksByAction(openPlan.id);
     setTasks(list);
+  };
+
+  const handleOpenFinishTask = (task) => {
+    setFinishTask(task);
+    setFinishReport('');
+    setFinishKpiResult('');
+  };
+
+  const handleConfirmFinishTask = async () => {
+    if (!finishTask) return;
+    if (!String(finishReport || '').trim()) {
+      window.showToast?.('Informe o relatorio da etapa.', 'error');
+      return;
+    }
+    if (finishTask.kpiEnabled) {
+      const value = finishKpiResult;
+      if (value === '' || Number.isNaN(Number(value))) {
+        window.showToast?.('Informe o resultado do KPI.', 'error');
+        return;
+      }
+    }
+    try {
+      await completeTask(finishTask.id, userData, finishReport, finishKpiResult);
+      setFinishTask(null);
+      setFinishReport('');
+      setFinishKpiResult('');
+      const list = await getTasksByAction(openPlan.id);
+      setTasks(list);
+    } catch (err) {
+      window.showToast?.('Nao foi possivel finalizar a etapa.', 'error');
+    }
+  };
+
+  const handleReopenTask = async (task) => {
+    await reopenTask(task.id, userData);
+    const list = await getTasksByAction(openPlan.id);
+    setTasks(list);
+  };
+
+  const handleDeleteAction = async () => {
+    if (!openPlan) return;
+    if (!window.confirm('Excluir esta acao?')) return;
+    await deleteActionPlan(openPlan.id, userData);
+    setOpenPlan(null);
+  };
+
+  const handleReopenAction = async () => {
+    if (!openPlan) return;
+    await updatePlanStatus(openPlan.id, 'Em Andamento', userData);
+    setOpenPlan({ ...openPlan, status: 'Em Andamento' });
+  };
+
+  const handleConfirmFinalize = async () => {
+    if (!finalizePlan) return;
+    await updatePlanStatus(finalizePlan.id, 'Finalizada', userData, { completionReport: finalizeReport });
+    setFinalizePlan(null);
+    setFinalizeReport('');
   };
 
   return (
     <div className="hub-stack">
-      <Card title="Novo Plano" subtitle="Crie um plano para iniciar o fluxo">
+      {!selectedGrowthPlan && (
+        <InfoBox type="warning">Selecione um plano geral para criar acoes.</InfoBox>
+      )}
+
+      <Card title="Nova Acao" subtitle="Crie uma acao dentro do plano geral">
         <div className="hub-form-grid">
-          <Input label="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input label="Nome da acao" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={CATEGORY_OPTIONS} />
           <Select label="Foco" value={form.actionFocus} onChange={(e) => setForm({ ...form, actionFocus: e.target.value })} options={FOCUS_OPTIONS} />
           <Input type="number" label="Custo (R$)" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
@@ -148,9 +336,17 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
           <Input type="date" label="Prazo" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
           <Input label="Objetivos (separe por virgula)" value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} />
           <Textarea label="Descricao" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <Select
+            label="Responsavel"
+            value={form.responsibleUid}
+            onChange={(e) => setForm({ ...form, responsibleUid: e.target.value })}
+            options={responsibleOptions}
+            placeholder="Selecione um usuario"
+          />
+          {users.length === 0 && <div className="hub-muted">Nenhum usuario encontrado.</div>}
         </div>
         <div className="hub-actions">
-          <Btn onClick={handleCreatePlan} loading={isSaving}>Criar Plano</Btn>
+          <Btn onClick={handleCreatePlan} loading={isSaving}>Criar Acao</Btn>
         </div>
       </Card>
 
@@ -178,7 +374,7 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
       <Modal
         open={!!openPlan}
         onClose={() => { setOpenPlan(null); setTasks([]); }}
-        title={openPlan ? `Plano: ${openPlan.name}` : 'Plano'}
+        title={openPlan ? `Acao: ${openPlan.name}` : 'Acao'}
         size="lg"
       >
         {openPlan && (
@@ -188,37 +384,182 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth }) 
               <div className="hub-modal-row">
                 <Badge cor="neutral">{openPlan.status}</Badge>
                 <span className="hub-muted">Cidade: {openPlan.cityId}</span>
+                <span className="hub-muted">Custo total: {moeda(Number(openPlan.cost || 0))}</span>
+              </div>
+              {Number(openPlan.taskBudgetTotal || 0) > 0 && (
+                <div className="hub-muted">Custo de etapas: {moeda(Number(openPlan.taskBudgetTotal || 0))}</div>
+              )}
+              <div className="hub-actions">
+                <Btn variant="danger" onClick={handleDeleteAction}>Excluir acao</Btn>
               </div>
             </div>
 
             <div className="hub-modal-section">
               <div className="hub-modal-title">Adicionar tarefa</div>
+              {openPlan.status === 'Finalizada' && (
+                <InfoBox type="warning">Acao finalizada. Para inserir novas etapas, volte para "Em Andamento".</InfoBox>
+              )}
               <div className="hub-form-grid">
-                <Input label="Titulo" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} />
-                <Input type="date" label="Prazo" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} />
-                <Input label="Responsavel (nome)" value={taskForm.responsibleName} onChange={(e) => setTaskForm({ ...taskForm, responsibleName: e.target.value })} />
-                <Input label="Responsavel (uid opcional)" value={taskForm.responsibleUid} onChange={(e) => setTaskForm({ ...taskForm, responsibleUid: e.target.value })} />
+                <Input label="Titulo" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Input type="date" label="Prazo" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Input type="number" label="Orcamento da etapa (R$)" value={taskForm.budget} onChange={(e) => setTaskForm({ ...taskForm, budget: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Select
+                  label="Medir resultados?"
+                  value={taskForm.kpiEnabled}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setTaskForm({
+                      ...taskForm,
+                      kpiEnabled: value,
+                      ...(value === 'no' ? { kpiSelection: '', kpiName: '', kpiCategory: KPI_CATEGORIES[0] } : {}),
+                    });
+                  }}
+                  options={[
+                    { value: 'no', label: 'Nao' },
+                    { value: 'yes', label: 'Sim' },
+                  ]}
+                  disabled={openPlan.status === 'Finalizada'}
+                />
+                {taskForm.kpiEnabled === 'yes' && (
+                  <Select
+                    label="KPI"
+                    value={taskForm.kpiSelection}
+                    onChange={(e) => setTaskForm({ ...taskForm, kpiSelection: e.target.value })}
+                    options={[
+                      { value: '', label: 'Selecione um KPI' },
+                      ...kpiOptions,
+                      { value: '__new__', label: 'Novo KPI' },
+                    ]}
+                    disabled={openPlan.status === 'Finalizada'}
+                  />
+                )}
+                {taskForm.kpiEnabled === 'yes' && taskForm.kpiSelection === '__new__' && (
+                  <>
+                    <Input
+                      label="Nome do novo KPI"
+                      value={taskForm.kpiName}
+                      onChange={(e) => setTaskForm({ ...taskForm, kpiName: e.target.value })}
+                      disabled={openPlan.status === 'Finalizada'}
+                    />
+                    <Select
+                      label="Categoria do KPI"
+                      value={taskForm.kpiCategory}
+                      onChange={(e) => setTaskForm({ ...taskForm, kpiCategory: e.target.value })}
+                      options={KPI_CATEGORIES}
+                      disabled={openPlan.status === 'Finalizada'}
+                    />
+                  </>
+                )}
+                <Select
+                  label="Responsavel"
+                  value={taskForm.responsibleUid}
+                  onChange={(e) => setTaskForm({ ...taskForm, responsibleUid: e.target.value })}
+                  options={responsibleOptions}
+                  placeholder="Selecione um usuario"
+                  disabled={openPlan.status === 'Finalizada'}
+                />
+                {users.length === 0 && <div className="hub-muted">Nenhum usuario encontrado.</div>}
               </div>
               <div className="hub-actions">
-                <Btn onClick={handleAddTask}>Salvar tarefa</Btn>
+                {openPlan.status === 'Finalizada' ? (
+                  <Btn variant="secondary" onClick={handleReopenAction}>Reabrir acao</Btn>
+                ) : (
+                  <Btn onClick={handleAddTask}>Salvar tarefa</Btn>
+                )}
               </div>
             </div>
 
             <div className="hub-modal-section">
-              <div className="hub-modal-title">Tarefas do plano</div>
+              <div className="hub-modal-title">Tarefas da acao</div>
               {tasks.length === 0 && <div className="hub-empty">Nenhuma tarefa ainda.</div>}
               {tasks.map((t) => (
                 <div key={t.id} className="hub-task-row">
                   <div>
                     <div className="hub-strong">{t.title || 'Tarefa'}</div>
                     <div className="hub-muted">Resp: {t.responsibleName || '---'}</div>
+                    {Number(t.budget || 0) > 0 && <div className="hub-muted">Orcamento: {moeda(Number(t.budget || 0))}</div>}
+                    {t.kpiName && <div className="hub-muted">KPI: {t.kpiName}</div>}
+                    {t.kpiResult !== undefined && t.kpiResult !== null && (
+                      <div className="hub-muted">Resultado: {t.kpiResult}</div>
+                    )}
                   </div>
-                  <Badge cor={t.status === 'done' ? 'success' : 'warning'}>{t.status}</Badge>
+                  <div className="hub-actions-inline">
+                    <Badge cor={t.status === 'done' ? 'success' : 'warning'}>{t.status}</Badge>
+                    {t.status === 'done' ? (
+                      <Btn size="sm" variant="secondary" onClick={() => handleReopenTask(t)}>Reabrir</Btn>
+                    ) : (
+                      <Btn size="sm" onClick={() => handleOpenFinishTask(t)}>Finalizar</Btn>
+                    )}
+                    <Btn size="sm" variant="danger" onClick={() => handleDeleteTask(t.id)}>Excluir</Btn>
+                  </div>
                 </div>
               ))}
             </div>
+
+            <div className="hub-modal-section">
+              <div className="hub-modal-title">Linha do tempo</div>
+              <Timeline events={timelineEvents} />
+            </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={!!finishTask}
+        onClose={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}
+        title={finishTask ? `Finalizar etapa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar etapa'}
+        size="lg"
+      >
+        <div className="hub-modal">
+          <div className="hub-modal-section">
+            <div className="hub-modal-title">Relatorio da etapa</div>
+            <Textarea
+              label="Relatorio (opcional)"
+              value={finishReport}
+              onChange={(e) => setFinishReport(e.target.value)}
+              placeholder="Descreva o que foi feito e os resultados."
+            />
+          </div>
+          {finishTask?.kpiEnabled && (
+            <div className="hub-modal-section">
+              <div className="hub-modal-title">Resultado do KPI</div>
+              <Input
+                type="number"
+                label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
+                value={finishKpiResult}
+                onChange={(e) => setFinishKpiResult(e.target.value)}
+                placeholder="Informe o resultado do KPI"
+              />
+            </div>
+          )}
+          <div className="hub-actions">
+            <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinishTask}>Finalizar etapa</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!finalizePlan}
+        onClose={() => { setFinalizePlan(null); setFinalizeReport(''); }}
+        title={finalizePlan ? `Finalizar acao: ${finalizePlan.name}` : 'Finalizar acao'}
+        size="lg"
+      >
+        <div className="hub-modal">
+          <div className="hub-modal-section">
+            <div className="hub-modal-title">Relatorio (opcional)</div>
+            <Textarea
+              label="Relatorio"
+              value={finalizeReport}
+              onChange={(e) => setFinalizeReport(e.target.value)}
+              placeholder="Descreva o que foi feito, resultados e observacoes."
+            />
+          </div>
+          <div className="hub-actions">
+            <Btn variant="secondary" onClick={() => { setFinalizePlan(null); setFinalizeReport(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinalize}>Finalizar acao</Btn>
+          </div>
+        </div>
       </Modal>
     </div>
   );

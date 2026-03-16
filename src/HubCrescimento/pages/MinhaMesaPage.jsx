@@ -1,14 +1,17 @@
-import React, { useMemo } from 'react';
-import { Card } from '../../components/ui';
+import React, { useMemo, useState } from 'react';
+import { Card, Modal, Textarea, Btn, Input } from '../../components/ui';
 import TaskList from '../components/TaskList';
 import { useTasks } from '../hooks/useTasks';
-import { completeTask, reopenTask } from '../services/taskService';
+import { completeTask, reopenTask, deleteTask } from '../services/taskService';
 
 const toDate = (v) => (v ? new Date(v) : null);
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 export default function MinhaMesaPage({ userData, selectedCityId }) {
   const tasks = useTasks({ uid: userData?.uid, cityId: selectedCityId });
+  const [finishTask, setFinishTask] = useState(null);
+  const [finishReport, setFinishReport] = useState('');
+  const [finishKpiResult, setFinishKpiResult] = useState('');
 
   const grouped = useMemo(() => {
     const now = new Date();
@@ -42,21 +45,85 @@ export default function MinhaMesaPage({ userData, selectedCityId }) {
   }, [tasks]);
 
   const handleComplete = async (task) => {
-    await completeTask(task.id, userData);
+    setFinishTask(task);
+    setFinishReport('');
+    setFinishKpiResult('');
   };
 
   const handleReopen = async (task) => {
     await reopenTask(task.id, userData);
   };
 
+  const handleDelete = async (task) => {
+    if (!window.confirm('Excluir esta tarefa?')) return;
+    await deleteTask(task.id, userData);
+  };
+
+  const handleConfirmFinish = async () => {
+    if (!finishTask) return;
+    if (!String(finishReport || '').trim()) {
+      window.showToast?.('Informe o relatorio da etapa.', 'error');
+      return;
+    }
+    if (finishTask.kpiEnabled) {
+      if (finishKpiResult === '' || Number.isNaN(Number(finishKpiResult))) {
+        window.showToast?.('Informe o resultado do KPI.', 'error');
+        return;
+      }
+    }
+    try {
+      await completeTask(finishTask.id, userData, finishReport, finishKpiResult);
+      setFinishTask(null);
+      setFinishReport('');
+      setFinishKpiResult('');
+    } catch (err) {
+      window.showToast?.('Nao foi possivel finalizar a etapa.', 'error');
+    }
+  };
+
   return (
     <div className="hub-stack">
       <Card title="Minha Mesa" subtitle="Tarefas da minha responsabilidade">
-        <TaskList title="Atrasadas" tasks={grouped.overdue} onComplete={handleComplete} onReopen={handleReopen} />
-        <TaskList title="Hoje" tasks={grouped.today} onComplete={handleComplete} onReopen={handleReopen} />
-        <TaskList title="Esta semana" tasks={grouped.week} onComplete={handleComplete} onReopen={handleReopen} />
-        <TaskList title="Concluidas" tasks={grouped.done} onComplete={handleComplete} onReopen={handleReopen} />
+        <TaskList title="Atrasadas" tasks={grouped.overdue} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Hoje" tasks={grouped.today} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Esta semana" tasks={grouped.week} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Concluidas" tasks={grouped.done} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
       </Card>
+
+      <Modal
+        open={!!finishTask}
+        onClose={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}
+        title={finishTask ? `Finalizar tarefa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar tarefa'}
+        size="lg"
+      >
+        <div className="hub-modal">
+          <div className="hub-modal-section">
+            <div className="hub-modal-title">Relatorio (opcional)</div>
+            <Textarea
+              label="Relatorio"
+              value={finishReport}
+              onChange={(e) => setFinishReport(e.target.value)}
+              placeholder="Descreva o que foi feito, resultados e observacoes."
+            />
+          </div>
+          {finishTask?.kpiEnabled && (
+            <div className="hub-modal-section">
+              <div className="hub-modal-title">Resultado do KPI</div>
+              <Input
+                type="number"
+                label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
+                value={finishKpiResult}
+                onChange={(e) => setFinishKpiResult(e.target.value)}
+                placeholder="Informe o resultado do KPI"
+              />
+            </div>
+          )}
+          <div className="hub-actions">
+            <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinish}>Finalizar tarefa</Btn>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

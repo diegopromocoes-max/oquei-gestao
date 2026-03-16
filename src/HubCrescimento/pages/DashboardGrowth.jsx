@@ -7,7 +7,7 @@ import GrowthScoreCard from '../components/GrowthScoreCard';
 import { db } from '../../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
-export default function DashboardGrowth({ selectedCityId, selectedMonth }) {
+export default function DashboardGrowth({ selectedCityId, selectedMonth, selectedGrowthPlan }) {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalPlans: 0,
@@ -22,7 +22,7 @@ export default function DashboardGrowth({ selectedCityId, selectedMonth }) {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const plans = await getPlans({ cityId: selectedCityId, month: selectedMonth });
+      const plans = await getPlans({ cityId: selectedCityId, month: selectedMonth, growthPlanId: selectedGrowthPlan?.id });
 
       const totalPlans = plans.length;
       const totalCost = plans.reduce((a, p) => a + Number(p.cost || 0), 0);
@@ -55,7 +55,11 @@ export default function DashboardGrowth({ selectedCityId, selectedMonth }) {
       const leadsInMonth = selectedMonth
         ? leads.filter((l) => String(l.date || '').startsWith(selectedMonth))
         : leads;
-      const leadsGenerated = leadsInMonth.filter((l) => l.originActionId).length;
+      const actionIds = new Set(plans.map((p) => p.id));
+      const leadsGenerated = leadsInMonth.filter((l) => {
+        if (!l.originActionId) return false;
+        return selectedGrowthPlan ? actionIds.has(l.originActionId) : true;
+      }).length;
 
       setMetrics({
         totalPlans,

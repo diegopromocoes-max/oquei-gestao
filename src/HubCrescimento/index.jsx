@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Page, Card, Select, Input, Tabs, InfoBox } from '../components/ui';
+import OverviewPage from './pages/OverviewPage';
 import KanbanPage from './pages/KanbanPage';
 import MinhaMesaPage from './pages/MinhaMesaPage';
 import MeetingsPage from './pages/MeetingsPage';
@@ -8,7 +9,7 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import './styles/hubStyles.css';
 
-const TAB_LABELS = ['Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
+const TAB_LABELS = ['Visao Geral', 'Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
 
 const isCoordinatorRole = (role) => {
   const r = String(role || '').toLowerCase();
@@ -25,6 +26,7 @@ export default function HubCrescimento({ userData }) {
   const [selectedCityId, setSelectedCityId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [activeTab, setActiveTab] = useState(TAB_LABELS[0]);
+  const [selectedGrowthPlan, setSelectedGrowthPlan] = useState(null);
 
   const isGrowthTeam = isGrowthTeamRole(userData?.role);
   const isCoordinator = isCoordinatorRole(userData?.role);
@@ -53,6 +55,17 @@ export default function HubCrescimento({ userData }) {
   useEffect(() => {
     if (isGrowthTeam) setActiveTab('Minha Mesa');
   }, [isGrowthTeam]);
+
+  useEffect(() => {
+    if (selectedGrowthPlan) {
+      if (selectedCityId && selectedGrowthPlan.cityId && selectedGrowthPlan.cityId !== selectedCityId) {
+        setSelectedGrowthPlan(null);
+      }
+      if (selectedMonth && selectedGrowthPlan.month && selectedGrowthPlan.month !== selectedMonth) {
+        setSelectedGrowthPlan(null);
+      }
+    }
+  }, [selectedCityId, selectedMonth, selectedGrowthPlan]);
 
   const cityOptions = useMemo(() => {
     if (isCoordinator) {
@@ -88,6 +101,10 @@ export default function HubCrescimento({ userData }) {
         </div>
       </Card>
 
+      {!isGrowthTeam && selectedGrowthPlan && (
+        <InfoBox type="info">Plano geral atual: {selectedGrowthPlan.name}</InfoBox>
+      )}
+
       {isGrowthTeam && (
         <InfoBox type="info">
           Seu perfil possui acesso apenas a Minha Mesa (RN02).
@@ -101,18 +118,47 @@ export default function HubCrescimento({ userData }) {
       <div className="hub-content">
         {isGrowthTeam && <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />}
 
-        {!isGrowthTeam && activeTab === 'Kanban' && (
-          <KanbanPage userData={userData} selectedCityId={selectedCityId} selectedMonth={selectedMonth} />
+        {!isGrowthTeam && activeTab === 'Visao Geral' && (
+          <OverviewPage
+            userData={userData}
+            selectedCityId={selectedCityId}
+            selectedMonth={selectedMonth}
+            selectedGrowthPlan={selectedGrowthPlan}
+            onSelectPlan={(p) => { if (p) { setSelectedGrowthPlan(p); setActiveTab('Kanban'); } }}
+            onClearPlan={() => setSelectedGrowthPlan(null)}
+          />
         )}
-        {!isGrowthTeam && activeTab === 'Minha Mesa' && (
-          <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
-        )}
-        {!isGrowthTeam && activeTab === 'Reunioes' && (
-          <MeetingsPage userData={userData} selectedCityId={selectedCityId} selectedMonth={selectedMonth} />
-        )}
-        {!isGrowthTeam && activeTab === 'Dashboard' && (
-          <DashboardGrowth selectedCityId={selectedCityId} selectedMonth={selectedMonth} />
-        )}
+
+      {!isGrowthTeam && ['Kanban', 'Reunioes', 'Dashboard'].includes(activeTab) && !selectedGrowthPlan && (
+        <InfoBox type="warning">Selecione um plano geral na Visao Geral.</InfoBox>
+      )}
+
+      {!isGrowthTeam && activeTab === 'Kanban' && selectedGrowthPlan && (
+        <KanbanPage
+          userData={userData}
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
+      {!isGrowthTeam && activeTab === 'Minha Mesa' && (
+        <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
+      )}
+      {!isGrowthTeam && activeTab === 'Reunioes' && selectedGrowthPlan && (
+        <MeetingsPage
+          userData={userData}
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
+      {!isGrowthTeam && activeTab === 'Dashboard' && selectedGrowthPlan && (
+        <DashboardGrowth
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
       </div>
     </Page>
   );

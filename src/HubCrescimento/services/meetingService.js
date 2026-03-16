@@ -5,7 +5,6 @@ import {
   doc,
   onSnapshot,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
@@ -18,42 +17,37 @@ export const listenMeetings = ({ cityId, callback }) => {
 
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    list.sort((a, b) => String(b.scheduledAt || b.createdAt || '').localeCompare(String(a.scheduledAt || a.createdAt || '')));
     callback(list);
   });
 };
 
-export const createMeeting = async ({ cityId, title }, userData) => {
+const buildScheduledAt = (date, time) => {
+  if (!date) return null;
+  const t = time || '00:00';
+  const iso = new Date(`${date}T${t}:00`).toISOString();
+  return iso;
+};
+
+export const createMeeting = async ({ cityId, title, date, time, participants, planIds, planNames }, userData) => {
   return addDoc(collection(db, 'growth_meetings'), {
     cityId: cityId || null,
     title: title || 'Reuniao de Growth',
-    items: [],
+    scheduledDate: date || null,
+    scheduledTime: time || null,
+    scheduledAt: buildScheduledAt(date, time),
+    participants: Array.isArray(participants) ? participants : [],
+    planIds: Array.isArray(planIds) ? planIds : [],
+    planNames: Array.isArray(planNames) ? planNames : [],
     createdAt: serverTimestamp(),
     createdBy: userData?.uid || 'system',
   });
 };
 
-export const addMeetingItem = async (meetingId, text, userData) => {
-  const ref = doc(db, 'growth_meetings', meetingId);
-
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('Meeting not found');
-    const data = snap.data();
-    const items = Array.isArray(data.items) ? data.items : [];
-
-    items.push({
-      id: String(Date.now()),
-      text,
-      createdAt: new Date().toISOString(),
-      createdBy: userData?.uid || 'system',
-      convertedPlanId: null,
-    });
-
-    tx.update(ref, { items });
+export const updateMeeting = async (meetingId, payload, userData) => {
+  return updateDoc(doc(db, 'growth_meetings', meetingId), {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
   });
-};
-
-export const updateMeetingItems = async (meetingId, items) => {
-  return updateDoc(doc(db, 'growth_meetings', meetingId), { items });
 };

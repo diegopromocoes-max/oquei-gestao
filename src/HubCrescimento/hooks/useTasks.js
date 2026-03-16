@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { listenTasks } from '../services/taskService';
 
-export function useTasks({ uid, cityId, planId }) {
+export function useTasks({ uid, cityId, actionPlanId }) {
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
-    if (!uid && !planId) {
+    if (!uid && !actionPlanId) {
       setTasks([]);
       return undefined;
     }
-    const unsub = listenTasks({ uid, cityId, planId, callback: setTasks });
+    const unsub = listenTasks({ uid, cityId, actionPlanId, callback: setTasks });
     return () => unsub && unsub();
-  }, [uid, cityId, planId]);
+  }, [uid, cityId, actionPlanId]);
 
   return tasks;
 }
