@@ -18,7 +18,7 @@ export default function NovoLead({ userData, onNavigate }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   
-  // ESTADO: Guarda as ações de crescimento que vêm do banco
+  // ESTADO: Guarda os Planos de Ação (Hub de Crescimento) ativos
   const [acoesCrescimento, setAcoesCrescimento] = useState([]);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -28,10 +28,11 @@ export default function NovoLead({ userData, onNavigate }) {
     cidade: userData?.cityId || '', 
     logradouro: '', numero: '', bairro: '',
     categoria: '', produto: '', status: 'Em negociação', 
-    origem: 'WhatsApp', // NOVO: Guarda a origem principal
-    acaoId: ''          // NOVO: Guarda a ação escolhida (se a origem for Ação)
+    origem: 'WhatsApp', 
+    acaoId: ''          
   });
 
+  // Carrega os catálogos básicos
   useEffect(() => {
     const load = async () => {
       try {
@@ -46,26 +47,24 @@ export default function NovoLead({ userData, onNavigate }) {
     load();
   }, []);
 
-  // BUSCA AS AÇÕES DE CRESCIMENTO NO FIREBASE
+  // HUB DE CRESCIMENTO: Busca as ações que estão "Em Andamento" na base de dados
   useEffect(() => {
     const fetchAcoes = async () => {
       try {
-        const q = query(collection(db, 'action_plans'), where('planType', '==', 'crescimento'));
+        // RNF01: Usamos getDocs (1 vez) em vez de onSnapshot, pois a listagem de origens não precisa de real-time absoluto aqui
+        const q = query(collection(db, 'action_plans'), where('status', '==', 'Em Andamento'));
         const snap = await getDocs(q);
         
-        const plans = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(p => p.status === 'Em Andamento' || p.status === 'Finalizada');
-          
+        const plans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setAcoesCrescimento(plans);
       } catch (error) {
-        console.error("Erro ao buscar planos de ação:", error);
+        console.error("Erro ao carregar Planos de Crescimento:", error);
       }
     };
     fetchAcoes();
   }, []);
 
-  // FILTRA AS AÇÕES PARA MOSTRAR APENAS AS DA CIDADE SELECIONADA
+  // FILTRA AS AÇÕES: Mostra apenas os planos ativos para a cidade que o atendente selecionou
   const acoesDaCidade = useMemo(() => {
     if (!form.cidade) return [];
     return acoesCrescimento.filter(p => p.cityId === form.cidade || p.cityId === '__all__');
@@ -91,7 +90,7 @@ export default function NovoLead({ userData, onNavigate }) {
         if (window.showToast) window.showToast("Preencha os dados obrigatórios do cliente.", "error");
         return;
       }
-      // Validação: Se escolheu "Ação de Crescimento", é obrigatório selecionar qual foi a ação
+      // Validação do Hub: É obrigatório dizer qual foi a ação se escolheu "Ação de Crescimento"
       if (form.origem === 'Ação de Crescimento' && !form.acaoId) {
         if (window.showToast) window.showToast("Selecione qual foi a ação realizada.", "error");
         return;
@@ -115,19 +114,20 @@ export default function NovoLead({ userData, onNavigate }) {
       const cat = categories.find(c => c.id === form.categoria) || { id: form.categoria, name: 'Geral' };
       const prod = products.find(p => p.id === form.produto) || { id: form.produto, name: 'Produto Não Especificado', price: 0 };
 
-      // Opcional: Se a origem for Ação, salvamos também o nome da ação para ficar legível no banco
+      // PREPARAÇÃO DE DADOS PARA O HUB DE CRESCIMENTO (ROI e CAC)
       const payload = { ...form };
       if (payload.origem === 'Ação de Crescimento' && payload.acaoId) {
+        payload.originActionId = payload.acaoId; // Chave exata definida na Arquitetura
         const acaoObj = acoesDaCidade.find(a => a.id === payload.acaoId);
         if (acaoObj) payload.acaoNome = acaoObj.name;
       }
 
       await createLead(payload, userData, city, cat, prod);
       
-      if (window.showToast) window.showToast("Lead registrado com sucesso!", "success");
+      if (window.showToast) window.showToast("Lead registado com sucesso!", "success");
       onNavigate('clientes');
     } catch (err) {
-      if (window.showToast) window.showToast("Erro ao salvar lead.", "error");
+      if (window.showToast) window.showToast("Erro ao guardar lead.", "error");
     }
     setLoading(false);
   };
@@ -142,7 +142,7 @@ export default function NovoLead({ userData, onNavigate }) {
   return (
     <div className="animated-view animate-fadeIn" style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
       
-      {/* ─── HEADER ESTILO HUB OQUEI ─── */}
+      {/* ─── CABEÇALHO ─── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '24px 30px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
           <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: colors.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 16px ${colors.primary}35` }}>
@@ -150,7 +150,7 @@ export default function NovoLead({ userData, onNavigate }) {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>Novo Lead</h1>
-            <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginTop: '4px' }}>Cadastre uma nova oportunidade para {userData?.cityName || 'sua unidade'}</p>
+            <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginTop: '4px' }}>Registe uma nova oportunidade para {userData?.cityName || 'a sua unidade'}</p>
           </div>
         </div>
         
@@ -161,10 +161,10 @@ export default function NovoLead({ userData, onNavigate }) {
         </div>
       </div>
 
-      {/* ─── CARD PRINCIPAL DO FORMULÁRIO ─── */}
+      {/* ─── CARTÃO PRINCIPAL DO FORMULÁRIO ─── */}
       <div style={{ background: 'var(--bg-card)', padding: '40px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', position: 'relative', maxWidth: '1000px', width: '100%' }}>
         
-        {/* ─── STEPPER VISUAL HORIZONTAL ─── */}
+        {/* ─── INDICADOR VISUAL HORIZONTAL ─── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '45px' }}>
           {[1, 2, 3].map(n => (
             <React.Fragment key={n}>
@@ -192,7 +192,7 @@ export default function NovoLead({ userData, onNavigate }) {
             
             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px'}}>
               <div style={global.field}>
-                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Data do Contato</label>
+                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Data do Contacto</label>
                 <div style={{ position: 'relative' }}>
                   <Calendar size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input type="date" style={{...global.input, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
@@ -203,7 +203,7 @@ export default function NovoLead({ userData, onNavigate }) {
                 <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Cidade / Unidade</label>
                 <div style={{ position: 'relative' }}>
                   <MapPin size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <select style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} value={form.cidade} onChange={e => setForm({...form, cidade: e.target.value})}>
+                  <select style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} value={form.cidade} onChange={e => setForm({...form, cidade: e.target.value, acaoId: ''})}>
                     <option value="">Selecione a cidade...</option>
                     {cities.map(c => <option key={c.id} value={c.id}>{c.name || c.nome}</option>)}
                   </select>
@@ -219,14 +219,14 @@ export default function NovoLead({ userData, onNavigate }) {
               </div>
 
               <div style={global.field}>
-                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>WhatsApp / Celular</label>
+                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>WhatsApp / Telemóvel</label>
                 <div style={{ position: 'relative' }}>
                   <Phone size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input style={{...global.input, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} placeholder="(00) 00000-0000" value={form.tel} onChange={handlePhoneChange} />
                 </div>
               </div>
               
-              {/* CAMPO: ORIGEM PADRÃO */}
+              {/* CAMPO: ORIGEM PADRÃO E HUB */}
               <div style={global.field}>
                 <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: colors.primary}}>Canal de Entrada / Origem</label>
                 <div style={{ position: 'relative' }}>
@@ -234,7 +234,7 @@ export default function NovoLead({ userData, onNavigate }) {
                   <select 
                     style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px', border: `1px solid ${colors.primary}50`}} 
                     value={form.origem} 
-                    onChange={e => setForm({...form, origem: e.target.value, acaoId: ''})} // Limpa a ação se trocar a origem
+                    onChange={e => setForm({...form, origem: e.target.value, acaoId: ''})}
                   >
                     <option value="WhatsApp">WhatsApp</option>
                     <option value="Telefone">Telefone</option>
@@ -242,7 +242,7 @@ export default function NovoLead({ userData, onNavigate }) {
                     <option value="Indicação">Indicação</option>
                     <option value="Porta a Porta">Porta a Porta</option>
                     <option value="Redes Sociais">Redes Sociais</option>
-                    <option value="Ação de Crescimento">Ação de Crescimento</option>
+                    <option value="Ação de Crescimento">Ação de Crescimento (HUB)</option>
                     <option value="Outros">Outros</option>
                   </select>
                 </div>
@@ -251,7 +251,7 @@ export default function NovoLead({ userData, onNavigate }) {
               {/* APARECE APENAS SE A ORIGEM FOR "Ação de Crescimento" */}
               {form.origem === 'Ação de Crescimento' && (
                 <div className="animate-fadeIn" style={{...global.field, gridColumn: 'span 2'}}>
-                  <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#f59e0b'}}>Selecione a Ação Realizada</label>
+                  <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#f59e0b'}}>Plano de Ação Ativo nesta Cidade</label>
                   <div style={{ position: 'relative' }}>
                     <Target size={18} color="#f59e0b" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
                     <select 
@@ -259,8 +259,8 @@ export default function NovoLead({ userData, onNavigate }) {
                       value={form.acaoId} 
                       onChange={e => setForm({...form, acaoId: e.target.value})}
                     >
-                      <option value="">Selecione qual ação trouxe este cliente...</option>
-                      {acoesDaCidade.length === 0 && <option value="" disabled>Nenhuma ação ativa para esta cidade.</option>}
+                      <option value="">Selecione a campanha que trouxe este cliente...</option>
+                      {acoesDaCidade.length === 0 && <option value="" disabled>Nenhuma ação 'Em Andamento' para esta cidade.</option>}
                       {acoesDaCidade.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
@@ -276,7 +276,7 @@ export default function NovoLead({ userData, onNavigate }) {
               </div>
 
               <div style={{...global.field, gridColumn: 'span 2'}}>
-                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Endereço (Rua e Número)</label>
+                <label style={{...global.label, fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)'}}>Morada (Rua e Número)</label>
                 <div style={{display: 'flex', gap: '15px'}}>
                   <div style={{ position: 'relative', flex: 4 }}>
                     <Home size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -302,7 +302,7 @@ export default function NovoLead({ userData, onNavigate }) {
               <div style={{ position: 'relative' }}>
                 <Layers size={18} color={form.categoria ? colors.primary : "var(--text-muted)"} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', transition: '0.2s' }} />
                 <select style={{...global.select, paddingLeft: '48px', height: '52px', borderRadius: '14px'}} value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value, produto: ''})}>
-                  <option value="">O que o cliente busca?</option>
+                  <option value="">O que o cliente procura?</option>
                   {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name || cat.nome}</option>)}
                 </select>
               </div>
@@ -328,7 +328,7 @@ export default function NovoLead({ userData, onNavigate }) {
                <div style={{ padding: '8px', background: 'var(--bg-primary-light)', borderRadius: '10px', color: colors.primary }}><CheckCircle2 size={20} /></div>
                Status da Negociação
             </h3>
-             <label style={{...global.label, marginBottom: '25px', display: 'block', textAlign: 'center', fontSize: '15px'}}>Em qual estágio se encontra esta venda agora?</label>
+             <label style={{...global.label, marginBottom: '25px', display: 'block', textAlign: 'center', fontSize: '15px'}}>Em que fase se encontra esta venda agora?</label>
              
              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
               {statusOptions.map(opt => {
@@ -377,7 +377,7 @@ export default function NovoLead({ userData, onNavigate }) {
           >
             {loading ? <Loader2 size={20} className="animate-spin" /> : (
               <span style={{display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', fontWeight: '900'}}>
-                {step === 3 ? 'Finalizar e Salvar' : 'Próximo Passo'} 
+                {step === 3 ? 'Finalizar e Guardar' : 'Próximo Passo'} 
                 {step < 3 && <ChevronRight size={20} strokeWidth={3} />}
               </span>
             )}

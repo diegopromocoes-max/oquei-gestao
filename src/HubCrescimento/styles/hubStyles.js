@@ -222,24 +222,29 @@ export const hubStyles = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
     gap: '16px',
   },
-  metric: {
-    background: 'var(--bg-app)',
-    border: '1px solid var(--border)',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  metricLabel: {
-    fontSize: '11px', fontWeight: '800',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  metricValue: {
-    fontSize: '20px', fontWeight: '900',
-    color: 'var(--text-main)',
-    marginTop: '6px',
-    lineHeight: 1.2,
-  },
+  // Localizar no src/HubCrescimento/styles/hubStyles.js
+// Atualizar o bloco metric:
+
+metric: {
+  background: 'var(--bg-card)', // ✅ Ajustado para cor de card
+  border: '1px solid var(--border)',
+  borderRadius: '16px', // ✅ Mais arredondado
+  padding: '20px',
+  boxShadow: 'var(--shadow-sm)',
+  transition: 'transform 0.2s ease',
+},
+metricLabel: {
+  fontSize: '11px', fontWeight: '900',
+  color: 'var(--text-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+},
+metricValue: {
+  fontSize: '24px', fontWeight: '900',
+  color: 'var(--text-main)',
+  marginTop: '4px',
+  lineHeight: '1',
+},
   metricSub: {
     fontSize: '11px', color: 'var(--text-muted)',
     marginTop: '4px',

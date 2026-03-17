@@ -1,278 +1,41 @@
-// ============================================================
-//  firestore.rules — Oquei Gestao / Hub Crescimento
-//  ERS RNF04: Seguranca via Firestore Security Rules (RBAC)
-//
-//  Roles validos (campo users/{uid}.role):
-//    coordinator | coordenador | master  — acesso global
-//    supervisor                          — acesso por clusterId
-//    attendant  | atendente             — acesso por cityId
-//    growth_team                        — apenas action_tasks proprias
-// ============================================================
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Funções auxiliares ──────────────────────────────────────────────────
-
-    /** Verifica se o usuario esta autenticado */
-    function isAuth() {
-      return request.auth != null;
+    function isAuth() { return request.auth != null; }
+    function userData() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    
+    function isCoordinator() { 
+      let r = userData().role;
+      return r == 'coordinator' || r == 'coordenador' || r == 'master' || r == 'diretor';
     }
+    function isSupervisor() { return userData().role == 'supervisor'; }
+    function isGrowth() { return userData().role == 'growth_team' || userData().role == 'GROWTH_TEAM'; }
+    function isAttendant() { return userData().role == 'atendente' || userData().role == 'attendant'; }
 
-    /** Dados do usuario logado no Firestore */
-    function userData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    /** Roles com acesso global (sem filtro de cidade/cluster) */
-    function isCoordinator() {
-      let role = userData().role;
-      return role == 'coordinator' || role == 'coordenador' || role == 'master';
-    }
-
-    /** Supervisor: acesso por clusterId */
-    function isSupervisor() {
-      return userData().role == 'supervisor';
-    }
-
-    /** Atendente: acesso por cityId */
-    function isAttendant() {
-      let role = userData().role;
-      return role == 'attendant' || role == 'atendente';
-    }
-
-    /** Equipe de Growth: acesso apenas as proprias tarefas */
-    function isGrowthTeam() {
-      return userData().role == 'growth_team';
-    }
-
-    /** Verifica se o recurso pertence ao cluster do supervisor */
-    function sameCluster(resourceData) {
-      return resourceData.clusterId == userData().clusterId;
-    }
-
-    /** Verifica se o recurso pertence a cidade do atendente */
-    function sameCity(resourceData) {
-      return resourceData.cityId == userData().cityId;
-    }
-
-    /** Verifica se o recurso e de responsabilidade do usuario */
-    function isResponsible(resourceData) {
-      return resourceData.responsibleUid == request.auth.uid
-        || (resourceData.responsibles is list
-            && resourceData.responsibles.hasAny([{ 'uid': request.auth.uid }]));
-    }
-
-    // ── Coleção: users ──────────────────────────────────────────────────────
-    match /users/{uid} {
-      allow read:   if isAuth() && (request.auth.uid == uid || isCoordinator());
-      allow write:  if isAuth() && (request.auth.uid == uid || isCoordinator());
-    }
-
-    // ── Coleção: cities ─────────────────────────────────────────────────────
-    match /cities/{cityId} {
-      allow read:  if isAuth();
+    match /users/{userId} {
+      allow get: if isAuth();
+      allow list: if isAuth() && (isCoordinator() || isGrowth() || isSupervisor());
       allow write: if isAuth() && isCoordinator();
     }
-
-    // ── Coleção: growth_plans ───────────────────────────────────────────────
-    match /growth_plans/{planId} {
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()  && sameCluster(resource.data))
-        || (isAttendant()   && sameCity(resource.data))
-        || (isGrowthTeam()  && sameCity(resource.data))
-      );
-      allow create: if isAuth() && (isCoordinator() || isSupervisor());
-      allow update: if isAuth() && (
-        isCoordinator()
-        || (isSupervisor() && sameCluster(resource.data))
-      );
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    // ── Coleção: action_plans ───────────────────────────────────────────────
-    match /action_plans/{planId} {
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()  && sameCluster(resource.data))
-        || (isAttendant()   && sameCity(resource.data))
-        || (isGrowthTeam()  && sameCity(resource.data))
-      );
-      allow create: if isAuth() && (isCoordinator() || isSupervisor());
-      allow update: if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()   && sameCluster(resource.data))
-        || (isGrowthTeam()   && isResponsible(resource.data))
-      );
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    // ── Coleção: action_tasks ───────────────────────────────────────────────
-    match /action_tasks/{taskId} {
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()  && sameCluster(resource.data))
-        || (isAttendant()   && sameCity(resource.data))
-        // growth_team: apenas proprias tarefas
-        || (isGrowthTeam()  && resource.data.responsibleUid == request.auth.uid)
-      );
-      allow create: if isAuth() && (isCoordinator() || isSupervisor());
-      allow update: if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()  && sameCluster(resource.data))
-        // growth_team pode atualizar apenas tarefas de sua responsabilidade
-        || (isGrowthTeam()  && resource.data.responsibleUid == request.auth.uid)
-      );
-      allow delete: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    // ── Coleção: growth_meetings ────────────────────────────────────────────
-    match /growth_meetings/{meetingId} {
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor() && sameCluster(resource.data))
-        || (isAttendant()  && sameCity(resource.data))
-        || (isGrowthTeam() && sameCity(resource.data))
-      );
-      allow create: if isAuth() && (isCoordinator() || isSupervisor());
-      allow update: if isAuth() && (
-        isCoordinator()
-        || (isSupervisor() && sameCluster(resource.data))
-      );
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    // ── Coleção: growth_timeline ────────────────────────────────────────────
-    match /growth_timeline/{eventId} {
-      // Timeline e auditoria — apenas leitura para os perfis com acesso
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor() && sameCluster(resource.data))
-        || (isAttendant()  && sameCity(resource.data))
-        || (isGrowthTeam() && sameCity(resource.data))
-      );
-      // Escrita apenas via servico (sistema), nunca diretamente pelo cliente
-      allow create: if isAuth() && (isCoordinator() || isSupervisor() || isGrowthTeam());
-      allow update: if false; // timeline e imutavel
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    // ── Coleção: growth_kpis ────────────────────────────────────────────────
-    match /growth_kpis/{kpiId} {
-      allow read:   if isAuth();
-      allow create: if isAuth() && (isCoordinator() || isSupervisor());
-      allow update: if isAuth() && (isCoordinator() || isSupervisor());
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    // ── Coleções legadas do sistema (fora do Hub) ──────────────────────────
 
     match /leads/{docId} {
-      allow read:   if isAuth() && (
-        isCoordinator()
-        || (isSupervisor() && sameCluster(resource.data))
-        || (isAttendant()  && resource.data.attendantId == request.auth.uid)
-      );
-      allow create: if isAuth();
-      allow update: if isAuth() && (
-        isCoordinator()
-        || (isSupervisor()  && sameCluster(resource.data))
-        || (isAttendant()   && resource.data.attendantId == request.auth.uid)
-      );
-      allow delete: if isAuth() && isCoordinator();
+      allow read: if isAuth() && (isCoordinator() || isGrowth() || isSupervisor() || (isAttendant() && resource.data.cityId == userData().cityId));
+      allow write: if isAuth() && (isCoordinator() || isSupervisor() || (isAttendant() && resource.data.attendantId == request.auth.uid));
     }
 
-    match /absences/{docId} {
-      allow read:   if isAuth() && (isCoordinator() || isSupervisor());
-      allow write:  if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /rh_requests/{docId} {
-      allow read:   if isAuth() && (isCoordinator() || isSupervisor() || resource.data.uid == request.auth.uid);
-      allow create: if isAuth();
-      allow update: if isAuth() && (isCoordinator() || isSupervisor());
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-
-    match /comunicados/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /sop_simulations/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /goals_cities/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /city_results/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /monthly_bases/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /sales_channels/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /router_catalog/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /bank_hours/{docId} {
-      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || resource.data.uid == request.auth.uid);
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /cash_register/{docId} {
-      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || sameCity(resource.data));
-      allow write: if isAuth() && (isCoordinator() || isSupervisor() || sameCity(resource.data));
-    }
-
-    match /agenda/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /colinhas/{docId} {
-      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || resource.data.attendantId == request.auth.uid);
-      allow create: if isAuth() && isAttendant();
-      allow update: if isAuth() && (isCoordinator() || isSupervisor());
-      allow delete: if isAuth() && isCoordinator();
-    }
-
-    match /holidays/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /clusters/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
-
-    match /patrocinios/{docId} {
-      allow read:  if isAuth() && (isCoordinator() || isSupervisor());
-      allow write: if isAuth() && (isCoordinator() || isSupervisor());
-    }
-
-    match /churn_reasons/{docId} {
-      allow read:  if isAuth();
-      allow write: if isAuth() && isCoordinator();
-    }
+    // Regras gerais de metas
+    match /goals_channels/{id} { allow read: if isAuth() && (isCoordinator() || isSupervisor()); allow write: if isAuth() && isCoordinator(); }
+    match /product_categories/{id} { allow read: if isAuth() && (isCoordinator() || isSupervisor()); allow write: if isAuth() && isCoordinator(); }
+    
+    // Hub de Crescimento
+    match /growth_plans/{id} { allow read, write: if isAuth() && (isCoordinator() || isGrowth() || isSupervisor()); }
+    match /action_plans/{id} { allow read, write: if isAuth() && (isCoordinator() || isGrowth() || isSupervisor()); }
+    
+    // Outras coleções (Caixa, RH, etc) - Leitura para envolvidos
+    match /{path=**}/absences/{id} { allow read, write: if isAuth() && (isCoordinator() || isSupervisor()); }
+    match /{path=**}/cash_register/{id} { allow read, write: if isAuth() && (isCoordinator() || isSupervisor()); }
+    match /cities/{id} { allow read: if isAuth(); allow write: if isAuth() && isCoordinator(); }
+    match /colinhas/{id} { allow read: if isAuth(); allow write: if isAuth() && (isAttendant() || isCoordinator()); }
   }
 }

@@ -34,7 +34,10 @@ export default function HubCrescimento({ userData }) {
   useEffect(() => {
     const load = async () => {
       const myCluster = String(userData?.clusterId || '').trim();
-      const conditions = isCoordinator ? [] : [where('clusterId', '==', myCluster)];
+      
+      // Coordenadores e Equipa de Growth têm visão global de cidades
+      const conditions = (isCoordinator || isGrowthTeam) ? [] : [where('clusterId', '==', myCluster)];
+      
       const q = query(collection(db, 'cities'), ...conditions);
       const snap = await getDocs(q);
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -42,23 +45,23 @@ export default function HubCrescimento({ userData }) {
       setCities(list);
 
       if (list.length > 0) {
-        if (userData?.cityId && list.find((c) => c.id === userData.cityId)) {
-          setSelectedCityId(userData.cityId);
-        } else if (!selectedCityId) {
-          setSelectedCityId(list[0].id);
-        }
+        setSelectedCityId((prev) => {
+          if (prev) return prev; 
+          if (userData?.cityId && userData.cityId !== 'global' && list.find((c) => c.id === userData.cityId)) {
+            return userData.cityId;
+          }
+          return (isCoordinator || isGrowthTeam) ? '__all__' : list[0].id;
+        });
       }
     };
-    load();
-  }, [userData, isCoordinator, selectedCityId]);
+    
+    if (userData) load();
+  }, [userData, isCoordinator, isGrowthTeam]); 
 
-  useEffect(() => {
-    if (isGrowthTeam) setActiveTab('Minha Mesa');
-  }, [isGrowthTeam]);
-
+  // Ao mudar a cidade ou mês, limpa o plano selecionado se não for correspondente
   useEffect(() => {
     if (selectedGrowthPlan) {
-      if (selectedCityId && selectedGrowthPlan.cityId && selectedGrowthPlan.cityId !== selectedCityId) {
+      if (selectedCityId && selectedCityId !== '__all__' && selectedGrowthPlan.cityId && selectedGrowthPlan.cityId !== selectedCityId) {
         setSelectedGrowthPlan(null);
       }
       if (selectedMonth && selectedGrowthPlan.month && selectedGrowthPlan.month !== selectedMonth) {
@@ -68,11 +71,12 @@ export default function HubCrescimento({ userData }) {
   }, [selectedCityId, selectedMonth, selectedGrowthPlan]);
 
   const cityOptions = useMemo(() => {
-    if (isCoordinator) {
+    // Equipe de Growth e Coordenadores podem ver "Todas as cidades"
+    if (isCoordinator || isGrowthTeam) {
       return [{ value: '__all__', label: 'Todas as cidades' }, ...cities.map((c) => ({ value: c.id, label: c.name || c.nome }))];
     }
     return cities.map((c) => ({ value: c.id, label: c.name || c.nome }));
-  }, [cities, isCoordinator]);
+  }, [cities, isCoordinator, isGrowthTeam]);
 
   return (
     <Page
@@ -87,7 +91,8 @@ export default function HubCrescimento({ userData }) {
               value={selectedCityId}
               onChange={(e) => setSelectedCityId(e.target.value)}
               options={cityOptions}
-              disabled={!isCoordinator && !!userData?.cityId}
+              // Bloqueia a troca apenas se for atendente comum preso a uma cidade
+              disabled={(!isCoordinator && !isGrowthTeam) && !!userData?.cityId}
             />
           </div>
           <div style={{ minWidth: '180px' }}>
@@ -101,24 +106,18 @@ export default function HubCrescimento({ userData }) {
         </div>
       </Card>
 
-      {!isGrowthTeam && selectedGrowthPlan && (
+      {/* Mostra qual o plano selecionado para todos os perfis */}
+      {selectedGrowthPlan && (
         <InfoBox type="info">Plano geral atual: {selectedGrowthPlan.name}</InfoBox>
       )}
 
-      {isGrowthTeam && (
-        <InfoBox type="info">
-          Seu perfil possui acesso apenas a Minha Mesa (RN02).
-        </InfoBox>
-      )}
-
-      {!isGrowthTeam && (
-        <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
-      )}
+      {/* Agora as Tabs são exibidas para toda a equipa */}
+      <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
 
       <div style={hubStyles.content}>
-        {isGrowthTeam && <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />}
-
-        {!isGrowthTeam && activeTab === 'Visao Geral' && (
+        
+        {/* Visão Geral acessível a todos */}
+        {activeTab === 'Visao Geral' && (
           <OverviewPage
             userData={userData}
             selectedCityId={selectedCityId}
@@ -129,36 +128,44 @@ export default function HubCrescimento({ userData }) {
           />
         )}
 
-      {!isGrowthTeam && ['Kanban', 'Reunioes', 'Dashboard'].includes(activeTab) && !selectedGrowthPlan && (
-        <InfoBox type="warning">Selecione um plano geral na Visao Geral.</InfoBox>
-      )}
+        {/* Aviso de que precisa de selecionar um plano antes de ver as restantes abas */}
+        {['Kanban', 'Reunioes', 'Dashboard'].includes(activeTab) && !selectedGrowthPlan && (
+          <InfoBox type="warning">Selecione um plano geral na Visao Geral.</InfoBox>
+        )}
 
-      {!isGrowthTeam && activeTab === 'Kanban' && selectedGrowthPlan && (
-        <KanbanPage
-          userData={userData}
-          selectedCityId={selectedCityId}
-          selectedMonth={selectedMonth}
-          selectedGrowthPlan={selectedGrowthPlan}
-        />
-      )}
-      {!isGrowthTeam && activeTab === 'Minha Mesa' && (
-        <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
-      )}
-      {!isGrowthTeam && activeTab === 'Reunioes' && selectedGrowthPlan && (
-        <MeetingsPage
-          userData={userData}
-          selectedCityId={selectedCityId}
-          selectedMonth={selectedMonth}
-          selectedGrowthPlan={selectedGrowthPlan}
-        />
-      )}
-      {!isGrowthTeam && activeTab === 'Dashboard' && selectedGrowthPlan && (
-        <DashboardGrowth
-          selectedCityId={selectedCityId}
-          selectedMonth={selectedMonth}
-          selectedGrowthPlan={selectedGrowthPlan}
-        />
-      )}
+        {/* As abas agora não têm o bloqueio de !isGrowthTeam */}
+        {activeTab === 'Kanban' && selectedGrowthPlan && (
+          <KanbanPage
+            userData={userData}
+            selectedCityId={selectedCityId}
+            selectedMonth={selectedMonth}
+            selectedGrowthPlan={selectedGrowthPlan}
+          />
+        )}
+        
+        {/* Minha Mesa acessível a todos (já estava) */}
+        {activeTab === 'Minha Mesa' && (
+          <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
+        )}
+        
+        {/* Reuniões acessível a todos */}
+        {activeTab === 'Reunioes' && selectedGrowthPlan && (
+          <MeetingsPage
+            userData={userData}
+            selectedCityId={selectedCityId}
+            selectedMonth={selectedMonth}
+            selectedGrowthPlan={selectedGrowthPlan}
+          />
+        )}
+        
+        {/* Dashboard acessível a todos */}
+        {activeTab === 'Dashboard' && selectedGrowthPlan && (
+          <DashboardGrowth
+            selectedCityId={selectedCityId}
+            selectedMonth={selectedMonth}
+            selectedGrowthPlan={selectedGrowthPlan}
+          />
+        )}
       </div>
     </Page>
   );

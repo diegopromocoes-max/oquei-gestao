@@ -1,0 +1,4672 @@
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/GrowthScoreCard.jsx
+// ==========================================
+
+import React from 'react';
+import { Card, ProgressBar, colors } from '../../components/ui';
+import { hubStyles } from '../styles/hubStyles';
+
+export default function GrowthScoreCard({ score }) {
+  const total     = score?.total ?? 0;
+  const breakdown = score?.breakdown || { sales: 0, growth: 0, retention: 0, execution: 0 };
+
+  return (
+    <Card title="Growth Score" subtitle="Pontuacao consolidada (0-100)">
+      <div style={hubStyles.score}>
+        <div style={hubStyles.scoreTotal}>{total}</div>
+        <div style={hubStyles.scoreLabel}>Score geral</div>
+      </div>
+      <div style={hubStyles.scoreBreakdown}>
+        {[
+          { label: 'Vendas',    pct: (breakdown.sales     / 40) * 100, cor: colors.primary },
+          { label: 'Crescimento', pct: (breakdown.growth  / 30) * 100, cor: colors.success },
+          { label: 'Retencao',  pct: (breakdown.retention / 20) * 100, cor: colors.warning },
+          { label: 'Execucao',  pct: (breakdown.execution / 10) * 100, cor: colors.info    },
+        ].map(({ label, pct, cor }) => (
+          <div key={label} style={hubStyles.scoreRow}>
+            <span style={hubStyles.muted}>{label}</span>
+            <ProgressBar pct={pct} cor={cor} />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/KanbanBoard.jsx
+// ==========================================
+
+// ============================================================
+//  components/KanbanBoard.jsx — Hub Crescimento
+//  Container do Kanban com suporte a @dnd-kit/core.
+//  Recebe o DndContext externamente (KanbanPage) e apenas
+//  organiza o layout horizontal das colunas.
+// ============================================================
+
+import React from 'react';
+import { hubStyles } from '../styles/hubStyles';
+
+export default function KanbanBoard({ children }) {
+  return (
+    <div style={hubStyles.kanban}>
+      {children}
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/KanbanColumn.jsx
+// ==========================================
+
+// ============================================================
+//  components/KanbanColumn.jsx — Hub Crescimento
+//  Coluna do Kanban com suporte a @dnd-kit/core (useDroppable).
+//  Cada coluna e uma drop zone identificada pelo status do plano.
+// ============================================================
+
+import React from 'react';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { hubStyles } from '../styles/hubStyles';
+
+/**
+ * Props:
+ *   id       — identificador da coluna (ex: 'Backlog', 'Em Andamento')
+ *   title    — label exibido no topo
+ *   count    — numero de cards na coluna
+ *   planIds  — array de IDs para o SortableContext
+ *   children — PlanCard(s) sortaveis
+ */
+export default function KanbanColumn({ id, title, count, planIds = [], children }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...hubStyles.column,
+        // Feedback visual ao arrastar sobre a coluna
+        outline: isOver ? '2px solid var(--color-primary, #2563eb)' : 'none',
+        outlineOffset: '2px',
+        transition: 'outline 0.15s ease',
+      }}
+    >
+      <div style={hubStyles.columnHeader}>
+        <div style={hubStyles.columnTitle}>{title}</div>
+        <div style={hubStyles.columnCount}>{count}</div>
+      </div>
+
+      <SortableContext items={planIds} strategy={verticalListSortingStrategy}>
+        <div style={hubStyles.columnBody}>
+          {children}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/PlanCard.jsx
+// ==========================================
+
+// ============================================================
+//  components/PlanCard.jsx — Hub Crescimento
+//  Card de plano de acao com suporte a @dnd-kit/sortable.
+//  useSortable substitui o draggable/onDragStart nativo.
+// ============================================================
+
+import React from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS }         from '@dnd-kit/utilities';
+import { Badge, ProgressBar, colors, moeda } from '../../components/ui';
+import { hubStyles } from '../styles/hubStyles';
+
+/**
+ * Props:
+ *   plan        — objeto do plano (action_plan)
+ *   onClick     — abre o modal de detalhes
+ */
+export default function PlanCard({ plan, onClick }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: plan.id });
+
+  const style = {
+    transform:  CSS.Transform.toString(transform),
+    transition,
+    opacity:    isDragging ? 0.45 : 1,
+    cursor:     isDragging ? 'grabbing' : 'grab',
+  };
+
+  const progress   = Number(plan.progress      || 0);
+  const tasksDone  = Number(plan.taskCompleted  || 0);
+  const tasksTotal = Number(plan.taskCount      || 0);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ ...hubStyles.card, ...style }}
+      {...attributes}
+      {...listeners}
+      onClick={() => !isDragging && onClick?.(plan)}
+    >
+      <div style={hubStyles.cardHeader}>
+        <div style={hubStyles.cardTitle}>{plan.name || 'Plano sem nome'}</div>
+        <Badge cor="neutral">{plan.status || 'Backlog'}</Badge>
+      </div>
+
+      <div style={hubStyles.cardBody}>
+        {/* Objetivos como chips */}
+        {Array.isArray(plan.objectives) && plan.objectives.length > 0 && (
+          <div style={hubStyles.cardObjectives}>
+            {plan.objectives.slice(0, 3).map((o) => (
+              <span key={o} style={hubStyles.chip}>{o}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Tarefas */}
+        <div style={hubStyles.cardRow}>
+          <span style={hubStyles.muted}>Tarefas</span>
+          <span style={hubStyles.strong}>{tasksDone}/{tasksTotal}</span>
+        </div>
+
+        {/* Barra de progresso */}
+        <ProgressBar
+          pct={progress}
+          cor={progress >= 100 ? colors.success : colors.primary}
+        />
+
+        {/* Custo */}
+        <div style={hubStyles.cardRow}>
+          <span style={hubStyles.muted}>Custo</span>
+          <span style={hubStyles.strong}>{moeda(Number(plan.cost || 0))}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/TaskList.jsx
+// ==========================================
+
+import React from 'react';
+import { Btn, data, Badge, moeda } from '../../components/ui';
+import { hubStyles } from '../styles/hubStyles';
+
+export default function TaskList({ title, tasks, onComplete, onReopen, onDelete }) {
+  return (
+    <div style={hubStyles.tasklist}>
+      <div style={hubStyles.tasklistHeader}>
+        <div style={hubStyles.tasklistTitle}>{title}</div>
+        <div style={hubStyles.tasklistCount}>{tasks.length}</div>
+      </div>
+
+      {tasks.length === 0 && (
+        <div style={hubStyles.empty}>Sem tarefas aqui.</div>
+      )}
+
+      {tasks.map((t) => (
+        <div key={t.id} style={hubStyles.task}>
+          <div style={{ flex: 1 }}>
+            <div style={hubStyles.taskTitle}>{t.title || t.text || 'Tarefa'}</div>
+            <div style={hubStyles.taskMeta}>
+              {t.deadline && <span style={hubStyles.muted}>Prazo: {data(t.deadline)}</span>}
+              {Number(t.budget || 0) > 0 && <span style={hubStyles.muted}>Orcamento: {moeda(Number(t.budget || 0))}</span>}
+              {t.kpiName && <Badge cor="info">KPI: {t.kpiName}</Badge>}
+              {t.kpiResult !== undefined && t.kpiResult !== null && <Badge cor="success">Resultado: {t.kpiResult}</Badge>}
+              {(t.actionName || t.planName) && <Badge cor="neutral">{t.actionName || t.planName}</Badge>}
+            </div>
+          </div>
+          <div style={hubStyles.taskActions}>
+            <div style={hubStyles.actionsInline}>
+              {t.status === 'done' ? (
+                <Btn size="sm" variant="secondary" onClick={() => onReopen?.(t)}>Reabrir</Btn>
+              ) : (
+                <Btn size="sm" onClick={() => onComplete?.(t)}>Concluir</Btn>
+              )}
+              {onDelete && (
+                <Btn size="sm" variant="danger" onClick={() => onDelete?.(t)}>Excluir</Btn>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/components/Timeline.jsx
+// ==========================================
+
+import React from 'react';
+import { colors, moeda } from '../../components/ui';
+import { Activity, CheckCircle2, Clock, PlayCircle, Flag, DollarSign } from 'lucide-react';
+
+const toDate = (value) => {
+  if (!value) return null;
+  if (value?.toDate) return value.toDate();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const getDateParts = (value) => {
+  const d = toDate(value);
+  if (!d) return { day: '--', year: '' };
+  const day = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(d);
+  return { day, year: String(d.getFullYear()) };
+};
+
+const eventStatus = (ev) => {
+  if (ev.type === 'task_done') return 'done';
+  if (ev.type === 'task_deleted') return 'danger';
+  if (ev.type === 'task_reopened') return 'pending';
+  if (ev.type === 'action_status') {
+    const st = String(ev.meta?.status || '').toLowerCase();
+    if (st === 'finalizada') return 'done';
+    if (st === 'cancelada') return 'danger';
+    return 'pending';
+  }
+  if (ev.type === 'plan_created' || ev.type === 'action_created') return 'done';
+  return 'pending';
+};
+
+const eventIcon = (ev, status) => {
+  if (ev.type === 'plan_created' || ev.type === 'action_created') return 'start';
+  if (ev.type === 'action_status' && String(ev.meta?.status || '').toLowerCase() === 'finalizada') return 'end';
+  if (status === 'done') return 'done';
+  if (status === 'danger') return 'danger';
+  return 'pending';
+};
+
+const short = (text, max = 120) => {
+  if (!text) return '';
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}...`;
+};
+
+export default function Timeline({ events = [] }) {
+  if (!events.length) {
+    return <div className="hub-empty">Sem eventos ainda.</div>;
+  }
+
+  return (
+    <div className="animate-fadeIn" style={{ background: 'var(--bg-app)', padding: '30px 40px', borderRadius: '16px', border: '1px solid var(--border)', marginTop: '10px' }}>
+      <h4 style={{ margin: '0 0 30px 0', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Activity size={18} color={colors.primary} /> Historico de evolucao
+      </h4>
+
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {events.map((ev, i) => {
+          const isLast = i === events.length - 1;
+          const status = eventStatus(ev);
+          const iconType = eventIcon(ev, status);
+          const isDone = status === 'done';
+          const isDanger = status === 'danger';
+
+          const iconColor = isDone ? colors.success : isDanger ? colors.danger : colors.warning;
+          const iconBg = isDone ? 'rgba(16, 185, 129, 0.1)' : isDanger ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+          const lineColor = events[i + 1] && eventStatus(events[i + 1]) === 'done' ? colors.success : 'var(--border)';
+
+          const { day, year } = getDateParts(ev.createdAt);
+          const meta = ev.meta || {};
+          const showBudget = Number(meta.budget || 0) > 0;
+          const showKpi = meta.kpiName || meta.kpiResult !== undefined;
+          const showStatus = meta.status;
+          const showReport = meta.report;
+
+          return (
+            <div key={ev.id || i} style={{ display: 'grid', gridTemplateColumns: '100px 40px 1fr', minHeight: '80px' }}>
+              <div style={{ textAlign: 'right', paddingRight: '15px', paddingTop: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '900', color: 'var(--text-main)' }}>{day}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>{year}</div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: iconBg, border: `2px solid ${iconColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                  {iconType === 'start' ? <PlayCircle size={14} color={iconColor} /> :
+                   iconType === 'end' ? <Flag size={14} color={iconColor} /> :
+                   isDone ? <CheckCircle2 size={14} color={iconColor} /> :
+                   <Clock size={14} color={iconColor} />}
+                </div>
+                {!isLast && (
+                  <div style={{ width: '2px', flex: 1, background: lineColor, margin: '4px 0', borderRadius: '2px', opacity: isDone ? 1 : 0.4 }} />
+                )}
+              </div>
+
+              <div style={{ paddingLeft: '15px', paddingBottom: '30px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '900', color: isDone ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                  {ev.text || 'Evento'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {ev.type || 'evento'}
+                </div>
+
+                {(showStatus || showKpi || showBudget) && (
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    {showStatus && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', background: 'var(--bg-panel)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                        Status: {meta.status}
+                      </span>
+                    )}
+                    {showKpi && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '900', color: colors.info, background: 'rgba(6, 182, 212, 0.1)', padding: '4px 8px', borderRadius: '6px' }}>
+                        KPI: {meta.kpiName || 'KPI'}{meta.kpiResult !== undefined && meta.kpiResult !== null ? ` = ${meta.kpiResult}` : ''}
+                      </span>
+                    )}
+                    {showBudget && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '900', color: colors.danger, background: 'rgba(239, 68, 68, 0.1)', padding: '4px 8px', borderRadius: '6px' }}>
+                        <DollarSign size={12} /> {moeda(Number(meta.budget || 0))}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {showReport && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Relatorio: {short(String(meta.report || ''))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/core/eventBus.js
+// ==========================================
+
+const listeners = new Map();
+
+export const eventBus = {
+  on(event, handler) {
+    if (!listeners.has(event)) listeners.set(event, new Set());
+    listeners.get(event).add(handler);
+    return () => this.off(event, handler);
+  },
+  off(event, handler) {
+    const set = listeners.get(event);
+    if (!set) return;
+    set.delete(handler);
+    if (set.size === 0) listeners.delete(event);
+  },
+  emit(event, payload) {
+    const set = listeners.get(event);
+    if (!set) return;
+    set.forEach((fn) => {
+      try { fn(payload); } catch (_) { /* no-op */ }
+    });
+  },
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/core/growthEngine.js
+// ==========================================
+
+const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
+const safeRatio = (a, b) => (b > 0 ? a / b : 0);
+
+export function calculateGrowthScore({
+  vendasMes = 0,
+  metaVendas = 0,
+  novosClientes = 0,
+  baseAnterior = 0,
+  cancelamentos = 0,
+  base = 0,
+  mediaProgressosPlanos = 0,
+} = {}) {
+  const salesRatio = clamp(safeRatio(vendasMes, metaVendas));
+  const growthRatio = clamp(safeRatio(novosClientes, baseAnterior));
+  const churnRatio = clamp(1 - safeRatio(cancelamentos, base));
+
+  const execRatio = mediaProgressosPlanos > 1
+    ? clamp(mediaProgressosPlanos / 100)
+    : clamp(mediaProgressosPlanos);
+
+  const sales = salesRatio * 40;
+  const growth = growthRatio * 30;
+  const retention = churnRatio * 20;
+  const execution = execRatio * 10;
+
+  const total = Math.round(sales + growth + retention + execution);
+
+  return {
+    total,
+    breakdown: {
+      sales: Math.round(sales),
+      growth: Math.round(growth),
+      retention: Math.round(retention),
+      execution: Math.round(execution),
+    },
+  };
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/core/insightGenerator.js
+// ==========================================
+
+export function generateInsights({
+  cancelamentos = 0,
+  mediaUltimos3Meses = 0,
+  custo = 0,
+  leadsGenerated = 0,
+  diasSemLeads = 0,
+  roi = 0,
+} = {}) {
+  const insights = [];
+
+  if (mediaUltimos3Meses > 0 && cancelamentos > mediaUltimos3Meses * 1.25) {
+    insights.push({
+      type: 'warning',
+      title: 'Churn acima da media',
+      text: 'Cancelamentos acima de 125% da media dos ultimos 3 meses.',
+    });
+  }
+
+  if (custo > 500 && leadsGenerated === 0 && diasSemLeads >= 7) {
+    insights.push({
+      type: 'danger',
+      title: 'Custo sem retorno',
+      text: 'Gasto acima de R$ 500 sem leads apos 7 dias.',
+    });
+  }
+
+  if (roi < 0) {
+    insights.push({
+      type: 'warning',
+      title: 'ROI negativo',
+      text: 'O retorno esta abaixo do custo no periodo.',
+    });
+  }
+
+  return insights;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/core/predictiveMath.js
+// ==========================================
+
+// ============================================================
+//  core/predictiveMath.js — Hub Crescimento
+//  DAS v1.0: Engine de pacing linear para projecao de fechamento
+//  de mes com base no ritmo atual de execucao.
+// ============================================================
+
+/**
+ * Calcula quantos dias uteis ja se passaram e quantos restam no mes.
+ * Considera apenas dias de segunda a sexta.
+ */
+function calcBusinessDays(year, month) {
+  const today     = new Date();
+  const lastDay   = new Date(year, month, 0).getDate(); // ultimo dia do mes
+  let elapsed = 0;
+  let remaining = 0;
+
+  for (let d = 1; d <= lastDay; d++) {
+    const dow = new Date(year, month - 1, d).getDay(); // 0=Dom, 6=Sab
+    if (dow === 0 || dow === 6) continue;
+    if (d <= today.getDate()) elapsed++;
+    else remaining++;
+  }
+
+  return { elapsed, remaining, total: elapsed + remaining };
+}
+
+/**
+ * Projeta o valor final do mes com base no ritmo atual (pacing linear).
+ *
+ * Formula:
+ *   pacingDiario = realizado / diasDecorridos
+ *   projecao     = realizado + (pacingDiario * diasRestantes)
+ *   gap          = projecao - meta
+ *   gapPercent   = (gap / meta) * 100
+ *
+ * @param {object} params
+ * @param {number} params.realizado      - Valor acumulado ate hoje
+ * @param {number} params.meta           - Meta total do mes
+ * @param {string} params.month          - Formato "YYYY-MM"
+ * @returns {object} Resultado do pacing
+ */
+export function calculatePacing({
+  realizado = 0,
+  meta = 0,
+  month = '',
+} = {}) {
+  // Parse do mes
+  const [year, mon] = month
+    ? month.split('-').map(Number)
+    : [new Date().getFullYear(), new Date().getMonth() + 1];
+
+  const { elapsed, remaining, total } = calcBusinessDays(year, mon);
+
+  // Sem dias decorridos: ritmo desconhecido
+  if (elapsed === 0) {
+    return {
+      projecao:        0,
+      pacingDiario:    0,
+      gap:             -meta,
+      gapPercent:      meta > 0 ? -100 : 0,
+      percentDecorrido: 0,
+      percentRealizado: 0,
+      diasElapsed:     0,
+      diasRemaining:   remaining,
+      diasTotal:       total,
+      status:          'inicio',
+    };
+  }
+
+  const pacingDiario = realizado / elapsed;
+  const projecao     = Math.round(realizado + pacingDiario * remaining);
+  const gap          = projecao - meta;
+  const gapPercent   = meta > 0 ? (gap / meta) * 100 : 0;
+  const percentDecorrido = Math.round((elapsed / total) * 100);
+  const percentRealizado = meta > 0 ? Math.round((realizado / meta) * 100) : 0;
+
+  // Status semaforo
+  let status;
+  if (gapPercent >= 5)        status = 'acima';      // projecao supera a meta
+  else if (gapPercent >= -5)  status = 'no_ritmo';   // dentro da margem de 5%
+  else if (gapPercent >= -20) status = 'atencao';    // risco moderado
+  else                        status = 'critico';    // risco alto
+
+  return {
+    projecao,
+    pacingDiario: Math.round(pacingDiario * 10) / 10,
+    gap,
+    gapPercent:   Math.round(gapPercent * 10) / 10,
+    percentDecorrido,
+    percentRealizado,
+    diasElapsed:  elapsed,
+    diasRemaining: remaining,
+    diasTotal:    total,
+    status,
+  };
+}
+
+/**
+ * Calcula o pacing para multiplas acoes (conversao por acao - RF09-C).
+ *
+ * @param {Array} plans     - Lista de action_plans com leadsGenerated e leadsTarget
+ * @param {string} month    - Formato "YYYY-MM"
+ * @returns {Array}         - Planos enriquecidos com dados de pacing e conversao
+ */
+export function calculatePacingByAction(plans = [], month = '') {
+  return plans.map((plan) => {
+    const leadsGerados    = Number(plan.leadsGenerated  || 0);
+    const leadsMeta       = Number(plan.leadsTarget     || 0);
+    const leadsConvertidos = Number(plan.leadsConverted || 0);
+
+    // RF09-C: Conversao por Acao = (leads convertidos / total leads da acao) * 100
+    const conversionRate = leadsGerados > 0
+      ? Math.round((leadsConvertidos / leadsGerados) * 100 * 10) / 10
+      : 0;
+
+    const pacing = leadsMeta > 0
+      ? calculatePacing({ realizado: leadsGerados, meta: leadsMeta, month })
+      : null;
+
+    return {
+      ...plan,
+      leadsGerados,
+      leadsMeta,
+      leadsConvertidos,
+      conversionRate,
+      pacing,
+    };
+  });
+}
+
+/** Mapa de status para cor semântica do design system */
+export const PACING_STATUS_COLOR = {
+  acima:     'success',
+  no_ritmo:  'primary',
+  atencao:   'warning',
+  critico:   'danger',
+  inicio:    'neutral',
+};
+
+/** Label legível para o status */
+export const PACING_STATUS_LABEL = {
+  acima:     'Acima do ritmo',
+  no_ritmo:  'No ritmo',
+  atencao:   'Atencao',
+  critico:   'Critico',
+  inicio:    'Inicio do mes',
+};
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useGrowthPlans.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { listenGrowthPlans } from '../services/growthPlanService';
+
+export function useGrowthPlans(cityId, month) {
+  const [plans, setPlans] = useState([]);
+
+  useEffect(() => {
+    const unsub = listenGrowthPlans({ cityId, month, callback: setPlans });
+    return () => unsub && unsub();
+  }, [cityId, month]);
+
+  return plans;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useKpis.js
+// ==========================================
+
+// ============================================================
+//  hooks/useKpis.js — Hub Crescimento
+//  RNF01: KPIs nao precisam de reatividade em tempo real.
+//  Migrado de onSnapshot para getDocs — elimina 1 listener
+//  permanente do KanbanPage, alinhando com o limite de 1
+//  listener por tela exigido pelo ERS.
+// ============================================================
+
+import { useEffect, useState } from 'react';
+import { getKpis } from '../services/kpiService';
+
+/**
+ * Retorna a lista de KPIs globais.
+ * Usa getDocs (snapshot unico) em vez de onSnapshot.
+ * Re-busca apenas quando o componente monta ou quando
+ * refresh() for chamado explicitamente.
+ */
+export function useKpis() {
+  const [kpis, setKpis]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick]       = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getKpis()
+      .then((list) => { if (active) setKpis(list); })
+      .catch((err) => console.error('useKpis:', err))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [tick]);
+
+  /** Permite forcar uma re-busca apos criar um KPI novo */
+  const refresh = () => setTick((t) => t + 1);
+
+  return { kpis, loading, refresh };
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useMeetings.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { listenMeetings } from '../services/meetingService';
+
+export function useMeetings(cityId) {
+  const [meetings, setMeetings] = useState([]);
+
+  useEffect(() => {
+    const unsub = listenMeetings({ cityId, callback: setMeetings });
+    return () => unsub && unsub();
+  }, [cityId]);
+
+  return meetings;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/usePlans.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { listenPlans } from '../services/planService';
+
+export function usePlans(cityId, month, growthPlanId) {
+  const [plans, setPlans] = useState([]);
+
+  useEffect(() => {
+    const unsub = listenPlans({ cityId, month, growthPlanId, callback: setPlans });
+    return () => unsub && unsub();
+  }, [cityId, month, growthPlanId]);
+
+  return plans;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useTasks.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { listenTasks } from '../services/taskService';
+
+export function useTasks({ uid, cityId, actionPlanId }) {
+  const [tasks, setTasks] = useState([]);
+
+  useEffect(() => {
+    if (!uid && !actionPlanId) {
+      setTasks([]);
+      return undefined;
+    }
+    const unsub = listenTasks({ uid, cityId, actionPlanId, callback: setTasks });
+    return () => unsub && unsub();
+  }, [uid, cityId, actionPlanId]);
+
+  return tasks;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useTimeline.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { listenTimelineEvents } from '../services/timelineService';
+
+export function useTimeline({ actionPlanId, growthPlanId }) {
+  const [events, setEvents] = useState([]);
+
+  useEffect(() => {
+    if (!actionPlanId && !growthPlanId) {
+      setEvents([]);
+      return undefined;
+    }
+    const unsub = listenTimelineEvents({ actionPlanId, growthPlanId, callback: setEvents });
+    return () => unsub && unsub();
+  }, [actionPlanId, growthPlanId]);
+
+  return events;
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/hooks/useUsers.js
+// ==========================================
+
+import { useEffect, useState } from 'react';
+import { getUsers } from '../services/userService';
+
+export function useUsers({ cityId, clusterId, enabled = true, fallbackAll = true }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setUsers([]);
+      setLoading(false);
+      return undefined;
+    }
+    const load = async () => {
+      setLoading(true);
+      const list = await getUsers({ cityId, clusterId, fallbackAll });
+      setUsers(list);
+      setLoading(false);
+    };
+    load();
+  }, [cityId, clusterId, enabled, fallbackAll]);
+
+  return { users, loading };
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/index.jsx
+// ==========================================
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { Page, Card, Select, Input, Tabs, InfoBox } from '../components/ui';
+import OverviewPage from './pages/OverviewPage';
+import KanbanPage from './pages/KanbanPage';
+import MinhaMesaPage from './pages/MinhaMesaPage';
+import MeetingsPage from './pages/MeetingsPage';
+import DashboardGrowth from './pages/DashboardGrowth';
+import { db } from '../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { hubStyles } from "./styles/hubStyles";
+
+const TAB_LABELS = ['Visao Geral', 'Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
+
+const isCoordinatorRole = (role) => {
+  const r = String(role || '').toLowerCase();
+  return r === 'coordinator' || r === 'coordenador' || r === 'master';
+};
+
+const isGrowthTeamRole = (role) => {
+  const r = String(role || '').toLowerCase();
+  return r === 'growth_team' || r === 'growth team' || r === 'equipe_growth';
+};
+
+export default function HubCrescimento({ userData }) {
+  const [cities, setCities] = useState([]);
+  const [selectedCityId, setSelectedCityId] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [activeTab, setActiveTab] = useState(TAB_LABELS[0]);
+  const [selectedGrowthPlan, setSelectedGrowthPlan] = useState(null);
+
+  const isGrowthTeam = isGrowthTeamRole(userData?.role);
+  const isCoordinator = isCoordinatorRole(userData?.role);
+
+  useEffect(() => {
+    const load = async () => {
+      const myCluster = String(userData?.clusterId || '').trim();
+      const conditions = isCoordinator ? [] : [where('clusterId', '==', myCluster)];
+      const q = query(collection(db, 'cities'), ...conditions);
+      const snap = await getDocs(q);
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => String(a.name || a.nome || '').localeCompare(String(b.name || b.nome || '')));
+      setCities(list);
+
+      if (list.length > 0) {
+        if (userData?.cityId && list.find((c) => c.id === userData.cityId)) {
+          setSelectedCityId(userData.cityId);
+        } else if (!selectedCityId) {
+          setSelectedCityId(list[0].id);
+        }
+      }
+    };
+    load();
+  }, [userData, isCoordinator, selectedCityId]);
+
+  useEffect(() => {
+    if (isGrowthTeam) setActiveTab('Minha Mesa');
+  }, [isGrowthTeam]);
+
+  useEffect(() => {
+    if (selectedGrowthPlan) {
+      if (selectedCityId && selectedGrowthPlan.cityId && selectedGrowthPlan.cityId !== selectedCityId) {
+        setSelectedGrowthPlan(null);
+      }
+      if (selectedMonth && selectedGrowthPlan.month && selectedGrowthPlan.month !== selectedMonth) {
+        setSelectedGrowthPlan(null);
+      }
+    }
+  }, [selectedCityId, selectedMonth, selectedGrowthPlan]);
+
+  const cityOptions = useMemo(() => {
+    if (isCoordinator) {
+      return [{ value: '__all__', label: 'Todas as cidades' }, ...cities.map((c) => ({ value: c.id, label: c.name || c.nome }))];
+    }
+    return cities.map((c) => ({ value: c.id, label: c.name || c.nome }));
+  }, [cities, isCoordinator]);
+
+  return (
+    <Page
+      title="Hub de Crescimento"
+      subtitle="Planejamento estrategico e execucao com baixo atrito"
+    >
+      <Card>
+        <div style={hubStyles.toolbar}>
+          <div style={{ minWidth: '240px' }}>
+            <Select
+              label="Cidade"
+              value={selectedCityId}
+              onChange={(e) => setSelectedCityId(e.target.value)}
+              options={cityOptions}
+              disabled={!isCoordinator && !!userData?.cityId}
+            />
+          </div>
+          <div style={{ minWidth: '180px' }}>
+            <Input
+              type="month"
+              label="Mes"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {!isGrowthTeam && selectedGrowthPlan && (
+        <InfoBox type="info">Plano geral atual: {selectedGrowthPlan.name}</InfoBox>
+      )}
+
+      {isGrowthTeam && (
+        <InfoBox type="info">
+          Seu perfil possui acesso apenas a Minha Mesa (RN02).
+        </InfoBox>
+      )}
+
+      {!isGrowthTeam && (
+        <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
+      )}
+
+      <div style={hubStyles.content}>
+        {isGrowthTeam && <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />}
+
+        {!isGrowthTeam && activeTab === 'Visao Geral' && (
+          <OverviewPage
+            userData={userData}
+            selectedCityId={selectedCityId}
+            selectedMonth={selectedMonth}
+            selectedGrowthPlan={selectedGrowthPlan}
+            onSelectPlan={(p) => { if (p) { setSelectedGrowthPlan(p); setActiveTab('Kanban'); } }}
+            onClearPlan={() => setSelectedGrowthPlan(null)}
+          />
+        )}
+
+      {!isGrowthTeam && ['Kanban', 'Reunioes', 'Dashboard'].includes(activeTab) && !selectedGrowthPlan && (
+        <InfoBox type="warning">Selecione um plano geral na Visao Geral.</InfoBox>
+      )}
+
+      {!isGrowthTeam && activeTab === 'Kanban' && selectedGrowthPlan && (
+        <KanbanPage
+          userData={userData}
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
+      {!isGrowthTeam && activeTab === 'Minha Mesa' && (
+        <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
+      )}
+      {!isGrowthTeam && activeTab === 'Reunioes' && selectedGrowthPlan && (
+        <MeetingsPage
+          userData={userData}
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
+      {!isGrowthTeam && activeTab === 'Dashboard' && selectedGrowthPlan && (
+        <DashboardGrowth
+          selectedCityId={selectedCityId}
+          selectedMonth={selectedMonth}
+          selectedGrowthPlan={selectedGrowthPlan}
+        />
+      )}
+      </div>
+    </Page>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/pages/DashboardGrowth.jsx
+// ==========================================
+
+// ============================================================
+//  DashboardGrowth.jsx — Hub Crescimento
+//  Visao executiva consolidada de ROI, Scores e Insights.
+//
+//  RF09:   CAC, ROI, Leads Gerados
+//  RF09-C: Conversao por Acao (leadsConvertidos / leadsGerados)
+//  RF10:   Growth Score (growthEngine)
+//  RF11:   Insights automaticos (insightGenerator)
+//  DAS:    predictiveMath — pacing linear de fechamento de mes
+// ============================================================
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { Card, InfoBox, Badge, moeda, numero } from '../../components/ui';
+import { getPlans }            from '../services/planService';
+import { getLeadsSummary, getConversionByAction } from '../services/leadService';
+import { calculateGrowthScore } from '../core/growthEngine';
+import { generateInsights }     from '../core/insightGenerator';
+import { calculatePacing, calculatePacingByAction, PACING_STATUS_COLOR, PACING_STATUS_LABEL } from '../core/predictiveMath';
+import GrowthScoreCard          from '../components/GrowthScoreCard';
+import { db }                   from '../../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+
+// ─── Componente de metrica simples ───────────────────────────────────────────
+function Metric({ label, value, sub, accent }) {
+  return (
+    <div className="hub-metric" style={accent ? { borderLeft: `3px solid var(--color-${accent}, #2563eb)` } : {}}>
+      <div className="hub-metric-label">{label}</div>
+      <div className="hub-metric-value">{value}</div>
+      {sub && <div className="hub-muted" style={{ fontSize: '11px', marginTop: '2px' }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ─── Barra de pacing visual ───────────────────────────────────────────────────
+function PacingBar({ pacing, meta, label }) {
+  if (!pacing) return null;
+  const { percentRealizado, percentDecorrido, status, projecao, gapPercent } = pacing;
+  const barColor = {
+    acima:    '#10b981',
+    no_ritmo: '#2563eb',
+    atencao:  '#f59e0b',
+    critico:  '#ef4444',
+    inicio:   '#64748b',
+  }[status] || '#64748b';
+
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          Projecao: <strong style={{ color: barColor }}>{numero(projecao)}</strong> de {numero(meta)}
+          {' '}({gapPercent > 0 ? '+' : ''}{gapPercent}%)
+        </span>
+      </div>
+
+      {/* Trilha dupla: decorrido (fundo) + realizado (frente) */}
+      <div style={{ position: 'relative', height: '10px', background: 'var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+        {/* Dias decorridos */}
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${percentDecorrido}%`, background: 'rgba(100,116,139,0.2)', borderRadius: '8px' }} />
+        {/* Realizado */}
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${Math.min(percentRealizado, 100)}%`, background: barColor, borderRadius: '8px', transition: 'width 0.6s ease' }} />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{percentDecorrido}% do mes decorrido</span>
+        <Badge cor={PACING_STATUS_COLOR[status] || 'neutral'} style={{ fontSize: '11px' }}>
+          {PACING_STATUS_LABEL[status]}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tabela de conversao por acao (RF09-C) ────────────────────────────────────
+function ConversionTable({ data }) {
+  const rows = Object.values(data);
+  if (rows.length === 0) {
+    return <div className="hub-empty">Sem acoes com leads vinculados neste periodo.</div>;
+  }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ background: 'var(--bg-panel)' }}>
+            {['Acao', 'Leads Gerados', 'Convertidos', 'Taxa de Conversao'].map((h) => (
+              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '800', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={row.planId} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-panel)' }}>
+              <td style={{ padding: '10px 12px', fontWeight: '600', color: 'var(--text-main)', borderBottom: '1px solid var(--border)' }}>
+                {row.planName}
+              </td>
+              <td style={{ padding: '10px 12px', color: 'var(--text-main)', borderBottom: '1px solid var(--border)' }}>
+                {row.leadsGerados}
+              </td>
+              <td style={{ padding: '10px 12px', color: 'var(--text-main)', borderBottom: '1px solid var(--border)' }}>
+                {row.leadsConvertidos}
+              </td>
+              <td style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ flex: 1, height: '6px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(row.conversionRate, 100)}%`, background: row.conversionRate >= 50 ? '#10b981' : row.conversionRate >= 20 ? '#f59e0b' : '#ef4444', borderRadius: '4px', transition: 'width 0.5s ease' }} />
+                  </div>
+                  <span style={{ fontWeight: '800', color: 'var(--text-main)', minWidth: '42px', textAlign: 'right' }}>
+                    {row.conversionRate}%
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Componente principal ────────────────────────────────────────────────────
+export default function DashboardGrowth({ selectedCityId, selectedMonth, selectedGrowthPlan }) {
+  const [loading, setLoading] = useState(true);
+  const [plans,   setPlans]   = useState([]);
+  const [metrics, setMetrics] = useState({
+    totalPlans:    0,
+    totalCost:     0,
+    totalReturn:   0,
+    leadsGenerated: 0,
+    leadsConverted: 0,
+    conversionRate: 0,
+    realGrowth:    0,
+    progressAvg:   0,
+    baseStart:     0,
+  });
+  const [conversionByAction, setConversionByAction] = useState({});
+
+  // ── Carga de dados ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        // 1. Planos do Hub
+        const loadedPlans = await getPlans({
+          cityId:       selectedCityId,
+          month:        selectedMonth,
+          growthPlanId: selectedGrowthPlan?.id,
+        });
+        setPlans(loadedPlans);
+
+        const totalPlans  = loadedPlans.length;
+        const totalCost   = loadedPlans.reduce((a, p) => a + Number(p.cost        || 0), 0);
+        const totalReturn = loadedPlans.reduce((a, p) => a + Number(p.returnValue || 0), 0);
+        const realGrowth  = loadedPlans
+          .filter((p) => p.status === 'Finalizada')
+          .reduce((a, p) => a + Number(p.actualBaseImpact || 0), 0);
+        const progressAvg = totalPlans
+          ? Math.round(loadedPlans.reduce((a, p) => a + Number(p.progress || 0), 0) / totalPlans)
+          : 0;
+
+        // 2. Base de clientes do mes
+        let baseStart = 0;
+        if (selectedMonth) {
+          const conditions = [where('month', '==', selectedMonth)];
+          if (selectedCityId && selectedCityId !== '__all__') {
+            conditions.push(where('cityId', '==', selectedCityId));
+          }
+          const snap = await getDocs(query(collection(db, 'monthly_bases'), ...conditions));
+          baseStart  = snap.docs.reduce((a, d) => a + Number(d.data()?.baseStart || 0), 0);
+        }
+
+        // 3. Leads via leadService (RF09 + RF09-C)
+        const actionIds  = loadedPlans.map((p) => p.id);
+        const leadsSummary = await getLeadsSummary({
+          cityId:    selectedCityId,
+          month:     selectedMonth,
+          actionIds,
+        });
+
+        // RF09-C: conversao por acao
+        const byAction = getConversionByAction(loadedPlans, leadsSummary.leads);
+        setConversionByAction(byAction);
+
+        setMetrics({
+          totalPlans,
+          totalCost,
+          totalReturn,
+          leadsGenerated: leadsSummary.totalLeads,
+          leadsConverted: leadsSummary.convertedLeads,
+          conversionRate: leadsSummary.conversionRate,
+          realGrowth,
+          progressAvg,
+          baseStart,
+        });
+      } catch (err) {
+        console.error('DashboardGrowth load error:', err);
+        window.showToast?.('Erro ao carregar o dashboard.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [selectedCityId, selectedMonth, selectedGrowthPlan?.id]);
+
+  // ── Derivados ──────────────────────────────────────────────────────────────
+  const roi = metrics.totalCost > 0
+    ? ((metrics.totalReturn - metrics.totalCost) / metrics.totalCost) * 100
+    : 0;
+
+  const cac = metrics.leadsGenerated > 0
+    ? metrics.totalCost / metrics.leadsGenerated
+    : 0;
+
+  const score = useMemo(() => calculateGrowthScore({
+    vendasMes:             0,
+    metaVendas:            0,
+    novosClientes:         metrics.realGrowth,
+    baseAnterior:          metrics.baseStart,
+    cancelamentos:         0,
+    base:                  metrics.baseStart,
+    mediaProgressosPlanos: metrics.progressAvg / 100,
+  }), [metrics]);
+
+  const insights = useMemo(() => {
+    const diasSemLeads = metrics.leadsGenerated === 0 ? 7 : 0;
+    return generateInsights({
+      cancelamentos:      0,
+      mediaUltimos3Meses: 0,
+      custo:              metrics.totalCost,
+      leadsGenerated:     metrics.leadsGenerated,
+      diasSemLeads,
+      roi,
+    });
+  }, [metrics, roi]);
+
+  // Pacing global de leads do mes
+  const leadsMeta  = plans.reduce((a, p) => a + Number(p.leadsTarget || 0), 0);
+  const pacingGlobal = useMemo(() =>
+    leadsMeta > 0
+      ? calculatePacing({ realizado: metrics.leadsGenerated, meta: leadsMeta, month: selectedMonth })
+      : null,
+  [metrics.leadsGenerated, leadsMeta, selectedMonth]);
+
+  // Pacing por acao (para a tabela expandida)
+  const plansWithPacing = useMemo(() =>
+    calculatePacingByAction(plans, selectedMonth),
+  [plans, selectedMonth]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="hub-stack">
+        <Card title="Dashboard Growth" subtitle="Carregando indicadores...">
+          <div className="hub-empty">Carregando...</div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="hub-stack">
+
+      {/* ── KPIs principais ── */}
+      <Card title="Indicadores Consolidados" subtitle={`${selectedMonth || 'Periodo'} — ${selectedGrowthPlan?.name || 'Todos os planos'}`}>
+        <div className="hub-dashboard-grid">
+          <Metric label="Planos"          value={numero(metrics.totalPlans)} />
+          <Metric label="Custo total"      value={moeda(metrics.totalCost)} />
+          <Metric label="Retorno estimado" value={moeda(metrics.totalReturn)} />
+          <Metric
+            label="ROI"
+            value={`${roi.toFixed(1)}%`}
+            accent={roi >= 0 ? 'success' : 'danger'}
+          />
+          <Metric
+            label="CAC"
+            value={moeda(cac)}
+            sub={metrics.leadsGenerated > 0 ? `${metrics.leadsGenerated} leads gerados` : 'Sem leads'}
+          />
+          <Metric
+            label="Taxa de Conversao Global"
+            value={`${metrics.conversionRate}%`}
+            sub={`${metrics.leadsConverted} de ${metrics.leadsGenerated} convertidos`}
+            accent={metrics.conversionRate >= 50 ? 'success' : metrics.conversionRate >= 20 ? 'warning' : 'danger'}
+          />
+          <Metric label="Crescimento real" value={`+${numero(metrics.realGrowth)}`} />
+          <Metric label="Execucao media"   value={`${metrics.progressAvg}%`} />
+        </div>
+      </Card>
+
+      {/* ── Pacing de leads ── */}
+      {pacingGlobal && (
+        <Card title="Pacing de Leads" subtitle="Projecao linear de fechamento do mes">
+          <PacingBar
+            pacing={pacingGlobal}
+            meta={leadsMeta}
+            label="Leads gerados vs meta do mes"
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '16px' }}>
+            <Metric label="Ritmo diario"       value={`${pacingGlobal.pacingDiario} leads/dia`} />
+            <Metric label="Dias decorridos"    value={`${pacingGlobal.diasElapsed} dias uteis`} />
+            <Metric label="Dias restantes"     value={`${pacingGlobal.diasRemaining} dias uteis`} />
+            <Metric label="Projecao final"     value={numero(pacingGlobal.projecao)} />
+          </div>
+        </Card>
+      )}
+
+      {/* ── Growth Score ── */}
+      <GrowthScoreCard score={score} />
+
+      {/* ── RF09-C: Conversao por Acao ── */}
+      <Card
+        title="Conversao por Acao"
+        subtitle="RF09-C: leads gerados e convertidos por cada plano de acao"
+      >
+        <ConversionTable data={conversionByAction} />
+      </Card>
+
+      {/* ── Insights automaticos ── */}
+      <Card title="Insights Automaticos" subtitle="Alertas gerados com base nos indicadores">
+        {insights.length === 0 ? (
+          <InfoBox type="success">Todos os indicadores dentro do esperado.</InfoBox>
+        ) : (
+          insights.map((ins, i) => (
+            <InfoBox key={i} type={ins.type}>
+              <strong>{ins.title}:</strong> {ins.text}
+            </InfoBox>
+          ))
+        )}
+      </Card>
+
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/pages/KanbanPage.jsx
+// ==========================================
+
+import React, { useMemo, useState, useEffect } from 'react';
+import { Card, Btn, Input, Select, Textarea, Modal, Badge, InfoBox, moeda } from '../../components/ui';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import KanbanBoard from '../components/KanbanBoard';
+import KanbanColumn from '../components/KanbanColumn';
+import PlanCard from '../components/PlanCard';
+import Timeline from '../components/Timeline';
+import { usePlans } from '../hooks/usePlans';
+import { createPlan, updatePlanStatus, deleteActionPlan } from '../services/planService';
+import { createTask, deleteTask, getTasksByAction, completeTask, reopenTask } from '../services/taskService';
+import { useUsers } from '../hooks/useUsers';
+import { useKpis } from '../hooks/useKpis';
+import { createKpi } from '../services/kpiService';
+import { useTimeline } from '../hooks/useTimeline';
+import { hubStyles } from '../styles/hubStyles';
+
+const CATEGORY_OPTIONS = ['Marketing', 'Comercial', 'Operacional', 'Relacionamento', 'Outras'];
+const FOCUS_OPTIONS = ['Vendas Novas', 'Migracoes/Up-Sell', 'Retencao/Anti-Churn', 'Marca', 'Inadimplencia', 'Outro'];
+const KPI_CATEGORIES = ['Vendas', 'Leads', 'Marca', 'Outro'];
+
+const COLUMNS = [
+  { id: 'Backlog', title: 'Backlog' },
+  { id: 'Planejamento', title: 'Planejamento' },
+  { id: 'Em Andamento', title: 'Em Andamento' },
+  { id: 'Finalizada', title: 'Finalizada' },
+  { id: 'Cancelada', title: 'Cancelada' },
+];
+
+export default function KanbanPage({ userData, selectedCityId, selectedMonth, selectedGrowthPlan }) {
+  const plans = usePlans(selectedGrowthPlan?.cityId || selectedCityId, selectedMonth, selectedGrowthPlan?.id);
+  const cityFilter = selectedGrowthPlan?.cityId || selectedCityId || null;
+  const { users } = useUsers({
+    cityId: cityFilter,
+    clusterId: userData?.clusterId || null,
+    fallbackAll: true,
+  });
+  // RNF01: useKpis migrado para getDocs (nao mais onSnapshot)
+  const { kpis, refresh: refreshKpis } = useKpis();
+  // ── dnd-kit: sensores com suporte a touch (mobile) ──────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+  const [activeId, setActiveId] = useState(null); // ID do card sendo arrastado
+  const [isSaving, setIsSaving] = useState(false);
+  const [finalizePlan, setFinalizePlan] = useState(null);
+  const [finalizeReport, setFinalizeReport] = useState('');
+
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    objectives: '',
+    category: CATEGORY_OPTIONS[0],
+    actionFocus: FOCUS_OPTIONS[0],
+    startDate: '',
+    endDate: '',
+    cost: '',
+    responsibleUid: '',
+  });
+
+  const [openPlan, setOpenPlan] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    deadline: '',
+    responsibleUid: '',
+    budget: '',
+    kpiEnabled: 'no',
+    kpiSelection: '',
+    kpiName: '',
+    kpiCategory: KPI_CATEGORIES[0],
+  });
+  const [finishTask, setFinishTask] = useState(null);
+  const [finishReport, setFinishReport] = useState('');
+  const [finishKpiResult, setFinishKpiResult] = useState('');
+  const timelineEvents = useTimeline({ actionPlanId: openPlan?.id });
+
+  const responsibleOptions = useMemo(() => {
+    return users.map((u) => ({
+      value: u.id,
+      label: `${u.name || u.nome || u.displayName || 'Sem nome'}${u.role ? ` (${u.role})` : ''}`,
+    }));
+  }, [users]);
+
+  const kpiOptions = useMemo(() => {
+    return kpis.map((kpi) => ({
+      value: kpi.id,
+      label: `${kpi.name || 'KPI'}${kpi.category ? ` (${kpi.category})` : ''}`,
+    }));
+  }, [kpis]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!openPlan) return;
+      const list = await getTasksByAction(openPlan.id);
+      setTasks(list);
+    };
+    load();
+  }, [openPlan]);
+
+  useEffect(() => {
+    if (!openPlan) return;
+    const latest = plans.find((p) => p.id === openPlan.id);
+    if (latest) setOpenPlan(latest);
+  }, [plans]);
+
+  const plansByStatus = useMemo(() => {
+    const map = {};
+    COLUMNS.forEach((c) => { map[c.id] = []; });
+    plans.forEach((p) => {
+      const key = map[p.status] ? p.status : 'Backlog';
+      map[key].push(p);
+    });
+    return map;
+  }, [plans]);
+
+  // ── dnd-kit: handlers de drag ────────────────────────────────────────────
+  const handleDragStart = ({ active }) => {
+    setActiveId(active.id);
+  };
+
+  const handleDragEnd = async ({ active, over }) => {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+
+    // over.id pode ser um planId (SortableContext) ou um columnId (Droppable)
+    const targetColumnId = plansByStatus[over.id]
+      ? over.id  // solto direto na coluna vazia
+      : plans.find((p) => p.id === over.id)?.status; // solto em cima de outro card
+
+    if (!targetColumnId) return;
+
+    const sourcePlan = plans.find((p) => p.id === active.id);
+    if (!sourcePlan || sourcePlan.status === targetColumnId) return;
+
+    if (targetColumnId === 'Finalizada') {
+      setFinalizePlan(sourcePlan);
+      setFinalizeReport('');
+      return;
+    }
+
+    await updatePlanStatus(active.id, targetColumnId, userData);
+  };
+
+  const handleCreatePlan = async () => {
+    if (!selectedGrowthPlan) {
+      window.showToast?.('Selecione um plano geral antes de criar a acao.', 'error');
+      return;
+    }
+    if (!form.name.trim()) {
+      window.showToast?.('Informe um nome para a acao.', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const objectives = form.objectives
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+
+      const responsible = users.find((u) => u.id === form.responsibleUid) || {};
+
+      await createPlan({
+        name: form.name,
+        description: form.description,
+        objectives,
+        category: form.category,
+        actionFocus: form.actionFocus,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        cost: Number(form.cost || 0),
+        cityId: selectedGrowthPlan.cityId,
+        month: selectedGrowthPlan.month || selectedMonth,
+        growthPlanId: selectedGrowthPlan.id,
+        growthPlanName: selectedGrowthPlan.name,
+        responsibles: [{
+          uid: responsible.id || userData?.uid || null,
+          name: responsible.name || responsible.nome || responsible.displayName || userData?.name || userData?.nome || 'Responsavel',
+          role: responsible.role || userData?.role || '',
+          cityId: responsible.cityId || selectedGrowthPlan.cityId,
+        }],
+      }, userData);
+
+      setForm({
+        name: '', description: '', objectives: '', category: CATEGORY_OPTIONS[0],
+        actionFocus: FOCUS_OPTIONS[0], startDate: '', endDate: '', cost: '', responsibleUid: ''
+      });
+
+      window.showToast?.('Acao criada.', 'success');
+    } catch (err) {
+      window.showToast?.('Erro ao criar acao.', 'error');
+    }
+    setIsSaving(false);
+  };
+
+  const handleAddTask = async () => {
+    if (!openPlan) return;
+    if (openPlan.status === 'Finalizada') {
+      window.showToast?.('Acao finalizada. Reabra para adicionar etapas.', 'error');
+      return;
+    }
+    if (!taskForm.title.trim()) {
+      window.showToast?.('Informe o titulo da tarefa.', 'error');
+      return;
+    }
+
+    const responsible = users.find((u) => u.id === taskForm.responsibleUid) || {};
+    const responsibleUid = responsible.id || userData?.uid || '';
+    const responsibleName = responsible.name || responsible.nome || responsible.displayName || userData?.name || userData?.nome || 'Responsavel';
+    const kpiEnabled = taskForm.kpiEnabled === 'yes';
+    let kpiId = null;
+    let kpiName = null;
+    let kpiCategory = null;
+
+    if (kpiEnabled) {
+      if (!taskForm.kpiSelection) {
+        window.showToast?.('Selecione um KPI ou crie um novo.', 'error');
+        return;
+      }
+      if (taskForm.kpiSelection && taskForm.kpiSelection !== '__new__') {
+        const found = kpis.find((k) => k.id === taskForm.kpiSelection);
+        kpiId = found?.id || null;
+        kpiName = found?.name || null;
+        kpiCategory = found?.category || null;
+      } else {
+        const name = String(taskForm.kpiName || '').trim();
+        if (!name) {
+          window.showToast?.('Informe o nome do KPI.', 'error');
+          return;
+        }
+        const existing = kpis.find((k) => String(k.name || '').toLowerCase() === name.toLowerCase());
+        if (existing) {
+          kpiId = existing.id;
+          kpiName = existing.name;
+          kpiCategory = existing.category || taskForm.kpiCategory;
+        } else {
+          const newId = await createKpi({ name, category: taskForm.kpiCategory }, userData);
+          kpiId = newId;
+          kpiName = name;
+          kpiCategory = taskForm.kpiCategory;
+          refreshKpis(); // RNF01: atualiza lista apos criar KPI (substitui reatividade do onSnapshot)
+        }
+      }
+    }
+
+    try {
+      await createTask(openPlan.id, {
+        title: taskForm.title,
+        deadline: taskForm.deadline || null,
+        cityId: openPlan.cityId,
+        actionName: openPlan.name,
+        responsibleUid,
+        responsibleName,
+        budget: Number(taskForm.budget || 0),
+        kpiEnabled,
+        kpiId,
+        kpiName,
+        kpiCategory,
+      }, userData);
+
+      setTaskForm({
+        title: '',
+        deadline: '',
+        responsibleUid: '',
+        budget: '',
+        kpiEnabled: 'no',
+        kpiSelection: '',
+        kpiName: '',
+        kpiCategory: KPI_CATEGORIES[0],
+      });
+      const list = await getTasksByAction(openPlan.id);
+      setTasks(list);
+    } catch (err) {
+      window.showToast?.('Nao foi possivel adicionar a etapa.', 'error');
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    await deleteTask(taskId, userData);
+    const list = await getTasksByAction(openPlan.id);
+    setTasks(list);
+  };
+
+  const handleOpenFinishTask = (task) => {
+    setFinishTask(task);
+    setFinishReport('');
+    setFinishKpiResult('');
+  };
+
+  const handleConfirmFinishTask = async () => {
+    if (!finishTask) return;
+    if (!String(finishReport || '').trim()) {
+      window.showToast?.('Informe o relatorio da etapa.', 'error');
+      return;
+    }
+    if (finishTask.kpiEnabled) {
+      const value = finishKpiResult;
+      if (value === '' || Number.isNaN(Number(value))) {
+        window.showToast?.('Informe o resultado do KPI.', 'error');
+        return;
+      }
+    }
+    try {
+      await completeTask(finishTask.id, userData, finishReport, finishKpiResult);
+      setFinishTask(null);
+      setFinishReport('');
+      setFinishKpiResult('');
+      const list = await getTasksByAction(openPlan.id);
+      setTasks(list);
+    } catch (err) {
+      window.showToast?.('Nao foi possivel finalizar a etapa.', 'error');
+    }
+  };
+
+  const handleReopenTask = async (task) => {
+    await reopenTask(task.id, userData);
+    const list = await getTasksByAction(openPlan.id);
+    setTasks(list);
+  };
+
+  const handleDeleteAction = async () => {
+    if (!openPlan) return;
+    if (!window.confirm('Excluir esta acao?')) return;
+    await deleteActionPlan(openPlan.id, userData);
+    setOpenPlan(null);
+  };
+
+  const handleReopenAction = async () => {
+    if (!openPlan) return;
+    await updatePlanStatus(openPlan.id, 'Em Andamento', userData);
+    setOpenPlan({ ...openPlan, status: 'Em Andamento' });
+  };
+
+  const handleConfirmFinalize = async () => {
+    if (!finalizePlan) return;
+    await updatePlanStatus(finalizePlan.id, 'Finalizada', userData, { completionReport: finalizeReport });
+    setFinalizePlan(null);
+    setFinalizeReport('');
+  };
+
+  return (
+    <div style={hubStyles.stack}>
+      {!selectedGrowthPlan && (
+        <InfoBox type="warning">Selecione um plano geral para criar acoes.</InfoBox>
+      )}
+
+      <Card title="Nova Acao" subtitle="Crie uma acao dentro do plano geral">
+        <div style={hubStyles.formGrid}>
+          <Input label="Nome da acao" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Select label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={CATEGORY_OPTIONS} />
+          <Select label="Foco" value={form.actionFocus} onChange={(e) => setForm({ ...form, actionFocus: e.target.value })} options={FOCUS_OPTIONS} />
+          <Input type="number" label="Custo (R$)" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
+          <Input type="date" label="Inicio" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+          <Input type="date" label="Prazo" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+          <Input label="Objetivos (separe por virgula)" value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} />
+          <Textarea label="Descricao" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <Select
+            label="Responsavel"
+            value={form.responsibleUid}
+            onChange={(e) => setForm({ ...form, responsibleUid: e.target.value })}
+            options={responsibleOptions}
+            placeholder="Selecione um usuario"
+          />
+          {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
+        </div>
+        <div style={hubStyles.actions}>
+          <Btn onClick={handleCreatePlan} loading={isSaving}>Criar Acao</Btn>
+        </div>
+      </Card>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <KanbanBoard>
+          {COLUMNS.map((col) => {
+            const colPlans  = plansByStatus[col.id] || [];
+            const planIds   = colPlans.map((p) => p.id);
+            return (
+              <KanbanColumn
+                key={col.id}
+                id={col.id}
+                title={col.title}
+                count={colPlans.length}
+                planIds={planIds}
+              >
+                {colPlans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onClick={() => setOpenPlan(plan)}
+                  />
+                ))}
+              </KanbanColumn>
+            );
+          })}
+        </KanbanBoard>
+
+        {/* DragOverlay: card "fantasma" que segue o cursor durante o drag */}
+        <DragOverlay>
+          {activeId ? (
+            <PlanCard
+              plan={plans.find((p) => p.id === activeId) || { id: activeId, name: '...' }}
+              onClick={() => {}}
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      <Modal
+        open={!!openPlan}
+        onClose={() => { setOpenPlan(null); setTasks([]); }}
+        title={openPlan ? `Acao: ${openPlan.name}` : 'Acao'}
+        size="lg"
+      >
+        {openPlan && (
+          <div style={hubStyles.modal}>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Dados principais</div>
+              <div style={hubStyles.modalRow}>
+                <Badge cor="neutral">{openPlan.status}</Badge>
+                <span style={hubStyles.muted}>Cidade: {openPlan.cityId}</span>
+                <span style={hubStyles.muted}>Custo total: {moeda(Number(openPlan.cost || 0))}</span>
+              </div>
+              {Number(openPlan.taskBudgetTotal || 0) > 0 && (
+                <div style={hubStyles.muted}>Custo de etapas: {moeda(Number(openPlan.taskBudgetTotal || 0))}</div>
+              )}
+              <div style={hubStyles.actions}>
+                <Btn variant="danger" onClick={handleDeleteAction}>Excluir acao</Btn>
+              </div>
+            </div>
+
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Adicionar tarefa</div>
+              {openPlan.status === 'Finalizada' && (
+                <InfoBox type="warning">Acao finalizada. Para inserir novas etapas, volte para "Em Andamento".</InfoBox>
+              )}
+              <div style={hubStyles.formGrid}>
+                <Input label="Titulo" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Input type="date" label="Prazo" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Input type="number" label="Orcamento da etapa (R$)" value={taskForm.budget} onChange={(e) => setTaskForm({ ...taskForm, budget: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
+                <Select
+                  label="Medir resultados?"
+                  value={taskForm.kpiEnabled}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setTaskForm({
+                      ...taskForm,
+                      kpiEnabled: value,
+                      ...(value === 'no' ? { kpiSelection: '', kpiName: '', kpiCategory: KPI_CATEGORIES[0] } : {}),
+                    });
+                  }}
+                  options={[
+                    { value: 'no', label: 'Nao' },
+                    { value: 'yes', label: 'Sim' },
+                  ]}
+                  disabled={openPlan.status === 'Finalizada'}
+                />
+                {taskForm.kpiEnabled === 'yes' && (
+                  <Select
+                    label="KPI"
+                    value={taskForm.kpiSelection}
+                    onChange={(e) => setTaskForm({ ...taskForm, kpiSelection: e.target.value })}
+                    options={[
+                      { value: '', label: 'Selecione um KPI' },
+                      ...kpiOptions,
+                      { value: '__new__', label: 'Novo KPI' },
+                    ]}
+                    disabled={openPlan.status === 'Finalizada'}
+                  />
+                )}
+                {taskForm.kpiEnabled === 'yes' && taskForm.kpiSelection === '__new__' && (
+                  <>
+                    <Input
+                      label="Nome do novo KPI"
+                      value={taskForm.kpiName}
+                      onChange={(e) => setTaskForm({ ...taskForm, kpiName: e.target.value })}
+                      disabled={openPlan.status === 'Finalizada'}
+                    />
+                    <Select
+                      label="Categoria do KPI"
+                      value={taskForm.kpiCategory}
+                      onChange={(e) => setTaskForm({ ...taskForm, kpiCategory: e.target.value })}
+                      options={KPI_CATEGORIES}
+                      disabled={openPlan.status === 'Finalizada'}
+                    />
+                  </>
+                )}
+                <Select
+                  label="Responsavel"
+                  value={taskForm.responsibleUid}
+                  onChange={(e) => setTaskForm({ ...taskForm, responsibleUid: e.target.value })}
+                  options={responsibleOptions}
+                  placeholder="Selecione um usuario"
+                  disabled={openPlan.status === 'Finalizada'}
+                />
+                {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
+              </div>
+              <div style={hubStyles.actions}>
+                {openPlan.status === 'Finalizada' ? (
+                  <Btn variant="secondary" onClick={handleReopenAction}>Reabrir acao</Btn>
+                ) : (
+                  <Btn onClick={handleAddTask}>Salvar tarefa</Btn>
+                )}
+              </div>
+            </div>
+
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Tarefas da acao</div>
+              {tasks.length === 0 && <div style={hubStyles.empty}>Nenhuma tarefa ainda.</div>}
+              {tasks.map((t) => (
+                <div key={t.id} style={hubStyles.taskRow}>
+                  <div>
+                    <div style={hubStyles.strong}>{t.title || 'Tarefa'}</div>
+                    <div style={hubStyles.muted}>Resp: {t.responsibleName || '---'}</div>
+                    {Number(t.budget || 0) > 0 && <div style={hubStyles.muted}>Orcamento: {moeda(Number(t.budget || 0))}</div>}
+                    {t.kpiName && <div style={hubStyles.muted}>KPI: {t.kpiName}</div>}
+                    {t.kpiResult !== undefined && t.kpiResult !== null && (
+                      <div style={hubStyles.muted}>Resultado: {t.kpiResult}</div>
+                    )}
+                  </div>
+                  <div style={hubStyles.actionsInline}>
+                    <Badge cor={t.status === 'done' ? 'success' : 'warning'}>{t.status}</Badge>
+                    {t.status === 'done' ? (
+                      <Btn size="sm" variant="secondary" onClick={() => handleReopenTask(t)}>Reabrir</Btn>
+                    ) : (
+                      <Btn size="sm" onClick={() => handleOpenFinishTask(t)}>Finalizar</Btn>
+                    )}
+                    <Btn size="sm" variant="danger" onClick={() => handleDeleteTask(t.id)}>Excluir</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Linha do tempo</div>
+              <Timeline events={timelineEvents} />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!finishTask}
+        onClose={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}
+        title={finishTask ? `Finalizar etapa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar etapa'}
+        size="lg"
+      >
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio da etapa</div>
+            <Textarea
+              label="Relatorio (opcional)"
+              value={finishReport}
+              onChange={(e) => setFinishReport(e.target.value)}
+              placeholder="Descreva o que foi feito e os resultados."
+            />
+          </div>
+          {finishTask?.kpiEnabled && (
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Resultado do KPI</div>
+              <Input
+                type="number"
+                label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
+                value={finishKpiResult}
+                onChange={(e) => setFinishKpiResult(e.target.value)}
+                placeholder="Informe o resultado do KPI"
+              />
+            </div>
+          )}
+          <div style={hubStyles.actions}>
+            <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinishTask}>Finalizar etapa</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!finalizePlan}
+        onClose={() => { setFinalizePlan(null); setFinalizeReport(''); }}
+        title={finalizePlan ? `Finalizar acao: ${finalizePlan.name}` : 'Finalizar acao'}
+        size="lg"
+      >
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
+            <Textarea
+              label="Relatorio"
+              value={finalizeReport}
+              onChange={(e) => setFinalizeReport(e.target.value)}
+              placeholder="Descreva o que foi feito, resultados e observacoes."
+            />
+          </div>
+          <div style={hubStyles.actions}>
+            <Btn variant="secondary" onClick={() => { setFinalizePlan(null); setFinalizeReport(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinalize}>Finalizar acao</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/pages/MeetingsPage.jsx
+// ==========================================
+
+// ============================================================
+//  MeetingsPage.jsx — Hub Crescimento
+//  RF01: Criacao e edicao de reunioes (growth_meetings)
+//  RF02: Conversao de item de ata em Plano de Acao (Backlog)
+// ============================================================
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { Card, Btn, Input, Badge, InfoBox, Modal, Textarea, data } from '../../components/ui';
+import { useMeetings }    from '../hooks/useMeetings';
+import { useGrowthPlans } from '../hooks/useGrowthPlans';
+import { useUsers }       from '../hooks/useUsers';
+import { createMeeting, updateMeeting, convertAgendaItemToPlan } from '../services/meetingService';
+import { createPlan } from '../services/planService';
+import { hubStyles } from '../styles/hubStyles';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const emptyForm = () => ({
+  title: '',
+  date: '',
+  time: '',
+  participantUids: [],
+  planIds: [],
+  agendaItems: [], // RF02: lista de itens da ata
+});
+
+const emptyAgendaItem = () => ({ text: '', convertedPlanId: null });
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function MeetingsPage({
+  userData,
+  selectedCityId,
+  selectedMonth,
+  selectedGrowthPlan,
+}) {
+  const meetings    = useMeetings(selectedCityId);
+  const plans       = useGrowthPlans(selectedCityId, selectedMonth);
+  const { users }   = useUsers({
+    cityId:      selectedCityId,
+    clusterId:   userData?.clusterId || null,
+    fallbackAll: true,
+  });
+
+  const [form, setForm]         = useState(emptyForm());
+  const [saving, setSaving]     = useState(false);
+
+  // RF02: estados de conversao
+  const [converting, setConverting]           = useState(null); // { meetingId, index, item }
+  const [addAgendaText, setAddAgendaText]     = useState('');
+
+  // Modo de edicao de ata em reuniao existente
+  const [editingMeeting, setEditingMeeting]   = useState(null);
+  const [editAgendaText, setEditAgendaText]   = useState('');
+
+  // Pre-preenche o plano quando vem selecionado de fora
+  useEffect(() => {
+    if (selectedGrowthPlan?.id && form.planIds.length === 0) {
+      setForm((prev) => ({ ...prev, planIds: [selectedGrowthPlan.id] }));
+    }
+  }, [selectedGrowthPlan?.id]); // eslint-disable-line
+
+  // ── Handlers de form ───────────────────────────────────────────────────────
+  const toggleParticipant = (uid) =>
+    setForm((prev) => ({
+      ...prev,
+      participantUids: prev.participantUids.includes(uid)
+        ? prev.participantUids.filter((id) => id !== uid)
+        : [...prev.participantUids, uid],
+    }));
+
+  const togglePlan = (planId) =>
+    setForm((prev) => ({
+      ...prev,
+      planIds: prev.planIds.includes(planId)
+        ? prev.planIds.filter((id) => id !== planId)
+        : [...prev.planIds, planId],
+    }));
+
+  const addAgendaItemToForm = () => {
+    const text = addAgendaText.trim();
+    if (!text) return;
+    setForm((prev) => ({
+      ...prev,
+      agendaItems: [...prev.agendaItems, emptyAgendaItem()].map((item, i) =>
+        i === prev.agendaItems.length ? { ...item, text } : item,
+      ),
+    }));
+    // garante o push correto
+    setForm((prev) => ({
+      ...prev,
+      agendaItems: [...prev.agendaItems, { text, convertedPlanId: null }],
+    }));
+    setAddAgendaText('');
+  };
+
+  // Simplificado: seta direto
+  const addItemToForm = () => {
+    const text = addAgendaText.trim();
+    if (!text) return;
+    setForm((prev) => ({
+      ...prev,
+      agendaItems: [...prev.agendaItems, { text, convertedPlanId: null }],
+    }));
+    setAddAgendaText('');
+  };
+
+  const removeAgendaItem = (index) =>
+    setForm((prev) => ({
+      ...prev,
+      agendaItems: prev.agendaItems.filter((_, i) => i !== index),
+    }));
+
+  // ── Criar reunião ──────────────────────────────────────────────────────────
+  const handleCreateMeeting = async () => {
+    if (!selectedCityId || selectedCityId === '__all__') {
+      window.showToast?.('Selecione uma cidade.', 'error'); return;
+    }
+    if (!form.date) {
+      window.showToast?.('Informe a data da reuniao.', 'error'); return;
+    }
+    if (form.participantUids.length === 0) {
+      window.showToast?.('Selecione pelo menos um participante.', 'error'); return;
+    }
+
+    setSaving(true);
+    try {
+      const participants = users
+        .filter((u) => form.participantUids.includes(u.id))
+        .map((u) => ({
+          uid:  u.id,
+          name: u.name || u.nome || u.displayName || 'Sem nome',
+          role: u.role || '',
+        }));
+
+      const selectedPlans = plans.filter((p) => form.planIds.includes(p.id));
+
+      await createMeeting(
+        {
+          cityId:      selectedCityId,
+          title:       form.title || 'Reuniao de Growth',
+          date:        form.date,
+          time:        form.time,
+          participants,
+          planIds:     selectedPlans.map((p) => p.id),
+          planNames:   selectedPlans.map((p) => p.name || 'Plano'),
+          agendaItems: form.agendaItems,
+        },
+        userData,
+      );
+
+      setForm(emptyForm());
+      window.showToast?.('Reuniao criada com sucesso.', 'success');
+    } catch (err) {
+      console.error(err);
+      window.showToast?.('Erro ao criar reuniao.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── RF02: Converter item de ata em Plano de Acao ───────────────────────────
+  const handleConvert = async () => {
+    if (!converting) return;
+    setSaving(true);
+    try {
+      await convertAgendaItemToPlan(
+        {
+          meetingId:       converting.meetingId,
+          agendaItemIndex: converting.index,
+          agendaItem:      converting.item,
+          cityId:          selectedCityId,
+          growthPlanId:    selectedGrowthPlan?.id   || null,
+          growthPlanName:  selectedGrowthPlan?.name || null,
+          month:           selectedMonth,
+        },
+        userData,
+        createPlan,
+      );
+      window.showToast?.('Item convertido em Plano de Acao (Backlog)!', 'success');
+      setConverting(null);
+    } catch (err) {
+      console.error(err);
+      window.showToast?.(`Erro: ${err.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Adicionar item de ata em reunião existente ─────────────────────────────
+  const handleAddAgendaToExisting = async () => {
+    const text = editAgendaText.trim();
+    if (!text || !editingMeeting) return;
+    setSaving(true);
+    try {
+      const current = Array.isArray(editingMeeting.agendaItems)
+        ? editingMeeting.agendaItems
+        : [];
+      await updateMeeting(
+        editingMeeting.id,
+        { agendaItems: [...current, { text, convertedPlanId: null }] },
+        userData,
+      );
+      setEditAgendaText('');
+      window.showToast?.('Item adicionado a ata.', 'success');
+    } catch (err) {
+      window.showToast?.('Erro ao adicionar item.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={hubStyles.stack}>
+
+      {/* ── Modal de confirmação RF02 ── */}
+      {converting && (
+        <Modal
+          open
+          title="Converter Item em Plano de Acao"
+          onClose={() => setConverting(null)}
+          footer={
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Btn variant="secondary" onClick={() => setConverting(null)}>Cancelar</Btn>
+              <Btn onClick={handleConvert} loading={saving}>Converter em Plano (Backlog)</Btn>
+            </div>
+          }
+        >
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: '0 0 12px' }}>
+            O item abaixo sera criado como um novo Plano de Acao no status <strong>Backlog</strong>
+            {selectedGrowthPlan ? ` dentro do plano geral "${selectedGrowthPlan.name}"` : ''}.
+          </p>
+          <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 18px', fontWeight: '700', color: 'var(--text-main)', fontSize: '14px' }}>
+            {converting.item.text}
+          </div>
+          {!selectedGrowthPlan && (
+            <InfoBox type="warning" style={{ marginTop: '12px' }}>
+              Nenhum Plano Geral selecionado. A acao sera criada sem vinculo a um Plano Geral.
+            </InfoBox>
+          )}
+        </Modal>
+      )}
+
+      {/* ── Modal editar ata de reunião existente ── */}
+      {editingMeeting && (
+        <Modal
+          open
+          title={`Ata: ${editingMeeting.title || 'Reuniao'}`}
+          onClose={() => { setEditingMeeting(null); setEditAgendaText(''); }}
+          footer={
+            <Btn variant="secondary" onClick={() => { setEditingMeeting(null); setEditAgendaText(''); }}>
+              Fechar
+            </Btn>
+          }
+        >
+          {/* Itens existentes */}
+          <AgendaList
+            items={editingMeeting.agendaItems || []}
+            onConvert={(index, item) => {
+              setEditingMeeting(null);
+              setConverting({ meetingId: editingMeeting.id, index, item });
+            }}
+          />
+
+          {/* Adicionar novo item */}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+            <Input
+              label="Novo item de ata"
+              value={editAgendaText}
+              onChange={(e) => setEditAgendaText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddAgendaToExisting()}
+            />
+            <div style={{ alignSelf: 'flex-end' }}>
+              <Btn onClick={handleAddAgendaToExisting} loading={saving} size="sm">
+                + Adicionar
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Formulário nova reunião ── */}
+      <Card title="Nova Reuniao" subtitle="Agende e registre itens de ata para conversao em planos">
+
+        <div style={hubStyles.formGrid}>
+          <Input
+            label="Titulo da reuniao"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+          <Input
+            type="date" label="Data"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
+          <Input
+            type="time" label="Horario"
+            value={form.time}
+            onChange={(e) => setForm({ ...form, time: e.target.value })}
+          />
+        </div>
+
+        {/* Participantes */}
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>Participantes</div>
+          <div style={hubStyles.checklist}>
+            {users.map((u) => (
+              <label key={u.id} style={hubStyles.check}>
+                <input
+                  type="checkbox"
+                  checked={form.participantUids.includes(u.id)}
+                  onChange={() => toggleParticipant(u.id)}
+                />
+                <span>{u.name || u.nome || u.displayName || 'Sem nome'}</span>
+              </label>
+            ))}
+            {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
+          </div>
+        </div>
+
+        {/* Planos relacionados */}
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>Planos relacionados (opcional)</div>
+          <div style={hubStyles.checklist}>
+            {plans.map((p) => (
+              <label key={p.id} style={hubStyles.check}>
+                <input
+                  type="checkbox"
+                  checked={form.planIds.includes(p.id)}
+                  onChange={() => togglePlan(p.id)}
+                />
+                <span>{p.name || 'Plano sem nome'}</span>
+              </label>
+            ))}
+            {plans.length === 0 && <div style={hubStyles.muted}>Sem planos disponiveis para vincular.</div>}
+          </div>
+        </div>
+
+        {/* RF02: Itens de ata antecipados */}
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>
+            Itens de Ata
+            <span style={{ fontWeight: '400', fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+              (podem ser convertidos em Planos de Acao apos a reuniao)
+            </span>
+          </div>
+
+          {form.agendaItems.length > 0 && (
+            <AgendaList
+              items={form.agendaItems}
+              onRemove={removeAgendaItem}
+              readOnly
+            />
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <Input
+              label="Novo item de ata"
+              value={addAgendaText}
+              onChange={(e) => setAddAgendaText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addItemToForm()}
+            />
+            <div style={{ alignSelf: 'flex-end' }}>
+              <Btn variant="secondary" onClick={addItemToForm} size="sm">+ Adicionar</Btn>
+            </div>
+          </div>
+        </div>
+
+        <div style={hubStyles.actions}>
+          <Btn onClick={handleCreateMeeting} loading={saving}>Criar Reuniao</Btn>
+        </div>
+      </Card>
+
+      {/* ── Lista de reuniões ── */}
+      {meetings.length === 0 && (
+        <InfoBox type="info">Nenhuma reuniao agendada ainda.</InfoBox>
+      )}
+
+      {meetings.map((m) => (
+        <MeetingCard
+          key={m.id}
+          meeting={m}
+          onOpenAta={() => setEditingMeeting(m)}
+          onConvert={(index, item) =>
+            setConverting({ meetingId: m.id, index, item })
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── MeetingCard ──────────────────────────────────────────────────────────────
+function MeetingCard({ meeting, onOpenAta, onConvert }) {
+  const participants = useMemo(() => {
+    if (!Array.isArray(meeting.participants)) return [];
+    return meeting.participants.map((p) => p.name).filter(Boolean);
+  }, [meeting.participants]);
+
+  const agendaItems = Array.isArray(meeting.agendaItems) ? meeting.agendaItems : [];
+  const hasAta = agendaItems.length > 0;
+
+  return (
+    <Card
+      title={meeting.title || 'Reuniao'}
+      subtitle={meeting.scheduledDate ? `Data: ${data(meeting.scheduledDate)}${meeting.scheduledTime ? ' - ' + meeting.scheduledTime : ''}` : 'Sem data'}
+      actions={
+        <Btn variant="secondary" size="sm" onClick={onOpenAta}>
+          {hasAta ? `Ata (${agendaItems.length})` : '+ Ata'}
+        </Btn>
+      }
+    >
+      {/* Participantes */}
+      {participants.length > 0 && (
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>Participantes</div>
+          <div style={hubStyles.chipRow}>
+            {participants.map((name) => (
+              <span key={name} style={hubStyles.chip}>{name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Planos vinculados */}
+      {(meeting.planNames || []).length > 0 && (
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>Planos relacionados</div>
+          <div style={hubStyles.chipRow}>
+            {meeting.planNames.map((name) => (
+              <Badge key={name} cor="neutral">{name}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Preview rápido dos itens de ata */}
+      {hasAta && (
+        <div style={hubStyles.modalSection}>
+          <div style={hubStyles.modalTitle}>Itens de Ata</div>
+          <AgendaList
+            items={agendaItems}
+            onConvert={onConvert}
+          />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── AgendaList ───────────────────────────────────────────────────────────────
+/**
+ * Lista de itens de ata.
+ * - onConvert(index, item): RF02 — converte em plano
+ * - onRemove(index):        remove do form (apenas criacao)
+ * - readOnly:               sem botao de converter (so exibe)
+ */
+function AgendaList({ items, onConvert, onRemove, readOnly }) {
+  if (!items || items.length === 0) {
+    return <div style={hubStyles.muted} style={{ fontSize: '13px' }}>Nenhum item de ata registrado.</div>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {items.map((item, index) => {
+        const converted = Boolean(item.convertedPlanId);
+        return (
+          <div
+            key={index}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: converted ? 'var(--bg-success-light, rgba(16,185,129,0.06))' : 'var(--bg-panel)',
+              border: `1px solid ${converted ? 'rgba(16,185,129,0.25)' : 'var(--border)'}`,
+              borderRadius: '10px', padding: '10px 14px',
+            }}
+          >
+            {/* Ícone de status */}
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>
+              {converted ? '✅' : '📝'}
+            </span>
+
+            {/* Texto */}
+            <span style={{
+              flex: 1, fontSize: '14px', fontWeight: '600',
+              color: converted ? 'var(--text-muted)' : 'var(--text-main)',
+              textDecoration: converted ? 'line-through' : 'none',
+            }}>
+              {item.text}
+            </span>
+
+            {/* Badge já convertido */}
+            {converted && (
+              <Badge cor="success" style={{ flexShrink: 0, fontSize: '11px' }}>
+                Plano criado
+              </Badge>
+            )}
+
+            {/* Botão converter (RF02) */}
+            {!converted && !readOnly && onConvert && (
+              <Btn
+                variant="secondary"
+                size="sm"
+                onClick={() => onConvert(index, item)}
+                style={{ flexShrink: 0, fontSize: '12px' }}
+              >
+                Converter em Plano
+              </Btn>
+            )}
+
+            {/* Botão remover (apenas no form de criação) */}
+            {onRemove && (
+              <Btn
+                variant="danger"
+                size="sm"
+                onClick={() => onRemove(index)}
+                style={{ flexShrink: 0, padding: '4px 8px' }}
+              >
+                ✕
+              </Btn>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/pages/MinhaMesaPage.jsx
+// ==========================================
+
+import React, { useMemo, useState } from 'react';
+import { Card, Modal, Textarea, Btn, Input } from '../../components/ui';
+import TaskList from '../components/TaskList';
+import { useTasks } from '../hooks/useTasks';
+import { completeTask, reopenTask, deleteTask } from '../services/taskService';
+import { hubStyles } from '../styles/hubStyles';
+
+const toDate = (v) => (v ? new Date(v) : null);
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+export default function MinhaMesaPage({ userData, selectedCityId }) {
+  const tasks = useTasks({ uid: userData?.uid, cityId: selectedCityId });
+  const [finishTask, setFinishTask] = useState(null);
+  const [finishReport, setFinishReport] = useState('');
+  const [finishKpiResult, setFinishKpiResult] = useState('');
+
+  const grouped = useMemo(() => {
+    const now = new Date();
+    const today = startOfDay(now);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const overdue = [];
+    const todayList = [];
+    const week = [];
+    const done = [];
+
+    tasks.filter((t) => t.status !== 'deleted').forEach((t) => {
+      if (t.status === 'done') {
+        done.push(t);
+        return;
+      }
+      const d = toDate(t.deadline);
+      if (!d) {
+        week.push(t);
+        return;
+      }
+      const d0 = startOfDay(d);
+      if (d0 < today) overdue.push(t);
+      else if (d0.getTime() === today.getTime()) todayList.push(t);
+      else if (d0 <= weekEnd) week.push(t);
+      else week.push(t);
+    });
+
+    return { overdue, today: todayList, week, done };
+  }, [tasks]);
+
+  const handleComplete = async (task) => {
+    setFinishTask(task);
+    setFinishReport('');
+    setFinishKpiResult('');
+  };
+
+  const handleReopen = async (task) => {
+    await reopenTask(task.id, userData);
+  };
+
+  const handleDelete = async (task) => {
+    if (!window.confirm('Excluir esta tarefa?')) return;
+    await deleteTask(task.id, userData);
+  };
+
+  const handleConfirmFinish = async () => {
+    if (!finishTask) return;
+    if (!String(finishReport || '').trim()) {
+      window.showToast?.('Informe o relatorio da etapa.', 'error');
+      return;
+    }
+    if (finishTask.kpiEnabled) {
+      if (finishKpiResult === '' || Number.isNaN(Number(finishKpiResult))) {
+        window.showToast?.('Informe o resultado do KPI.', 'error');
+        return;
+      }
+    }
+    try {
+      await completeTask(finishTask.id, userData, finishReport, finishKpiResult);
+      setFinishTask(null);
+      setFinishReport('');
+      setFinishKpiResult('');
+    } catch (err) {
+      window.showToast?.('Nao foi possivel finalizar a etapa.', 'error');
+    }
+  };
+
+  return (
+    <div style={hubStyles.stack}>
+      <Card title="Minha Mesa" subtitle="Tarefas da minha responsabilidade">
+        <TaskList title="Atrasadas" tasks={grouped.overdue} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Hoje" tasks={grouped.today} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Esta semana" tasks={grouped.week} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+        <TaskList title="Concluidas" tasks={grouped.done} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
+      </Card>
+
+      <Modal
+        open={!!finishTask}
+        onClose={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}
+        title={finishTask ? `Finalizar tarefa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar tarefa'}
+        size="lg"
+      >
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
+            <Textarea
+              label="Relatorio"
+              value={finishReport}
+              onChange={(e) => setFinishReport(e.target.value)}
+              placeholder="Descreva o que foi feito, resultados e observacoes."
+            />
+          </div>
+          {finishTask?.kpiEnabled && (
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Resultado do KPI</div>
+              <Input
+                type="number"
+                label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
+                value={finishKpiResult}
+                onChange={(e) => setFinishKpiResult(e.target.value)}
+                placeholder="Informe o resultado do KPI"
+              />
+            </div>
+          )}
+          <div style={hubStyles.actions}>
+            <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinish}>Finalizar tarefa</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/pages/OverviewPage.jsx
+// ==========================================
+
+import React, { useMemo, useState } from 'react';
+import { Card, Btn, Input, Textarea, Badge, Select, Modal, moeda } from '../../components/ui';
+import { useGrowthPlans } from '../hooks/useGrowthPlans';
+import { createGrowthPlan, deleteGrowthPlan, finalizeGrowthPlan } from '../services/growthPlanService';
+import { useUsers } from '../hooks/useUsers';
+import Timeline from '../components/Timeline';
+import { useTimeline } from '../hooks/useTimeline';
+import { hubStyles } from '../styles/hubStyles';
+
+export default function OverviewPage({ userData, selectedCityId, selectedMonth, selectedGrowthPlan, onSelectPlan, onClearPlan }) {
+  const plans = useGrowthPlans(selectedCityId, selectedMonth);
+  const cityFilter = selectedCityId && selectedCityId !== '__all__' ? selectedCityId : null;
+  const { users } = useUsers({
+    cityId: cityFilter,
+    clusterId: userData?.clusterId || null,
+    fallbackAll: true,
+  });
+  const [form, setForm] = useState({ name: '', description: '', responsibleUid: '' });
+  const [saving, setSaving] = useState(false);
+  const [finalizePlan, setFinalizePlan] = useState(null);
+  const [finalizeReport, setFinalizeReport] = useState('');
+  const [timelinePlan, setTimelinePlan] = useState(null);
+  const timelineEvents = useTimeline({ growthPlanId: timelinePlan?.id });
+
+  const responsibleOptions = useMemo(() => {
+    return users.map((u) => ({
+      value: u.id,
+      label: `${u.name || u.nome || u.displayName || 'Sem nome'}${u.role ? ` (${u.role})` : ''}`,
+    }));
+  }, [users]);
+
+  const handleCreate = async () => {
+    if (!selectedCityId || selectedCityId === '__all__') {
+      window.showToast?.('Selecione uma cidade.', 'error');
+      return;
+    }
+    if (!form.name.trim()) {
+      window.showToast?.('Informe o nome do plano geral.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const responsible = users.find((u) => u.id === form.responsibleUid) || {};
+      await createGrowthPlan({
+        name: form.name,
+        description: form.description,
+        cityId: selectedCityId,
+        month: selectedMonth,
+        responsibleUid: responsible.id || userData?.uid || null,
+        responsibleName: responsible.name || responsible.nome || responsible.displayName || userData?.name || userData?.nome || null,
+      }, userData);
+      setForm({ name: '', description: '', responsibleUid: '' });
+      window.showToast?.('Plano geral criado.', 'success');
+    } catch (err) {
+      window.showToast?.('Erro ao criar plano geral.', 'error');
+    }
+    setSaving(false);
+  };
+
+  const handleDelete = async (planId) => {
+    if (!window.confirm('Excluir este plano geral?')) return;
+    await deleteGrowthPlan(planId, userData);
+    if (selectedGrowthPlan?.id === planId) onClearPlan?.();
+  };
+
+  const handleConfirmFinalize = async () => {
+    if (!finalizePlan) return;
+    await finalizeGrowthPlan(finalizePlan.id, finalizeReport, userData);
+    setFinalizePlan(null);
+    setFinalizeReport('');
+  };
+
+  return (
+    <div style={hubStyles.stack}>
+      <Card title="Visao Geral" subtitle="Crie um plano geral e depois cadastre as acoes">
+        <div style={hubStyles.formGrid}>
+          <Input label="Nome do plano geral" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Textarea label="Descricao" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <Select
+            label="Responsavel"
+            value={form.responsibleUid}
+            onChange={(e) => setForm({ ...form, responsibleUid: e.target.value })}
+            options={responsibleOptions}
+            placeholder="Selecione um usuario"
+          />
+          {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
+        </div>
+        <div style={hubStyles.actions}>
+          <Btn onClick={handleCreate} loading={saving}>Criar plano geral</Btn>
+        </div>
+      </Card>
+
+      <Card title="Planos gerais" subtitle="Selecione para acessar as acoes">
+        {plans.length === 0 && <div style={hubStyles.empty}>Nenhum plano geral criado.</div>}
+        {plans.map((p) => (
+          <div key={p.id} style={hubStyles.taskRow}>
+            <div>
+              <div style={hubStyles.strong}>{p.name}</div>
+              <div style={hubStyles.muted}>{p.description || 'Sem descricao'}</div>
+              <div style={hubStyles.muted}>Mes: {p.month || '--'} | Cidade: {p.cityId || '--'}</div>
+              <div style={hubStyles.muted}>Orcamento geral: {moeda(Number(p.budgetTotal || 0))}</div>
+              <div style={hubStyles.muted}>Status: {p.status || 'Ativo'}</div>
+            </div>
+            <div style={hubStyles.actionsInline}>
+              {selectedGrowthPlan?.id === p.id && <Badge cor="success">Selecionado</Badge>}
+              <Btn size="sm" onClick={() => onSelectPlan?.(p)}>Entrar</Btn>
+              <Btn
+                size="sm"
+                variant="secondary"
+                onClick={() => setTimelinePlan(p)}
+              >
+                Linha do tempo
+              </Btn>
+              <Btn
+                size="sm"
+                variant="secondary"
+                disabled={p.status === 'Finalizado'}
+                onClick={() => { setFinalizePlan(p); setFinalizeReport(''); }}
+              >
+                Finalizar
+              </Btn>
+              <Btn size="sm" variant="danger" onClick={() => handleDelete(p.id)}>Excluir</Btn>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Modal
+        open={!!finalizePlan}
+        onClose={() => { setFinalizePlan(null); setFinalizeReport(''); }}
+        title={finalizePlan ? `Finalizar plano: ${finalizePlan.name}` : 'Finalizar plano'}
+        size="lg"
+      >
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
+            <Textarea
+              label="Relatorio"
+              value={finalizeReport}
+              onChange={(e) => setFinalizeReport(e.target.value)}
+              placeholder="Descreva resultados, aprendizados e proximos passos."
+            />
+          </div>
+          <div style={hubStyles.actions}>
+            <Btn variant="secondary" onClick={() => { setFinalizePlan(null); setFinalizeReport(''); }}>Cancelar</Btn>
+            <Btn onClick={handleConfirmFinalize}>Finalizar plano</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!timelinePlan}
+        onClose={() => setTimelinePlan(null)}
+        title={timelinePlan ? `Linha do tempo: ${timelinePlan.name}` : 'Linha do tempo'}
+        size="lg"
+      >
+        <div style={hubStyles.modal}>
+          <Timeline events={timelineEvents} />
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/growthPlanService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import { addTimelineEvent } from './timelineService';
+
+export const listenGrowthPlans = ({ cityId, month, callback }) => {
+  const conditions = [];
+  if (cityId && cityId !== '__all__') conditions.push(where('cityId', '==', cityId));
+  if (month) conditions.push(where('month', '==', month));
+  const q = query(collection(db, 'growth_plans'), ...conditions);
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => !p.deleted);
+    list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    callback(list);
+  });
+};
+
+export const createGrowthPlan = async (payload, userData) => {
+  const data = {
+    ...payload,
+    status: payload.status || 'Ativo',
+    budgetTotal: payload.budgetTotal || 0,
+    createdAt: serverTimestamp(),
+    createdBy: userData?.uid || 'system',
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  };
+  const ref = await addDoc(collection(db, 'growth_plans'), data);
+  await addTimelineEvent({
+    growthPlanId: ref.id,
+    cityId: data.cityId || null,
+    type: 'plan_created',
+    text: `Plano criado: ${data.name || 'Sem nome'}`,
+    userId: userData?.uid || 'system',
+  });
+  return ref;
+};
+
+export const syncGrowthPlanBudget = async (growthPlanId, userData) => {
+  if (!growthPlanId) return 0;
+  const q = query(collection(db, 'action_plans'), where('growthPlanId', '==', growthPlanId));
+  const snap = await getDocs(q);
+  const total = snap.docs
+    .map((d) => d.data())
+    .filter((p) => !p.deleted)
+    .reduce((sum, p) => sum + Number(p.cost || 0), 0);
+
+  await updateDoc(doc(db, 'growth_plans', growthPlanId), {
+    budgetTotal: total,
+    budgetUpdatedAt: serverTimestamp(),
+    budgetUpdatedBy: userData?.uid || 'system',
+  });
+
+  return total;
+};
+
+export const updateGrowthPlan = async (id, payload, userData) => {
+  const data = {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  };
+  return updateDoc(doc(db, 'growth_plans', id), data);
+};
+
+export const finalizeGrowthPlan = async (id, completionReport, userData) => {
+  const report = String(completionReport || '').trim();
+  return updateGrowthPlan(id, {
+    status: 'Finalizado',
+    completedAt: serverTimestamp(),
+    completedBy: userData?.uid || 'system',
+    completionReport: report || null,
+    completionReportAt: report ? serverTimestamp() : null,
+    completionReportBy: report ? userData?.uid || 'system' : null,
+  }, userData);
+};
+
+export const deleteGrowthPlan = async (id, userData) => {
+  return updateDoc(doc(db, 'growth_plans', id), {
+    deleted: true,
+    status: 'Inativo',
+    deletedAt: serverTimestamp(),
+    deletedBy: userData?.uid || 'system',
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  });
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/kpiService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  addDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore';
+
+const sortByName = (list) =>
+  list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+export const listenKpis = (callback) => {
+  const q = query(collection(db, 'growth_kpis'));
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    callback(sortByName(list));
+  });
+};
+
+export const getKpis = async () => {
+  const snap = await getDocs(collection(db, 'growth_kpis'));
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return sortByName(list);
+};
+
+export const createKpi = async ({ name, category }, userData) => {
+  if (!name) throw new Error('KPI name required');
+  const ref = await addDoc(collection(db, 'growth_kpis'), {
+    name,
+    category: category || null,
+    createdAt: serverTimestamp(),
+    createdBy: userData?.uid || 'system',
+  });
+  return ref.id;
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/leadService.js
+// ==========================================
+
+// ============================================================
+//  services/leadService.js — Hub Crescimento
+//  Isola toda a logica de acesso a colecao 'leads' do Dashboard.
+//  RF09-C: Conversao por Acao (leadsConvertidos / leadsGerados).
+// ============================================================
+
+import { db } from '../../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+
+/**
+ * Busca leads de uma cidade/mes e os vincula aos planos de acao.
+ *
+ * @param {object} params
+ * @param {string}   params.cityId        - ID da cidade (ou '__all__' para global)
+ * @param {string}   params.month         - Formato "YYYY-MM"
+ * @param {string[]} params.actionIds     - IDs dos action_plans para filtrar
+ * @returns {Promise<LeadSummary>}
+ */
+export async function getLeadsSummary({ cityId, month, actionIds = [] } = {}) {
+  const conditions = [];
+  if (cityId && cityId !== '__all__') {
+    conditions.push(where('cityId', '==', cityId));
+  }
+
+  const snap  = await getDocs(query(collection(db, 'leads'), ...conditions));
+  const leads = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  // Filtra pelo mes
+  const leadsInMonth = month
+    ? leads.filter((l) => String(l.date || l.createdAt || '').startsWith(month))
+    : leads;
+
+  const actionSet = new Set(actionIds);
+
+  // Leads vinculados a planos do Hub
+  const linkedLeads = leadsInMonth.filter(
+    (l) => l.originActionId && (actionSet.size === 0 || actionSet.has(l.originActionId)),
+  );
+
+  const totalLeads     = linkedLeads.length;
+  const convertedLeads = linkedLeads.filter((l) => l.status === 'convertido' || l.converted === true).length;
+
+  return {
+    totalLeads,
+    convertedLeads,
+    conversionRate: totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 100 * 10) / 10 : 0,
+    leads: linkedLeads,
+  };
+}
+
+/**
+ * RF09-C: Calcula conversao por acao individualmente.
+ * Para cada plano retorna: leadsGerados, leadsConvertidos e conversionRate.
+ *
+ * @param {object[]} plans   - Lista de action_plans
+ * @param {object[]} leads   - Lista de leads ja filtrados por cidade/mes
+ * @returns {object}         - Mapa { [planId]: { leadsGerados, leadsConvertidos, conversionRate } }
+ */
+export function getConversionByAction(plans = [], leads = []) {
+  const result = {};
+
+  plans.forEach((plan) => {
+    const planLeads      = leads.filter((l) => l.originActionId === plan.id);
+    const leadsGerados   = planLeads.length;
+    const leadsConvert   = planLeads.filter((l) => l.status === 'convertido' || l.converted === true).length;
+    const conversionRate = leadsGerados > 0
+      ? Math.round((leadsConvert / leadsGerados) * 100 * 10) / 10
+      : 0;
+
+    result[plan.id] = {
+      planId:         plan.id,
+      planName:       plan.name || 'Sem nome',
+      leadsGerados,
+      leadsConvertidos: leadsConvert,
+      conversionRate,
+    };
+  });
+
+  return result;
+}
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/meetingService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+
+export const listenMeetings = ({ cityId, callback }) => {
+  const conditions = [];
+  if (cityId && cityId !== '__all__') conditions.push(where('cityId', '==', cityId));
+  const q = query(collection(db, 'growth_meetings'), ...conditions);
+
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => String(b.scheduledAt || b.createdAt || '').localeCompare(String(a.scheduledAt || a.createdAt || '')));
+    callback(list);
+  });
+};
+
+const buildScheduledAt = (date, time) => {
+  if (!date) return null;
+  const t = time || '00:00';
+  const iso = new Date(`${date}T${t}:00`).toISOString();
+  return iso;
+};
+
+export const createMeeting = async ({ cityId, title, date, time, participants, planIds, planNames }, userData) => {
+  return addDoc(collection(db, 'growth_meetings'), {
+    cityId: cityId || null,
+    title: title || 'Reuniao de Growth',
+    scheduledDate: date || null,
+    scheduledTime: time || null,
+    scheduledAt: buildScheduledAt(date, time),
+    participants: Array.isArray(participants) ? participants : [],
+    planIds: Array.isArray(planIds) ? planIds : [],
+    planNames: Array.isArray(planNames) ? planNames : [],
+    createdAt: serverTimestamp(),
+    createdBy: userData?.uid || 'system',
+  });
+};
+
+export const updateMeeting = async (meetingId, payload, userData) => {
+  return updateDoc(doc(db, 'growth_meetings', meetingId), {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  });
+};
+
+/**
+ * RF02 — Converte um item de ata em Plano de Acao (action_plans) no status Backlog.
+ * Registra o ID do plano gerado de volta na ata para rastreabilidade.
+ */
+export const convertAgendaItemToPlan = async (
+  { meetingId, agendaItemIndex, agendaItem, cityId, growthPlanId, growthPlanName, month },
+  userData,
+  createPlanFn,
+) => {
+  if (!agendaItem?.text?.trim()) throw new Error('Item de ata sem texto.');
+
+  // Cria o plano de acao no status Backlog
+  const planRef = await createPlanFn(
+    {
+      name: agendaItem.text.trim(),
+      description: `Originado da ata: "${agendaItem.text.trim()}"`,
+      status: 'Backlog',
+      cityId: cityId || null,
+      growthPlanId: growthPlanId || null,
+      growthPlanName: growthPlanName || null,
+      month: month || null,
+      cost: 0,
+      originMeetingId: meetingId || null,
+    },
+    userData,
+  );
+
+  // Rastreia o link de volta na ata da reuniao
+  if (meetingId) {
+    const meetingRef = doc(db, 'growth_meetings', meetingId);
+    const meetingSnap = await import('firebase/firestore').then(({ getDoc }) => getDoc(meetingRef));
+    if (meetingSnap.exists()) {
+      const items = Array.isArray(meetingSnap.data().agendaItems)
+        ? [...meetingSnap.data().agendaItems]
+        : [];
+      if (items[agendaItemIndex] !== undefined) {
+        items[agendaItemIndex] = { ...items[agendaItemIndex], convertedPlanId: planRef.id };
+        await updateDoc(meetingRef, {
+          agendaItems: items,
+          updatedAt: serverTimestamp(),
+          updatedBy: userData?.uid || 'system',
+        });
+      }
+    }
+  }
+
+  return planRef;
+};
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/planService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
+import { addTimelineEvent } from './timelineService';
+import { syncGrowthPlanBudget } from './growthPlanService';
+
+const PLAN_TYPE = 'crescimento';
+
+export const listenPlans = ({ cityId, month, growthPlanId, callback }) => {
+  const conditions = [where('planType', '==', PLAN_TYPE)];
+  if (month) conditions.push(where('month', '==', month));
+  if (cityId && cityId !== '__all__') conditions.push(where('cityId', '==', cityId));
+  if (growthPlanId) conditions.push(where('growthPlanId', '==', growthPlanId));
+
+  const q = query(collection(db, 'action_plans'), ...conditions);
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => !p.deleted);
+    list.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+    callback(list);
+  });
+};
+
+export const getPlans = async ({ cityId, month, growthPlanId } = {}) => {
+  const conditions = [where('planType', '==', PLAN_TYPE)];
+  if (month) conditions.push(where('month', '==', month));
+  if (cityId && cityId !== '__all__') conditions.push(where('cityId', '==', cityId));
+  if (growthPlanId) conditions.push(where('growthPlanId', '==', growthPlanId));
+
+  const q = query(collection(db, 'action_plans'), ...conditions);
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => !p.deleted);
+};
+
+export const createPlan = async (payload, userData) => {
+  const data = {
+    ...payload,
+    planType: PLAN_TYPE,
+    growthPlanId: payload.growthPlanId || null,
+    growthPlanName: payload.growthPlanName || null,
+    status: payload.status || 'Backlog',
+    taskCount: payload.taskCount || 0,
+    taskCompleted: payload.taskCompleted || 0,
+    progress: payload.progress || 0,
+    createdAt: serverTimestamp(),
+    createdBy: userData?.uid || 'system',
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  };
+  const ref = await addDoc(collection(db, 'action_plans'), data);
+  await addTimelineEvent({
+    actionPlanId: ref.id,
+    growthPlanId: data.growthPlanId || null,
+    cityId: data.cityId || null,
+    type: 'action_created',
+    text: `Acao criada: ${data.name || 'Sem nome'}`,
+    userId: userData?.uid || 'system',
+    meta: { budget: Number(data.cost || 0) },
+  });
+  if (data.growthPlanId) {
+    await syncGrowthPlanBudget(data.growthPlanId, userData);
+  }
+  return ref;
+};
+
+export const updatePlan = async (id, payload, userData) => {
+  const data = {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  };
+  return updateDoc(doc(db, 'action_plans', id), data);
+};
+
+export const updatePlanStatus = async (id, status, userData, options = {}) => {
+  const report = String(options.completionReport || '').trim();
+  const payload = { status };
+
+  if (status === 'Finalizada') {
+    payload.completedAt = serverTimestamp();
+    payload.completedBy = userData?.uid || 'system';
+    payload.completionReport = report || null;
+    payload.completionReportAt = report ? serverTimestamp() : null;
+    payload.completionReportBy = report ? userData?.uid || 'system' : null;
+  } else {
+    payload.completedAt = null;
+    payload.completedBy = null;
+    payload.completionReport = null;
+    payload.completionReportAt = null;
+    payload.completionReportBy = null;
+  }
+
+  const planSnap = await getDoc(doc(db, 'action_plans', id));
+  const plan = planSnap.exists() ? planSnap.data() : {};
+  await updatePlan(id, payload, userData);
+  await addTimelineEvent({
+    actionPlanId: id,
+    growthPlanId: plan.growthPlanId || null,
+    cityId: plan.cityId || null,
+    type: 'action_status',
+    text: `Acao ${plan.name || ''} -> ${status}`,
+    userId: userData?.uid || 'system',
+    meta: { status, report: report || null },
+  });
+};
+
+export const deleteActionPlan = async (id, userData) => {
+  const planSnap = await getDoc(doc(db, 'action_plans', id));
+  const plan = planSnap.exists() ? planSnap.data() : {};
+  await updateDoc(doc(db, 'action_plans', id), {
+    deleted: true,
+    status: 'Cancelada',
+    deletedAt: serverTimestamp(),
+    deletedBy: userData?.uid || 'system',
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  });
+
+  const q = query(collection(db, 'action_tasks'), where('actionPlanId', '==', id));
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => {
+    batch.update(d.ref, {
+      status: 'deleted',
+      deletedAt: serverTimestamp(),
+      deletedBy: userData?.uid || 'system',
+    });
+  });
+  await batch.commit();
+
+  if (plan.growthPlanId) {
+    await syncGrowthPlanBudget(plan.growthPlanId, userData);
+  }
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/taskService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  runTransaction,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import { addTimelineEvent } from './timelineService';
+import { syncGrowthPlanBudget } from './growthPlanService';
+
+export const listenTasks = ({ uid, cityId, actionPlanId, callback }) => {
+  const conditions = [];
+  if (uid) conditions.push(where('responsibleUid', '==', uid));
+  if (cityId && cityId !== '__all__') conditions.push(where('cityId', '==', cityId));
+  if (actionPlanId) conditions.push(where('actionPlanId', '==', actionPlanId));
+
+  const q = query(collection(db, 'action_tasks'), ...conditions);
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((t) => t.status !== 'deleted');
+    list.sort((a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')));
+    callback(list);
+  });
+};
+
+export const createTask = async (actionPlanId, task, userData) => {
+  const planRef = doc(db, 'action_plans', actionPlanId);
+  const taskRef = doc(collection(db, 'action_tasks'));
+  let planData = null;
+
+  await runTransaction(db, async (tx) => {
+    const planSnap = await tx.get(planRef);
+    if (!planSnap.exists()) throw new Error('Plan not found');
+
+    const plan = planSnap.data();
+    planData = plan;
+    if (plan.status === 'Finalizada') throw new Error('Plan finalized');
+    const taskCount = Number(plan.taskCount || 0) + 1;
+    const taskCompleted = Number(plan.taskCompleted || 0);
+    const progress = taskCount > 0 ? Math.round((taskCompleted / taskCount) * 100) : 0;
+    const extraCost = Number(task.budget || 0);
+    const cost = Number(plan.cost || 0) + extraCost;
+    const taskBudgetTotal = Number(plan.taskBudgetTotal || 0) + extraCost;
+
+    tx.set(taskRef, {
+      ...task,
+      budget: extraCost,
+      actionPlanId,
+      growthPlanId: plan.growthPlanId || null,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      createdBy: userData?.uid || 'system',
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+
+    tx.update(planRef, {
+      taskCount,
+      progress,
+      cost,
+      taskBudgetTotal,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+  });
+
+  await addTimelineEvent({
+    actionPlanId,
+    growthPlanId: planData?.growthPlanId || null,
+    cityId: planData?.cityId || null,
+    type: 'task_created',
+    text: `Etapa criada: ${task.title || task.text || 'Sem titulo'}`,
+    userId: userData?.uid || 'system',
+    meta: {
+      budget: Number(task.budget || 0),
+      kpiId: task.kpiId || null,
+      kpiName: task.kpiName || null,
+    },
+  });
+  if (planData?.growthPlanId) {
+    await syncGrowthPlanBudget(planData.growthPlanId, userData);
+  }
+
+  return taskRef.id;
+};
+
+export const completeTask = async (taskId, userData, completionReport = '', kpiResult = null) => {
+  const taskRef = doc(db, 'action_tasks', taskId);
+  const taskSnap = await getDoc(taskRef);
+  if (!taskSnap.exists()) throw new Error('Task not found');
+
+  const task = taskSnap.data();
+  const planRef = doc(db, 'action_plans', task.actionPlanId);
+  const report = String(completionReport || '').trim();
+  const needsKpi = !!task.kpiEnabled;
+  const parsedKpi = kpiResult === '' || kpiResult === null || kpiResult === undefined
+    ? null
+    : Number(kpiResult);
+  if (needsKpi && (parsedKpi === null || Number.isNaN(parsedKpi))) {
+    throw new Error('KPI result required');
+  }
+  let planData = null;
+
+  await runTransaction(db, async (tx) => {
+    const planSnap = await tx.get(planRef);
+    if (!planSnap.exists()) throw new Error('Plan not found');
+
+    const plan = planSnap.data();
+    planData = plan;
+    const taskCompleted = Number(plan.taskCompleted || 0) + 1;
+    const taskCount = Number(plan.taskCount || 0);
+    const progress = taskCount > 0 ? Math.round((taskCompleted / taskCount) * 100) : 0;
+    const growthPlanId = task.growthPlanId || plan.growthPlanId || null;
+
+    tx.update(taskRef, {
+      status: 'done',
+      completedAt: serverTimestamp(),
+      completedBy: userData?.uid || 'system',
+      completionReport: report || null,
+      completionReportAt: report ? serverTimestamp() : null,
+      completionReportBy: report ? userData?.uid || 'system' : null,
+      kpiResult: parsedKpi,
+      kpiResultAt: parsedKpi !== null ? serverTimestamp() : null,
+      kpiResultBy: parsedKpi !== null ? userData?.uid || 'system' : null,
+      growthPlanId: growthPlanId || null,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+
+    tx.update(planRef, {
+      taskCompleted,
+      progress,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+  });
+
+  await addTimelineEvent({
+    actionPlanId: task.actionPlanId,
+    growthPlanId: task.growthPlanId || planData?.growthPlanId || null,
+    cityId: task.cityId,
+    type: 'task_done',
+    text: `Etapa concluida: ${task.title || task.text || 'Sem titulo'}`,
+    userId: userData?.uid || 'system',
+    meta: {
+      kpiId: task.kpiId || null,
+      kpiName: task.kpiName || null,
+      kpiResult: parsedKpi,
+      report: report || null,
+    },
+  });
+};
+
+export const reopenTask = async (taskId, userData) => {
+  const taskRef = doc(db, 'action_tasks', taskId);
+  const taskSnap = await getDoc(taskRef);
+  if (!taskSnap.exists()) throw new Error('Task not found');
+
+  const task = taskSnap.data();
+  const planRef = doc(db, 'action_plans', task.actionPlanId);
+  let planData = null;
+
+  await runTransaction(db, async (tx) => {
+    const planSnap = await tx.get(planRef);
+    if (!planSnap.exists()) throw new Error('Plan not found');
+
+    const plan = planSnap.data();
+    planData = plan;
+    const taskCompleted = Math.max(0, Number(plan.taskCompleted || 0) - 1);
+    const taskCount = Number(plan.taskCount || 0);
+    const progress = taskCount > 0 ? Math.round((taskCompleted / taskCount) * 100) : 0;
+    const growthPlanId = task.growthPlanId || plan.growthPlanId || null;
+
+    tx.update(taskRef, {
+      status: 'pending',
+      completedAt: null,
+      completedBy: null,
+      completionReport: null,
+      completionReportAt: null,
+      completionReportBy: null,
+      kpiResult: null,
+      kpiResultAt: null,
+      kpiResultBy: null,
+      growthPlanId: growthPlanId || null,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+
+    tx.update(planRef, {
+      taskCompleted,
+      progress,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+  });
+
+  await addTimelineEvent({
+    actionPlanId: task.actionPlanId,
+    growthPlanId: task.growthPlanId || planData?.growthPlanId || null,
+    cityId: task.cityId,
+    type: 'task_reopened',
+    text: `Etapa reaberta: ${task.title || task.text || 'Sem titulo'}`,
+    userId: userData?.uid || 'system',
+  });
+};
+
+export const updateTask = async (taskId, payload, userData) => {
+  return updateDoc(doc(db, 'action_tasks', taskId), {
+    ...payload,
+    updatedAt: serverTimestamp(),
+    updatedBy: userData?.uid || 'system',
+  });
+};
+
+export const deleteTask = async (taskId, userData) => {
+  const taskRef = doc(db, 'action_tasks', taskId);
+  const taskSnap = await getDoc(taskRef);
+  if (!taskSnap.exists()) throw new Error('Task not found');
+
+  const task = taskSnap.data();
+  const planRef = doc(db, 'action_plans', task.actionPlanId);
+  let planData = null;
+
+  await runTransaction(db, async (tx) => {
+    const planSnap = await tx.get(planRef);
+    if (!planSnap.exists()) throw new Error('Plan not found');
+
+    const plan = planSnap.data();
+    planData = plan;
+    const taskCount = Math.max(0, Number(plan.taskCount || 0) - 1);
+    const taskCompleted = Math.max(0, Number(plan.taskCompleted || 0) - (task.status === 'done' ? 1 : 0));
+    const progress = taskCount > 0 ? Math.round((taskCompleted / taskCount) * 100) : 0;
+    const extraCost = Number(task.budget || 0);
+    const cost = Math.max(0, Number(plan.cost || 0) - extraCost);
+    const taskBudgetTotal = Math.max(0, Number(plan.taskBudgetTotal || 0) - extraCost);
+
+    tx.update(taskRef, {
+      status: 'deleted',
+      deletedAt: serverTimestamp(),
+      deletedBy: userData?.uid || 'system',
+    });
+
+    tx.update(planRef, {
+      taskCount,
+      taskCompleted,
+      progress,
+      cost,
+      taskBudgetTotal,
+      updatedAt: serverTimestamp(),
+      updatedBy: userData?.uid || 'system',
+    });
+  });
+
+  await addTimelineEvent({
+    actionPlanId: task.actionPlanId,
+    growthPlanId: task.growthPlanId || planData?.growthPlanId || null,
+    cityId: task.cityId,
+    type: 'task_deleted',
+    text: `Etapa excluida: ${task.title || task.text || 'Sem titulo'}`,
+    userId: userData?.uid || 'system',
+  });
+
+  if (planData?.growthPlanId) {
+    await syncGrowthPlanBudget(planData.growthPlanId, userData);
+  }
+};
+
+export const getTasksByAction = async (actionPlanId) => {
+  if (!actionPlanId) return [];
+  const q = query(collection(db, 'action_tasks'), where('actionPlanId', '==', actionPlanId));
+  const snap = await getDocs(q);
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((t) => t.status !== 'deleted');
+  list.sort((a, b) => String(a.deadline || '').localeCompare(String(b.deadline || '')));
+  return list;
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/timelineService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import {
+  addDoc,
+  collection,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  where,
+} from 'firebase/firestore';
+
+export const addTimelineEvent = async ({
+  actionPlanId,
+  growthPlanId,
+  planId,
+  cityId,
+  type,
+  text,
+  userId,
+  meta,
+}) => {
+  const actionId = actionPlanId || planId;
+  if (!actionId && !growthPlanId) return null;
+  return addDoc(collection(db, 'growth_timeline'), {
+    actionPlanId: actionId || null,
+    growthPlanId: growthPlanId || null,
+    cityId: cityId || null,
+    type: type || 'event',
+    text: text || '',
+    meta: meta || null,
+    createdAt: serverTimestamp(),
+    createdBy: userId || 'system',
+  });
+};
+
+export const listenTimelineEvents = ({ actionPlanId, growthPlanId, callback }) => {
+  const conditions = [];
+  if (actionPlanId) conditions.push(where('actionPlanId', '==', actionPlanId));
+  if (growthPlanId) conditions.push(where('growthPlanId', '==', growthPlanId));
+
+  const q = query(collection(db, 'growth_timeline'), ...conditions);
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => {
+      const da = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+      const db = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+      return da - db;
+    });
+    callback(list);
+  });
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/services/userService.js
+// ==========================================
+
+import { db } from '../../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+
+export const getUsers = async ({ cityId, clusterId, fallbackAll = false } = {}) => {
+  const queries = [];
+  if (cityId && cityId !== '__all__') {
+    queries.push(query(collection(db, 'users'), where('cityId', '==', cityId)));
+  }
+  if (clusterId) {
+    queries.push(query(collection(db, 'users'), where('clusterId', '==', clusterId)));
+  }
+  if (queries.length === 0) {
+    queries.push(collection(db, 'users'));
+  }
+
+  const snaps = await Promise.all(queries.map((q) => getDocs(q)));
+  const map = new Map();
+  snaps.forEach((snap) => {
+    snap.docs.forEach((d) => {
+      map.set(d.id, { id: d.id, ...d.data() });
+    });
+  });
+
+  let list = Array.from(map.values())
+    .filter((u) => u.active !== false)
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+  if (fallbackAll && list.length === 0) {
+    const allSnap = await getDocs(collection(db, 'users'));
+    list = allSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((u) => u.active !== false)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }
+
+  return list;
+};
+
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/styles/hubStyles.css
+// ==========================================
+
+/*
+ * hubStyles.css — Hub Crescimento
+ * Estilos migrados para hubStyles.js (inline styles + CSS vars).
+ * Este arquivo mantido vazio para nao quebrar imports existentes.
+ * Remover gradualmente os className="hub-*" nos componentes.
+ */
+
+// ==========================================
+// 📄 ARQUIVO: src/HubCrescimento/styles/hubStyles.js
+// ==========================================
+
+// ============================================================
+//  styles/hubStyles.js — Hub Crescimento
+//  Objeto de estilos centralizado do modulo.
+//  Segue o padrao do design system: inline styles + CSS vars.
+//
+//  USO:
+//    import { hubStyles } from '../styles/hubStyles';
+//    <div style={hubStyles.stack}>...</div>
+//
+//  CONVENCAO:
+//    - Nunca usar cores hardcoded — sempre CSS vars ou colors.*
+//    - Excecoes documentadas com comentario inline
+// ============================================================
+
+export const hubStyles = {
+
+  // ── Layout global ────────────────────────────────────────────────────────
+  /** Pilha vertical de cards com espacamento padrao */
+  stack: {
+    display: 'flex', flexDirection: 'column', gap: '24px',
+  },
+  /** Barra de ferramentas horizontal (filtros, selects) */
+  toolbar: {
+    display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center',
+  },
+  /** Area de conteudo principal */
+  content: {
+    display: 'flex', flexDirection: 'column', gap: '24px',
+  },
+
+  // ── Kanban — board e colunas ─────────────────────────────────────────────
+  /** Container horizontal do Kanban com scroll */
+  kanban: {
+    display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '6px',
+  },
+  /** Coluna individual do Kanban */
+  column: {
+    minWidth: '260px',
+    background: 'var(--bg-app)',
+    border: '1px solid var(--border)',
+    borderRadius: '16px',
+    padding: '16px',
+    display: 'flex', flexDirection: 'column', gap: '12px',
+    flexShrink: 0,
+  },
+  columnHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  },
+  columnTitle: {
+    fontWeight: '900', color: 'var(--text-main)', fontSize: '14px',
+  },
+  /** Badge circular com contador de cards */
+  columnCount: {
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
+    borderRadius: '999px',
+    padding: '2px 8px',
+    fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)',
+  },
+  columnBody: {
+    display: 'flex', flexDirection: 'column', gap: '12px',
+    minHeight: '60px', // garante drop zone visivel quando coluna vazia
+  },
+
+  // ── Card de plano (PlanCard) ──────────────────────────────────────────────
+  /** Card arrastavel do Kanban */
+  card: {
+    background: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderRadius: '14px',
+    padding: '14px',
+    cursor: 'grab',
+    display: 'flex', flexDirection: 'column', gap: '12px',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    userSelect: 'none',
+  },
+  /** Estado hover — { ...hubStyles.card, ...hubStyles.cardHover } */
+  cardHover: {
+    transform: 'translateY(-2px)',
+    boxShadow: '0 6px 16px rgba(0,0,0,0.08)',
+  },
+  /** Estado dragging (dnd-kit) — aplicado via spread */
+  cardDragging: {
+    opacity: 0.45,
+    cursor: 'grabbing',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+    transform: 'rotate(1.5deg) scale(1.02)',
+  },
+  cardHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
+  },
+  cardTitle: {
+    fontWeight: '900', color: 'var(--text-main)', fontSize: '14px',
+    lineHeight: '1.35',
+  },
+  cardBody: {
+    display: 'flex', flexDirection: 'column', gap: '8px',
+  },
+  cardRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px',
+  },
+  cardObjectives: {
+    display: 'flex', flexWrap: 'wrap', gap: '6px',
+  },
+
+  // ── Chips / Tags ──────────────────────────────────────────────────────────
+  chip: {
+    fontSize: '10px', fontWeight: '800',
+    padding: '3px 8px',
+    borderRadius: '999px',
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap',
+  },
+  chipRow: {
+    display: 'flex', flexWrap: 'wrap', gap: '6px',
+  },
+
+  // ── Formularios ───────────────────────────────────────────────────────────
+  /** Grid responsivo para campos de formulario */
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '16px',
+    marginTop: '12px',
+  },
+  /** Container de botoes alinhado a direita */
+  actions: {
+    display: 'flex', justifyContent: 'flex-end',
+    marginTop: '16px', gap: '8px',
+  },
+  /** Botoes inline sem margem extra */
+  actionsInline: {
+    display: 'flex', gap: '8px', alignItems: 'center',
+  },
+  /** Input + botao lado a lado */
+  inputRow: {
+    display: 'flex', gap: '8px', alignItems: 'flex-end',
+  },
+
+  // ── Estados de UI ─────────────────────────────────────────────────────────
+  empty: {
+    textAlign: 'center',
+    padding: '20px',
+    color: 'var(--text-muted)',
+    fontWeight: '700',
+    fontSize: '13px',
+  },
+
+  // ── Tasklist (TaskList.jsx + MinhaMesaPage) ───────────────────────────────
+  tasklist: {
+    display: 'flex', flexDirection: 'column', gap: '10px', margin: '12px 0',
+  },
+  tasklistHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: '4px',
+  },
+  tasklistTitle: {
+    fontWeight: '900', color: 'var(--text-main)', fontSize: '14px',
+  },
+  tasklistCount: {
+    fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)',
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
+    borderRadius: '999px',
+    padding: '2px 8px',
+  },
+  /** Item de tarefa no TaskList */
+  task: {
+    display: 'flex', justifyContent: 'space-between', gap: '12px',
+    background: 'var(--bg-app)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    padding: '12px',
+  },
+  taskTitle: {
+    fontWeight: '800', color: 'var(--text-main)', fontSize: '13px',
+  },
+  taskMeta: {
+    display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px',
+    alignItems: 'center',
+  },
+  taskActions: {
+    display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
+  },
+  /** Linha de tarefa no modal do KanbanPage */
+  taskRow: {
+    display: 'flex', justifyContent: 'space-between', gap: '12px',
+    padding: '10px 12px',
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    background: 'var(--bg-app)',
+    marginTop: '8px',
+  },
+
+  // ── Growth Score ──────────────────────────────────────────────────────────
+  score: {
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', gap: '6px',
+    marginBottom: '16px',
+  },
+  scoreTotal: {
+    fontSize: '52px', fontWeight: '900', color: 'var(--text-main)',
+    lineHeight: 1,
+  },
+  scoreLabel: {
+    color: 'var(--text-muted)', fontWeight: '700', fontSize: '13px',
+  },
+  scoreBreakdown: {
+    display: 'flex', flexDirection: 'column', gap: '10px',
+  },
+  /** Grid label + barra de progresso */
+  scoreRow: {
+    display: 'grid', gridTemplateColumns: '120px 1fr',
+    alignItems: 'center', gap: '12px',
+  },
+
+  // ── Dashboard / Metricas ──────────────────────────────────────────────────
+  dashboardGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px',
+  },
+  metric: {
+    background: 'var(--bg-app)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    padding: '14px',
+  },
+  metricLabel: {
+    fontSize: '11px', fontWeight: '800',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  metricValue: {
+    fontSize: '20px', fontWeight: '900',
+    color: 'var(--text-main)',
+    marginTop: '6px',
+    lineHeight: 1.2,
+  },
+  metricSub: {
+    fontSize: '11px', color: 'var(--text-muted)',
+    marginTop: '4px',
+  },
+
+  // ── Pacing bar (DashboardGrowth / predictiveMath) ─────────────────────────
+  pacingBar: {
+    marginBottom: '12px',
+  },
+  pacingBarHeader: {
+    display: 'flex', justifyContent: 'space-between', marginBottom: '4px',
+  },
+  pacingBarLabel: {
+    fontSize: '12px', fontWeight: '700', color: 'var(--text-main)',
+  },
+  pacingBarInfo: {
+    fontSize: '12px', color: 'var(--text-muted)',
+  },
+  pacingBarTrack: {
+    position: 'relative', height: '10px',
+    background: 'var(--border)',
+    borderRadius: '8px', overflow: 'hidden',
+  },
+  pacingBarFooter: {
+    display: 'flex', justifyContent: 'space-between', marginTop: '4px',
+  },
+  pacingBarFooterText: {
+    fontSize: '11px', color: 'var(--text-muted)',
+  },
+
+  // ── Tabela de conversao por acao (RF09-C) ─────────────────────────────────
+  conversionTableWrapper: {
+    overflowX: 'auto',
+  },
+  conversionTable: {
+    width: '100%', borderCollapse: 'collapse', fontSize: '13px',
+  },
+  conversionTh: {
+    padding: '10px 12px',
+    textAlign: 'left',
+    fontWeight: '800',
+    color: 'var(--text-muted)',
+    fontSize: '11px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid var(--border)',
+    background: 'var(--bg-panel)',
+  },
+  conversionTd: {
+    padding: '10px 12px',
+    color: 'var(--text-main)',
+    borderBottom: '1px solid var(--border)',
+  },
+  conversionTdMini: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+  },
+  conversionBarTrack: {
+    flex: 1, height: '6px',
+    background: 'var(--border)',
+    borderRadius: '4px', overflow: 'hidden',
+  },
+  conversionBarValue: {
+    fontWeight: '800', color: 'var(--text-main)',
+    minWidth: '42px', textAlign: 'right',
+  },
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  modal: {
+    display: 'flex', flexDirection: 'column', gap: '20px',
+  },
+  modalSection: {
+    display: 'flex', flexDirection: 'column', gap: '12px',
+  },
+  modalTitle: {
+    fontWeight: '900', color: 'var(--text-main)',
+    fontSize: '13px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  modalRow: {
+    display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap',
+  },
+  /** Preview de item antes de confirmar conversao */
+  modalPreviewBox: {
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    padding: '14px 18px',
+    fontWeight: '700',
+    color: 'var(--text-main)',
+    fontSize: '14px',
+  },
+  modalFooter: {
+    display: 'flex', gap: '10px', justifyContent: 'flex-end',
+  },
+
+  // ── Reunioes / Atas (MeetingsPage / RF02) ─────────────────────────────────
+  meetingItems: {
+    display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px',
+  },
+  /** Item de ata pendente de conversao */
+  agendaItem: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    transition: 'border-color 0.2s',
+  },
+  /** Item de ata ja convertido em Plano de Acao */
+  agendaItemDone: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    background: 'rgba(16,185,129,0.05)', // verde muito suave — excecao documentada
+    border: '1px solid rgba(16,185,129,0.25)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    transition: 'border-color 0.2s',
+  },
+  agendaItemText: {
+    flex: 1, fontSize: '14px', fontWeight: '600', color: 'var(--text-main)',
+  },
+  agendaItemTextDone: {
+    flex: 1, fontSize: '14px', fontWeight: '600',
+    color: 'var(--text-muted)',
+    textDecoration: 'line-through',
+  },
+
+  // ── Listas de selecao (participantes, planos) ─────────────────────────────
+  checklist: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '8px', marginTop: '6px',
+  },
+  check: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    fontSize: '12px', color: 'var(--text-main)',
+    background: 'var(--bg-app)',
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    padding: '6px 10px',
+    cursor: 'pointer',
+    transition: 'border-color 0.15s',
+  },
+
+  // ── Texto utilitario ──────────────────────────────────────────────────────
+  muted: {
+    color: 'var(--text-muted)', fontSize: '12px',
+  },
+  strong: {
+    fontWeight: '800', color: 'var(--text-main)',
+  },
+  sectionHint: {
+    fontWeight: '400', fontSize: '12px',
+    color: 'var(--text-muted)', marginLeft: '8px',
+  },
+  divider: {
+    height: '1px',
+    background: 'var(--border)',
+    margin: '4px 0',
+  },
+};
+
+// ==========================================
+// 📄 ARQUIVO: ./src/App.jsx
+// ==========================================
+
+// ============================================================
+//  App.jsx — Oquei Gestão
+//  Sprint 1 — Tarefa 1.4: AppErrorBoundary adicionado
+//  Sprint 1 — Tarefa 1.3: injectGlobalCSS da fonte única
+// ============================================================
+
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
+
+// ✅ ÚNICA fonte de verdade para CSS — globalStyles unificado
+import { injectGlobalCSS } from './globalStyles';
+
+// ✅ Design System
+import { Spinner, Btn, Page, Card, colors } from './components/ui';
+
+// ✅ Error Boundary global
+import { AppErrorBoundary } from './components/ModuleErrorBoundary';
+
+// Páginas (lazy loading nas rotas protegidas já está nos Painéis)
+import Login from './pages/Login';
+import PainelCoordenador from './pages/PainelCoordenador';
+import PainelSupervisor  from './pages/PainelSupervisor';
+import CRMAtendente      from './pages/CRMAtendente';
+
+// ─────────────────────────────────────────────────────────────
+const ROLE_MAP = {
+  coordinator: 'coordinator',
+  coordenador: 'coordinator',
+  supervisor:  'supervisor',
+  attendant:   'attendant',
+  atendente:   'attendant',
+};
+
+function getRoleRoute(role) {
+  const r = String(role).toLowerCase();
+  if (r === 'coordinator' || r === 'coordenador') return '/coordenador';
+  if (r === 'supervisor')                         return '/supervisor';
+  if (r === 'attendant'   || r === 'atendente')   return '/atendente';
+  return '/unauthorized';
+}
+
+// ─────────────────────────────────────────────────────────────
+function AppCore() {
+  const [user,     setUser]     = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+
+  // Injeta CSS global uma única vez
+  useEffect(() => { injectGlobalCSS(); }, []);
+
+  // Escuta mudanças de autenticação
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        try {
+          const snap = await getDoc(doc(db, 'users', currentUser.uid));
+          const data = snap.exists() ? snap.data() : {};
+          data.role = data.role
+            ? ROLE_MAP[data.role.toLowerCase().trim()] || data.role.toLowerCase().trim()
+            : 'guest';
+          setUserData(data);
+        } catch (err) {
+          console.error('[App] Erro ao buscar perfil:', err);
+          setUserData({ role: 'guest', name: currentUser.email });
+        }
+      } else {
+        setUser(null);
+        setUserData(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ── Loading inicial ─────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex', height: '100vh', width: '100vw',
+        justifyContent: 'center', alignItems: 'center',
+        backgroundColor: 'var(--bg-app)',
+        flexDirection: 'column', gap: '16px',
+      }}>
+        <Spinner size={32} />
+        <p style={{
+          fontWeight: '900', fontSize: '12px',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}>
+          Inicializando Ecossistema Oquei...
+        </p>
+      </div>
+    );
+  }
+
+  // ── Componente de rota protegida ────────────────────────────
+  function PrivateRoute({ children, allowedRoles }) {
+    if (!user) return <Navigate to="/login" replace />;
+    const normalizedRole = ROLE_MAP[userData?.role] || 'guest';
+    if (!allowedRoles.includes(normalizedRole)) {
+      return <Navigate to={getRoleRoute(userData?.role)} replace />;
+    }
+    return React.cloneElement(children, { userData });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  return (
+    <BrowserRouter>
+      <Routes>
+
+        {/* ── Login ─────────────────────────────────────────── */}
+        <Route
+          path="/login"
+          element={
+            user && userData
+              ? <Navigate to={getRoleRoute(userData.role)} replace />
+              : <Login />
+          }
+        />
+
+        {/* ── Coordenador ───────────────────────────────────── */}
+        <Route
+          path="/coordenador/*"
+          element={
+            <PrivateRoute allowedRoles={['coordinator']}>
+              <PainelCoordenador />
+            </PrivateRoute>
+          }
+        />
+
+        {/* ── Supervisor ────────────────────────────────────── */}
+        <Route
+          path="/supervisor/*"
+          element={
+            <PrivateRoute allowedRoles={['supervisor']}>
+              <PainelSupervisor />
+            </PrivateRoute>
+          }
+        />
+
+        {/* ── Atendente ─────────────────────────────────────── */}
+        <Route
+          path="/atendente/*"
+          element={
+            <PrivateRoute allowedRoles={['attendant']}>
+              <CRMAtendente />
+            </PrivateRoute>
+          }
+        />
+
+        {/* ── Acesso negado ─────────────────────────────────── */}
+        <Route
+          path="/unauthorized"
+          element={
+            <div style={{
+              height: '100vh', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              backgroundColor: 'var(--bg-app)',
+            }}>
+              <Card
+                accent={colors.danger}
+                style={{ maxWidth: '440px', textAlign: 'center' }}
+              >
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '14px',
+                  background: `${colors.danger}18`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 20px',
+                }}>
+                  <span style={{ fontSize: '22px' }}>🚫</span>
+                </div>
+                <h1 style={{
+                  fontSize: '20px', fontWeight: '900',
+                  color: colors.danger, margin: '0 0 12px',
+                }}>
+                  Acesso Restrito
+                </h1>
+                <p style={{
+                  fontSize: '13px', color: 'var(--text-muted)',
+                  lineHeight: 1.6, margin: '0 0 24px',
+                }}>
+                  A conta <strong style={{ color: 'var(--text-main)' }}>
+                    {user?.email}
+                  </strong> não possui permissão para acessar esta área.
+                  <br /><br />
+                  Cargo atual:{' '}
+                  <strong style={{ color: 'var(--text-brand)' }}>
+                    {userData?.role?.toUpperCase() || 'NENHUM'}
+                  </strong>
+                </p>
+                <Btn
+                  variant="danger"
+                  onClick={() => signOut(auth)}
+                  style={{ width: '100%' }}
+                >
+                  Sair e Tentar Outra Conta
+                </Btn>
+              </Card>
+            </div>
+          }
+        />
+
+        {/* ── Wildcard ──────────────────────────────────────── */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={user && userData ? getRoleRoute(userData.role) : '/login'}
+              replace
+            />
+          }
+        />
+
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Root com AppErrorBoundary como camada mais externa
+// ─────────────────────────────────────────────────────────────
+export default function App() {
+  return (
+    <AppErrorBoundary>
+      <AppCore />
+    </AppErrorBoundary>
+  );
+}
+
+// ==========================================
+// 📄 ARQUIVO: ./firebase.json
+// ==========================================
+
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}
+
+// ==========================================
+// 📄 ARQUIVO: ./firestore.rules
+// ==========================================
+
+// ============================================================
+//  firestore.rules — Oquei Gestao / Hub Crescimento
+//  ERS RNF04: Seguranca via Firestore Security Rules (RBAC)
+//
+//  Roles validos (campo users/{uid}.role):
+//    coordinator | coordenador | master  — acesso global
+//    supervisor                          — acesso por clusterId
+//    attendant  | atendente             — acesso por cityId
+//    growth_team                        — apenas action_tasks proprias
+// ============================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Funções auxiliares ──────────────────────────────────────────────────
+
+    /** Verifica se o usuario esta autenticado */
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    /** Dados do usuario logado no Firestore */
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /** Roles com acesso global (sem filtro de cidade/cluster) */
+    function isCoordinator() {
+      let role = userData().role;
+      return role == 'coordinator' || role == 'coordenador' || role == 'master';
+    }
+
+    /** Supervisor: acesso por clusterId */
+    function isSupervisor() {
+      return userData().role == 'supervisor';
+    }
+
+    /** Atendente: acesso por cityId */
+    function isAttendant() {
+      let role = userData().role;
+      return role == 'attendant' || role == 'atendente';
+    }
+
+    /** Equipe de Growth: acesso apenas as proprias tarefas */
+    function isGrowthTeam() {
+      return userData().role == 'growth_team';
+    }
+
+    /** Verifica se o recurso pertence ao cluster do supervisor */
+    function sameCluster(resourceData) {
+      return resourceData.clusterId == userData().clusterId;
+    }
+
+    /** Verifica se o recurso pertence a cidade do atendente */
+    function sameCity(resourceData) {
+      return resourceData.cityId == userData().cityId;
+    }
+
+    /** Verifica se o recurso e de responsabilidade do usuario */
+    function isResponsible(resourceData) {
+      return resourceData.responsibleUid == request.auth.uid
+        || (resourceData.responsibles is list
+            && resourceData.responsibles.hasAny([{ 'uid': request.auth.uid }]));
+    }
+
+    // ── Coleção: users ──────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:   if isAuth() && (request.auth.uid == uid || isCoordinator());
+      allow write:  if isAuth() && (request.auth.uid == uid || isCoordinator());
+    }
+
+    // ── Coleção: cities ─────────────────────────────────────────────────────
+    match /cities/{cityId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleção: growth_plans ───────────────────────────────────────────────
+    match /growth_plans/{planId} {
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()  && sameCluster(resource.data))
+        || (isAttendant()   && sameCity(resource.data))
+        || (isGrowthTeam()  && sameCity(resource.data))
+      );
+      allow create: if isAuth() && (isCoordinator() || isSupervisor());
+      allow update: if isAuth() && (
+        isCoordinator()
+        || (isSupervisor() && sameCluster(resource.data))
+      );
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleção: action_plans ───────────────────────────────────────────────
+    match /action_plans/{planId} {
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()  && sameCluster(resource.data))
+        || (isAttendant()   && sameCity(resource.data))
+        || (isGrowthTeam()  && sameCity(resource.data))
+      );
+      allow create: if isAuth() && (isCoordinator() || isSupervisor());
+      allow update: if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()   && sameCluster(resource.data))
+        || (isGrowthTeam()   && isResponsible(resource.data))
+      );
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleção: action_tasks ───────────────────────────────────────────────
+    match /action_tasks/{taskId} {
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()  && sameCluster(resource.data))
+        || (isAttendant()   && sameCity(resource.data))
+        // growth_team: apenas proprias tarefas
+        || (isGrowthTeam()  && resource.data.responsibleUid == request.auth.uid)
+      );
+      allow create: if isAuth() && (isCoordinator() || isSupervisor());
+      allow update: if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()  && sameCluster(resource.data))
+        // growth_team pode atualizar apenas tarefas de sua responsabilidade
+        || (isGrowthTeam()  && resource.data.responsibleUid == request.auth.uid)
+      );
+      allow delete: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    // ── Coleção: growth_meetings ────────────────────────────────────────────
+    match /growth_meetings/{meetingId} {
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor() && sameCluster(resource.data))
+        || (isAttendant()  && sameCity(resource.data))
+        || (isGrowthTeam() && sameCity(resource.data))
+      );
+      allow create: if isAuth() && (isCoordinator() || isSupervisor());
+      allow update: if isAuth() && (
+        isCoordinator()
+        || (isSupervisor() && sameCluster(resource.data))
+      );
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleção: growth_timeline ────────────────────────────────────────────
+    match /growth_timeline/{eventId} {
+      // Timeline e auditoria — apenas leitura para os perfis com acesso
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor() && sameCluster(resource.data))
+        || (isAttendant()  && sameCity(resource.data))
+        || (isGrowthTeam() && sameCity(resource.data))
+      );
+      // Escrita apenas via servico (sistema), nunca diretamente pelo cliente
+      allow create: if isAuth() && (isCoordinator() || isSupervisor() || isGrowthTeam());
+      allow update: if false; // timeline e imutavel
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleção: growth_kpis ────────────────────────────────────────────────
+    match /growth_kpis/{kpiId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && (isCoordinator() || isSupervisor());
+      allow update: if isAuth() && (isCoordinator() || isSupervisor());
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    // ── Coleções legadas do sistema (fora do Hub) ──────────────────────────
+
+    match /leads/{docId} {
+      allow read:   if isAuth() && (
+        isCoordinator()
+        || (isSupervisor() && sameCluster(resource.data))
+        || (isAttendant()  && resource.data.attendantId == request.auth.uid)
+      );
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        isCoordinator()
+        || (isSupervisor()  && sameCluster(resource.data))
+        || (isAttendant()   && resource.data.attendantId == request.auth.uid)
+      );
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    match /absences/{docId} {
+      allow read:   if isAuth() && (isCoordinator() || isSupervisor());
+      allow write:  if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /rh_requests/{docId} {
+      allow read:   if isAuth() && (isCoordinator() || isSupervisor() || resource.data.uid == request.auth.uid);
+      allow create: if isAuth();
+      allow update: if isAuth() && (isCoordinator() || isSupervisor());
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+
+    match /comunicados/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /sop_simulations/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /goals_cities/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /city_results/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /monthly_bases/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /sales_channels/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /router_catalog/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /bank_hours/{docId} {
+      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || resource.data.uid == request.auth.uid);
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /cash_register/{docId} {
+      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || sameCity(resource.data));
+      allow write: if isAuth() && (isCoordinator() || isSupervisor() || sameCity(resource.data));
+    }
+
+    match /agenda/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /colinhas/{docId} {
+      allow read:  if isAuth() && (isCoordinator() || isSupervisor() || resource.data.attendantId == request.auth.uid);
+      allow create: if isAuth() && isAttendant();
+      allow update: if isAuth() && (isCoordinator() || isSupervisor());
+      allow delete: if isAuth() && isCoordinator();
+    }
+
+    match /holidays/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /clusters/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /patrocinios/{docId} {
+      allow read:  if isAuth() && (isCoordinator() || isSupervisor());
+      allow write: if isAuth() && (isCoordinator() || isSupervisor());
+    }
+
+    match /churn_reasons/{docId} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && isCoordinator();
+    }
+  }
+}
+
+
+// ==========================================
+// 📄 ARQUIVO: ./firestore.indexes.json
+// ==========================================
+
+{
+  "indexes": [
+    {
+      "collectionGroup": "action_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "responsibleUid", "order": "ASCENDING" },
+        { "fieldPath": "status",         "order": "ASCENDING" },
+        { "fieldPath": "deadline",       "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "action_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityId",    "order": "ASCENDING"  },
+        { "fieldPath": "status",    "order": "ASCENDING"  },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "action_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "planType",     "order": "ASCENDING"  },
+        { "fieldPath": "month",        "order": "ASCENDING"  },
+        { "fieldPath": "cityId",       "order": "ASCENDING"  },
+        { "fieldPath": "growthPlanId", "order": "ASCENDING"  },
+        { "fieldPath": "updatedAt",    "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "growth_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityId", "order": "ASCENDING" },
+        { "fieldPath": "month",  "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "growth_timeline",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actionPlanId", "order": "ASCENDING" },
+        { "fieldPath": "growthPlanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt",    "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

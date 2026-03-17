@@ -1,7 +1,5 @@
 // ============================================================
-//  App.jsx — Oquei Gestão
-//  Sprint 1 — Tarefa 1.4: AppErrorBoundary adicionado
-//  Sprint 1 — Tarefa 1.3: injectGlobalCSS da fonte única
+//  App.jsx — Oquei Gestão (v2.8 - Force Growth Access)
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
@@ -10,62 +8,74 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-// ✅ ÚNICA fonte de verdade para CSS — globalStyles unificado
 import { injectGlobalCSS } from './globalStyles';
-
-// ✅ Design System
-import { Spinner, Btn, Page, Card, colors } from './components/ui';
-
-// ✅ Error Boundary global
+import { Spinner, Btn, Card, colors } from './components/ui';
 import { AppErrorBoundary } from './components/ModuleErrorBoundary';
 
-// Páginas (lazy loading nas rotas protegidas já está nos Painéis)
 import Login from './pages/Login';
 import PainelCoordenador from './pages/PainelCoordenador';
 import PainelSupervisor  from './pages/PainelSupervisor';
 import CRMAtendente      from './pages/CRMAtendente';
+import PainelGrowthTeam  from './pages/PainelGrowthTeam';
 
-// ─────────────────────────────────────────────────────────────
-const ROLE_MAP = {
-  coordinator: 'coordinator',
-  coordenador: 'coordinator',
-  supervisor:  'supervisor',
-  attendant:   'attendant',
-  atendente:   'attendant',
+// ─── 1. MAPEAMENTO DE CARGOS ───────────────────────────────────────────────
+const clean = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '').trim();
+
+const ROLES = {
+  COORD:  'coordinator',
+  SUPER:  'supervisor',
+  ATTEND: 'attendant',
+  GROWTH: 'growth_team',
+  GUEST:  'guest'
 };
 
-function getRoleRoute(role) {
-  const r = String(role).toLowerCase();
-  if (r === 'coordinator' || r === 'coordenador') return '/coordenador';
-  if (r === 'supervisor')                         return '/supervisor';
-  if (r === 'attendant'   || r === 'atendente')   return '/atendente';
+const ROLE_MAP = {
+  coordinator: ROLES.COORD, coordenador: ROLES.COORD, master: ROLES.COORD, diretor: ROLES.COORD,
+  supervisor: ROLES.SUPER,
+  attendant: ROLES.ATTEND, atendente: ROLES.ATTEND,
+  growthteam: ROLES.GROWTH, growth_team: ROLES.GROWTH, equipegrowth: ROLES.GROWTH
+};
+
+const getRoleRoute = (role) => {
+  const r = ROLE_MAP[clean(role)] || ROLES.GUEST;
+  if (r === ROLES.COORD)  return '/coordenador';
+  if (r === ROLES.SUPER)  return '/supervisor';
+  if (r === ROLES.ATTEND) return '/atendente';
+  if (r === ROLES.GROWTH) return '/growth';
   return '/unauthorized';
+};
+
+// ─── 2. COMPONENTE DE ROTA ──────────────────────────────────────────────────
+function PrivateRoute({ children, allowedRoles, userData }) {
+  if (!userData) return <Navigate to="/login" replace />;
+  
+  const userRole = ROLE_MAP[clean(userData.role)] || ROLES.GUEST;
+  console.log(`[AuthCheck] User: ${userData.role} -> Normalized: ${userRole}`);
+
+  if (!allowedRoles.includes(userRole)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  return React.cloneElement(children, { userData });
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─── 3. APP CORE ─────────────────────────────────────────────────────────────
 function AppCore() {
-  const [user,     setUser]     = useState(null);
+  const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
-  const [loading,  setLoading]  = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  // Injeta CSS global uma única vez
   useEffect(() => { injectGlobalCSS(); }, []);
 
-  // Escuta mudanças de autenticação
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
         try {
           const snap = await getDoc(doc(db, 'users', currentUser.uid));
-          const data = snap.exists() ? snap.data() : {};
-          data.role = data.role
-            ? ROLE_MAP[data.role.toLowerCase().trim()] || data.role.toLowerCase().trim()
-            : 'guest';
-          setUserData(data);
+          setUserData({ uid: currentUser.uid, ...(snap.exists() ? snap.data() : { role: 'guest' }) });
         } catch (err) {
-          console.error('[App] Erro ao buscar perfil:', err);
-          setUserData({ role: 'guest', name: currentUser.email });
+          setUserData({ uid: currentUser.uid, role: 'guest' });
         }
       } else {
         setUser(null);
@@ -76,157 +86,38 @@ function AppCore() {
     return () => unsubscribe();
   }, []);
 
-  // ── Loading inicial ─────────────────────────────────────────
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex', height: '100vh', width: '100vw',
-        justifyContent: 'center', alignItems: 'center',
-        backgroundColor: 'var(--bg-app)',
-        flexDirection: 'column', gap: '16px',
-      }}>
-        <Spinner size={32} />
-        <p style={{
-          fontWeight: '900', fontSize: '12px',
-          color: 'var(--text-muted)',
-          letterSpacing: '0.08em', textTransform: 'uppercase',
-        }}>
-          Inicializando Ecossistema Oquei...
-        </p>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--bg-app)' }}>
+      <Spinner size={32} />
+    </div>
+  );
 
-  // ── Componente de rota protegida ────────────────────────────
-  function PrivateRoute({ children, allowedRoles }) {
-    if (!user) return <Navigate to="/login" replace />;
-    const normalizedRole = ROLE_MAP[userData?.role] || 'guest';
-    if (!allowedRoles.includes(normalizedRole)) {
-      return <Navigate to={getRoleRoute(userData?.role)} replace />;
-    }
-    return React.cloneElement(children, { userData });
-  }
-
-  // ─────────────────────────────────────────────────────────────
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={user && userData ? <Navigate to={getRoleRoute(userData.role)} replace /> : <Login />} />
 
-        {/* ── Login ─────────────────────────────────────────── */}
-        <Route
-          path="/login"
-          element={
-            user && userData
-              ? <Navigate to={getRoleRoute(userData.role)} replace />
-              : <Login />
-          }
-        />
+        <Route path="/coordenador/*" element={<PrivateRoute allowedRoles={[ROLES.COORD]} userData={userData}><PainelCoordenador /></PrivateRoute>} />
+        <Route path="/supervisor/*"  element={<PrivateRoute allowedRoles={[ROLES.SUPER]} userData={userData}><PainelSupervisor /></PrivateRoute>} />
+        <Route path="/atendente/*"   element={<PrivateRoute allowedRoles={[ROLES.ATTEND]} userData={userData}><CRMAtendente /></PrivateRoute>} />
+        <Route path="/growth/*"      element={<PrivateRoute allowedRoles={[ROLES.GROWTH]} userData={userData}><PainelGrowthTeam /></PrivateRoute>} />
 
-        {/* ── Coordenador ───────────────────────────────────── */}
-        <Route
-          path="/coordenador/*"
-          element={
-            <PrivateRoute allowedRoles={['coordinator']}>
-              <PainelCoordenador />
-            </PrivateRoute>
-          }
-        />
+        <Route path="/unauthorized" element={
+          <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-app)' }}>
+            <Card accent={colors.danger} style={{ maxWidth: '400px', textAlign: 'center' }}>
+              <h1 style={{ color: colors.danger, fontWeight: '900' }}>Acesso Restrito</h1>
+              <p style={{ color: 'var(--text-muted)' }}>Conta: {user?.email}<br/>Cargo: {userData?.role || 'Nenhum'}</p>
+              <Btn variant="danger" onClick={() => signOut(auth)} style={{ width: '100%' }}>Sair</Btn>
+            </Card>
+          </div>
+        } />
 
-        {/* ── Supervisor ────────────────────────────────────── */}
-        <Route
-          path="/supervisor/*"
-          element={
-            <PrivateRoute allowedRoles={['supervisor']}>
-              <PainelSupervisor />
-            </PrivateRoute>
-          }
-        />
-
-        {/* ── Atendente ─────────────────────────────────────── */}
-        <Route
-          path="/atendente/*"
-          element={
-            <PrivateRoute allowedRoles={['attendant']}>
-              <CRMAtendente />
-            </PrivateRoute>
-          }
-        />
-
-        {/* ── Acesso negado ─────────────────────────────────── */}
-        <Route
-          path="/unauthorized"
-          element={
-            <div style={{
-              height: '100vh', display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: 'var(--bg-app)',
-            }}>
-              <Card
-                accent={colors.danger}
-                style={{ maxWidth: '440px', textAlign: 'center' }}
-              >
-                <div style={{
-                  width: '48px', height: '48px', borderRadius: '14px',
-                  background: `${colors.danger}18`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 20px',
-                }}>
-                  <span style={{ fontSize: '22px' }}>🚫</span>
-                </div>
-                <h1 style={{
-                  fontSize: '20px', fontWeight: '900',
-                  color: colors.danger, margin: '0 0 12px',
-                }}>
-                  Acesso Restrito
-                </h1>
-                <p style={{
-                  fontSize: '13px', color: 'var(--text-muted)',
-                  lineHeight: 1.6, margin: '0 0 24px',
-                }}>
-                  A conta <strong style={{ color: 'var(--text-main)' }}>
-                    {user?.email}
-                  </strong> não possui permissão para acessar esta área.
-                  <br /><br />
-                  Cargo atual:{' '}
-                  <strong style={{ color: 'var(--text-brand)' }}>
-                    {userData?.role?.toUpperCase() || 'NENHUM'}
-                  </strong>
-                </p>
-                <Btn
-                  variant="danger"
-                  onClick={() => signOut(auth)}
-                  style={{ width: '100%' }}
-                >
-                  Sair e Tentar Outra Conta
-                </Btn>
-              </Card>
-            </div>
-          }
-        />
-
-        {/* ── Wildcard ──────────────────────────────────────── */}
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to={user && userData ? getRoleRoute(userData.role) : '/login'}
-              replace
-            />
-          }
-        />
-
+        <Route path="*" element={<Navigate to={user && userData ? getRoleRoute(userData.role) : '/login'} replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Root com AppErrorBoundary como camada mais externa
-// ─────────────────────────────────────────────────────────────
 export default function App() {
-  return (
-    <AppErrorBoundary>
-      <AppCore />
-    </AppErrorBoundary>
-  );
+  return <AppErrorBoundary><AppCore /></AppErrorBoundary>;
 }

@@ -4,12 +4,14 @@ import TaskList from '../components/TaskList';
 import { useTasks } from '../hooks/useTasks';
 import { completeTask, reopenTask, deleteTask } from '../services/taskService';
 import { hubStyles } from '../styles/hubStyles';
+import { auth } from '../../firebase';
 
 const toDate = (v) => (v ? new Date(v) : null);
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 export default function MinhaMesaPage({ userData, selectedCityId }) {
-  const tasks = useTasks({ uid: userData?.uid, cityId: selectedCityId });
+  const myUid = userData?.uid || auth?.currentUser?.uid;
+  const tasks = useTasks({ uid: myUid, cityId: selectedCityId });
   const [finishTask, setFinishTask] = useState(null);
   const [finishReport, setFinishReport] = useState('');
   const [finishKpiResult, setFinishKpiResult] = useState('');

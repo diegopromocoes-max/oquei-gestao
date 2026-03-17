@@ -40,7 +40,10 @@ export default function LayoutGlobal({
   onLogout,
 }) {
   const [collapsed,  setCollapsed]  = useState(false);
-  const [theme,      setTheme]      = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('oquei-theme') || 'light';
+  });
+  
   const [busca,      setBusca]      = useState('');
   const [openSecs,   setOpenSecs]   = useState({});
   const [notifOpen,  setNotifOpen]  = useState(false);
@@ -56,12 +59,16 @@ export default function LayoutGlobal({
     };
   }, []);
 
+  
   // Tema
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
+const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('oquei-theme', theme);
+  }, [theme]);
 
   // Fecha notificações ao clicar fora
   useEffect(() => {
