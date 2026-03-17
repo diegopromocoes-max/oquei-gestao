@@ -5,6 +5,7 @@ import { createGrowthPlan, deleteGrowthPlan, finalizeGrowthPlan } from '../servi
 import { useUsers } from '../hooks/useUsers';
 import Timeline from '../components/Timeline';
 import { useTimeline } from '../hooks/useTimeline';
+import { hubStyles } from '../styles/hubStyles';
 
 export default function OverviewPage({ userData, selectedCityId, selectedMonth, selectedGrowthPlan, onSelectPlan, onClearPlan }) {
   const plans = useGrowthPlans(selectedCityId, selectedMonth);
@@ -70,9 +71,9 @@ export default function OverviewPage({ userData, selectedCityId, selectedMonth, 
   };
 
   return (
-    <div className="hub-stack">
+    <div style={hubStyles.stack}>
       <Card title="Visao Geral" subtitle="Crie um plano geral e depois cadastre as acoes">
-        <div className="hub-form-grid">
+        <div style={hubStyles.formGrid}>
           <Input label="Nome do plano geral" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Textarea label="Descricao" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <Select
@@ -82,25 +83,25 @@ export default function OverviewPage({ userData, selectedCityId, selectedMonth, 
             options={responsibleOptions}
             placeholder="Selecione um usuario"
           />
-          {users.length === 0 && <div className="hub-muted">Nenhum usuario encontrado.</div>}
+          {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
         </div>
-        <div className="hub-actions">
+        <div style={hubStyles.actions}>
           <Btn onClick={handleCreate} loading={saving}>Criar plano geral</Btn>
         </div>
       </Card>
 
       <Card title="Planos gerais" subtitle="Selecione para acessar as acoes">
-        {plans.length === 0 && <div className="hub-empty">Nenhum plano geral criado.</div>}
+        {plans.length === 0 && <div style={hubStyles.empty}>Nenhum plano geral criado.</div>}
         {plans.map((p) => (
-          <div key={p.id} className="hub-task-row">
+          <div key={p.id} style={hubStyles.taskRow}>
             <div>
-              <div className="hub-strong">{p.name}</div>
-              <div className="hub-muted">{p.description || 'Sem descricao'}</div>
-              <div className="hub-muted">Mes: {p.month || '--'} | Cidade: {p.cityId || '--'}</div>
-              <div className="hub-muted">Orcamento geral: {moeda(Number(p.budgetTotal || 0))}</div>
-              <div className="hub-muted">Status: {p.status || 'Ativo'}</div>
+              <div style={hubStyles.strong}>{p.name}</div>
+              <div style={hubStyles.muted}>{p.description || 'Sem descricao'}</div>
+              <div style={hubStyles.muted}>Mes: {p.month || '--'} | Cidade: {p.cityId || '--'}</div>
+              <div style={hubStyles.muted}>Orcamento geral: {moeda(Number(p.budgetTotal || 0))}</div>
+              <div style={hubStyles.muted}>Status: {p.status || 'Ativo'}</div>
             </div>
-            <div className="hub-actions-inline">
+            <div style={hubStyles.actionsInline}>
               {selectedGrowthPlan?.id === p.id && <Badge cor="success">Selecionado</Badge>}
               <Btn size="sm" onClick={() => onSelectPlan?.(p)}>Entrar</Btn>
               <Btn
@@ -130,9 +131,9 @@ export default function OverviewPage({ userData, selectedCityId, selectedMonth, 
         title={finalizePlan ? `Finalizar plano: ${finalizePlan.name}` : 'Finalizar plano'}
         size="lg"
       >
-        <div className="hub-modal">
-          <div className="hub-modal-section">
-            <div className="hub-modal-title">Relatorio (opcional)</div>
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
             <Textarea
               label="Relatorio"
               value={finalizeReport}
@@ -140,7 +141,7 @@ export default function OverviewPage({ userData, selectedCityId, selectedMonth, 
               placeholder="Descreva resultados, aprendizados e proximos passos."
             />
           </div>
-          <div className="hub-actions">
+          <div style={hubStyles.actions}>
             <Btn variant="secondary" onClick={() => { setFinalizePlan(null); setFinalizeReport(''); }}>Cancelar</Btn>
             <Btn onClick={handleConfirmFinalize}>Finalizar plano</Btn>
           </div>
@@ -153,7 +154,7 @@ export default function OverviewPage({ userData, selectedCityId, selectedMonth, 
         title={timelinePlan ? `Linha do tempo: ${timelinePlan.name}` : 'Linha do tempo'}
         size="lg"
       >
-        <div className="hub-modal">
+        <div style={hubStyles.modal}>
           <Timeline events={timelineEvents} />
         </div>
       </Modal>

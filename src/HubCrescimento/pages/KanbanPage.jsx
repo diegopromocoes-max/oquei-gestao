@@ -1,5 +1,15 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, Btn, Input, Select, Textarea, Modal, Badge, InfoBox, moeda } from '../../components/ui';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanColumn from '../components/KanbanColumn';
 import PlanCard from '../components/PlanCard';
@@ -11,6 +21,7 @@ import { useUsers } from '../hooks/useUsers';
 import { useKpis } from '../hooks/useKpis';
 import { createKpi } from '../services/kpiService';
 import { useTimeline } from '../hooks/useTimeline';
+import { hubStyles } from '../styles/hubStyles';
 
 const CATEGORY_OPTIONS = ['Marketing', 'Comercial', 'Operacional', 'Relacionamento', 'Outras'];
 const FOCUS_OPTIONS = ['Vendas Novas', 'Migracoes/Up-Sell', 'Retencao/Anti-Churn', 'Marca', 'Inadimplencia', 'Outro'];
@@ -32,8 +43,14 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
     clusterId: userData?.clusterId || null,
     fallbackAll: true,
   });
-  const kpis = useKpis();
-  const [draggedPlan, setDraggedPlan] = useState(null);
+  // RNF01: useKpis migrado para getDocs (nao mais onSnapshot)
+  const { kpis, refresh: refreshKpis } = useKpis();
+  // ── dnd-kit: sensores com suporte a touch (mobile) ──────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+  const [activeId, setActiveId] = useState(null); // ID do card sendo arrastado
   const [isSaving, setIsSaving] = useState(false);
   const [finalizePlan, setFinalizePlan] = useState(null);
   const [finalizeReport, setFinalizeReport] = useState('');
@@ -106,22 +123,32 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
     return map;
   }, [plans]);
 
-  const handleDragStart = (e, plan) => {
-    setDraggedPlan(plan);
-    e.dataTransfer.effectAllowed = 'move';
+  // ── dnd-kit: handlers de drag ────────────────────────────────────────────
+  const handleDragStart = ({ active }) => {
+    setActiveId(active.id);
   };
 
-  const handleDrop = async (e, status) => {
-    e.preventDefault();
-    if (!draggedPlan || draggedPlan.status === status) return;
-    if (status === 'Finalizada') {
-      setFinalizePlan(draggedPlan);
+  const handleDragEnd = async ({ active, over }) => {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+
+    // over.id pode ser um planId (SortableContext) ou um columnId (Droppable)
+    const targetColumnId = plansByStatus[over.id]
+      ? over.id  // solto direto na coluna vazia
+      : plans.find((p) => p.id === over.id)?.status; // solto em cima de outro card
+
+    if (!targetColumnId) return;
+
+    const sourcePlan = plans.find((p) => p.id === active.id);
+    if (!sourcePlan || sourcePlan.status === targetColumnId) return;
+
+    if (targetColumnId === 'Finalizada') {
+      setFinalizePlan(sourcePlan);
       setFinalizeReport('');
-      setDraggedPlan(null);
       return;
     }
-    await updatePlanStatus(draggedPlan.id, status, userData);
-    setDraggedPlan(null);
+
+    await updatePlanStatus(active.id, targetColumnId, userData);
   };
 
   const handleCreatePlan = async () => {
@@ -221,6 +248,7 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
           kpiId = newId;
           kpiName = name;
           kpiCategory = taskForm.kpiCategory;
+          refreshKpis(); // RNF01: atualiza lista apos criar KPI (substitui reatividade do onSnapshot)
         }
       }
     }
@@ -321,13 +349,13 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
   };
 
   return (
-    <div className="hub-stack">
+    <div style={hubStyles.stack}>
       {!selectedGrowthPlan && (
         <InfoBox type="warning">Selecione um plano geral para criar acoes.</InfoBox>
       )}
 
       <Card title="Nova Acao" subtitle="Crie uma acao dentro do plano geral">
-        <div className="hub-form-grid">
+        <div style={hubStyles.formGrid}>
           <Input label="Nome da acao" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={CATEGORY_OPTIONS} />
           <Select label="Foco" value={form.actionFocus} onChange={(e) => setForm({ ...form, actionFocus: e.target.value })} options={FOCUS_OPTIONS} />
@@ -343,33 +371,53 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
             options={responsibleOptions}
             placeholder="Selecione um usuario"
           />
-          {users.length === 0 && <div className="hub-muted">Nenhum usuario encontrado.</div>}
+          {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
         </div>
-        <div className="hub-actions">
+        <div style={hubStyles.actions}>
           <Btn onClick={handleCreatePlan} loading={isSaving}>Criar Acao</Btn>
         </div>
       </Card>
 
-      <KanbanBoard>
-        {COLUMNS.map((col) => (
-          <KanbanColumn
-            key={col.id}
-            title={col.title}
-            count={plansByStatus[col.id]?.length || 0}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, col.id)}
-          >
-            {(plansByStatus[col.id] || []).map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                onDragStart={handleDragStart}
-                onClick={() => setOpenPlan(plan)}
-              />
-            ))}
-          </KanbanColumn>
-        ))}
-      </KanbanBoard>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <KanbanBoard>
+          {COLUMNS.map((col) => {
+            const colPlans  = plansByStatus[col.id] || [];
+            const planIds   = colPlans.map((p) => p.id);
+            return (
+              <KanbanColumn
+                key={col.id}
+                id={col.id}
+                title={col.title}
+                count={colPlans.length}
+                planIds={planIds}
+              >
+                {colPlans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onClick={() => setOpenPlan(plan)}
+                  />
+                ))}
+              </KanbanColumn>
+            );
+          })}
+        </KanbanBoard>
+
+        {/* DragOverlay: card "fantasma" que segue o cursor durante o drag */}
+        <DragOverlay>
+          {activeId ? (
+            <PlanCard
+              plan={plans.find((p) => p.id === activeId) || { id: activeId, name: '...' }}
+              onClick={() => {}}
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       <Modal
         open={!!openPlan}
@@ -378,28 +426,28 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
         size="lg"
       >
         {openPlan && (
-          <div className="hub-modal">
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Dados principais</div>
-              <div className="hub-modal-row">
+          <div style={hubStyles.modal}>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Dados principais</div>
+              <div style={hubStyles.modalRow}>
                 <Badge cor="neutral">{openPlan.status}</Badge>
-                <span className="hub-muted">Cidade: {openPlan.cityId}</span>
-                <span className="hub-muted">Custo total: {moeda(Number(openPlan.cost || 0))}</span>
+                <span style={hubStyles.muted}>Cidade: {openPlan.cityId}</span>
+                <span style={hubStyles.muted}>Custo total: {moeda(Number(openPlan.cost || 0))}</span>
               </div>
               {Number(openPlan.taskBudgetTotal || 0) > 0 && (
-                <div className="hub-muted">Custo de etapas: {moeda(Number(openPlan.taskBudgetTotal || 0))}</div>
+                <div style={hubStyles.muted}>Custo de etapas: {moeda(Number(openPlan.taskBudgetTotal || 0))}</div>
               )}
-              <div className="hub-actions">
+              <div style={hubStyles.actions}>
                 <Btn variant="danger" onClick={handleDeleteAction}>Excluir acao</Btn>
               </div>
             </div>
 
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Adicionar tarefa</div>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Adicionar tarefa</div>
               {openPlan.status === 'Finalizada' && (
                 <InfoBox type="warning">Acao finalizada. Para inserir novas etapas, volte para "Em Andamento".</InfoBox>
               )}
-              <div className="hub-form-grid">
+              <div style={hubStyles.formGrid}>
                 <Input label="Titulo" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
                 <Input type="date" label="Prazo" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
                 <Input type="number" label="Orcamento da etapa (R$)" value={taskForm.budget} onChange={(e) => setTaskForm({ ...taskForm, budget: e.target.value })} disabled={openPlan.status === 'Finalizada'} />
@@ -458,9 +506,9 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
                   placeholder="Selecione um usuario"
                   disabled={openPlan.status === 'Finalizada'}
                 />
-                {users.length === 0 && <div className="hub-muted">Nenhum usuario encontrado.</div>}
+                {users.length === 0 && <div style={hubStyles.muted}>Nenhum usuario encontrado.</div>}
               </div>
-              <div className="hub-actions">
+              <div style={hubStyles.actions}>
                 {openPlan.status === 'Finalizada' ? (
                   <Btn variant="secondary" onClick={handleReopenAction}>Reabrir acao</Btn>
                 ) : (
@@ -469,21 +517,21 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
               </div>
             </div>
 
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Tarefas da acao</div>
-              {tasks.length === 0 && <div className="hub-empty">Nenhuma tarefa ainda.</div>}
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Tarefas da acao</div>
+              {tasks.length === 0 && <div style={hubStyles.empty}>Nenhuma tarefa ainda.</div>}
               {tasks.map((t) => (
-                <div key={t.id} className="hub-task-row">
+                <div key={t.id} style={hubStyles.taskRow}>
                   <div>
-                    <div className="hub-strong">{t.title || 'Tarefa'}</div>
-                    <div className="hub-muted">Resp: {t.responsibleName || '---'}</div>
-                    {Number(t.budget || 0) > 0 && <div className="hub-muted">Orcamento: {moeda(Number(t.budget || 0))}</div>}
-                    {t.kpiName && <div className="hub-muted">KPI: {t.kpiName}</div>}
+                    <div style={hubStyles.strong}>{t.title || 'Tarefa'}</div>
+                    <div style={hubStyles.muted}>Resp: {t.responsibleName || '---'}</div>
+                    {Number(t.budget || 0) > 0 && <div style={hubStyles.muted}>Orcamento: {moeda(Number(t.budget || 0))}</div>}
+                    {t.kpiName && <div style={hubStyles.muted}>KPI: {t.kpiName}</div>}
                     {t.kpiResult !== undefined && t.kpiResult !== null && (
-                      <div className="hub-muted">Resultado: {t.kpiResult}</div>
+                      <div style={hubStyles.muted}>Resultado: {t.kpiResult}</div>
                     )}
                   </div>
-                  <div className="hub-actions-inline">
+                  <div style={hubStyles.actionsInline}>
                     <Badge cor={t.status === 'done' ? 'success' : 'warning'}>{t.status}</Badge>
                     {t.status === 'done' ? (
                       <Btn size="sm" variant="secondary" onClick={() => handleReopenTask(t)}>Reabrir</Btn>
@@ -496,8 +544,8 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
               ))}
             </div>
 
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Linha do tempo</div>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Linha do tempo</div>
               <Timeline events={timelineEvents} />
             </div>
           </div>
@@ -510,9 +558,9 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
         title={finishTask ? `Finalizar etapa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar etapa'}
         size="lg"
       >
-        <div className="hub-modal">
-          <div className="hub-modal-section">
-            <div className="hub-modal-title">Relatorio da etapa</div>
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio da etapa</div>
             <Textarea
               label="Relatorio (opcional)"
               value={finishReport}
@@ -521,8 +569,8 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
             />
           </div>
           {finishTask?.kpiEnabled && (
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Resultado do KPI</div>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Resultado do KPI</div>
               <Input
                 type="number"
                 label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
@@ -532,7 +580,7 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
               />
             </div>
           )}
-          <div className="hub-actions">
+          <div style={hubStyles.actions}>
             <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
             <Btn onClick={handleConfirmFinishTask}>Finalizar etapa</Btn>
           </div>
@@ -545,9 +593,9 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
         title={finalizePlan ? `Finalizar acao: ${finalizePlan.name}` : 'Finalizar acao'}
         size="lg"
       >
-        <div className="hub-modal">
-          <div className="hub-modal-section">
-            <div className="hub-modal-title">Relatorio (opcional)</div>
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
             <Textarea
               label="Relatorio"
               value={finalizeReport}
@@ -555,7 +603,7 @@ export default function KanbanPage({ userData, selectedCityId, selectedMonth, se
               placeholder="Descreva o que foi feito, resultados e observacoes."
             />
           </div>
-          <div className="hub-actions">
+          <div style={hubStyles.actions}>
             <Btn variant="secondary" onClick={() => { setFinalizePlan(null); setFinalizeReport(''); }}>Cancelar</Btn>
             <Btn onClick={handleConfirmFinalize}>Finalizar acao</Btn>
           </div>

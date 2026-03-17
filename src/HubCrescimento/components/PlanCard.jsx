@@ -1,41 +1,80 @@
-import React from 'react';
-import { Badge, ProgressBar, colors, moeda } from '../../components/ui';
+// ============================================================
+//  components/PlanCard.jsx — Hub Crescimento
+//  Card de plano de acao com suporte a @dnd-kit/sortable.
+//  useSortable substitui o draggable/onDragStart nativo.
+// ============================================================
 
-export default function PlanCard({ plan, onClick, onDragStart }) {
-  const progress = Number(plan.progress || 0);
-  const tasksDone = Number(plan.taskCompleted || 0);
-  const tasksTotal = Number(plan.taskCount || 0);
+import React from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS }         from '@dnd-kit/utilities';
+import { Badge, ProgressBar, colors, moeda } from '../../components/ui';
+import { hubStyles } from '../styles/hubStyles';
+
+/**
+ * Props:
+ *   plan        — objeto do plano (action_plan)
+ *   onClick     — abre o modal de detalhes
+ */
+export default function PlanCard({ plan, onClick }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: plan.id });
+
+  const style = {
+    transform:  CSS.Transform.toString(transform),
+    transition,
+    opacity:    isDragging ? 0.45 : 1,
+    cursor:     isDragging ? 'grabbing' : 'grab',
+  };
+
+  const progress   = Number(plan.progress      || 0);
+  const tasksDone  = Number(plan.taskCompleted  || 0);
+  const tasksTotal = Number(plan.taskCount      || 0);
 
   return (
     <div
-      className="hub-card"
-      draggable
-      onDragStart={(e) => onDragStart?.(e, plan)}
-      onClick={() => onClick?.(plan)}
+      ref={setNodeRef}
+      style={{ ...hubStyles.card, ...style }}
+      {...attributes}
+      {...listeners}
+      onClick={() => !isDragging && onClick?.(plan)}
     >
-      <div className="hub-card-header">
-        <div className="hub-card-title">{plan.name || 'Plano sem nome'}</div>
+      <div style={hubStyles.cardHeader}>
+        <div style={hubStyles.cardTitle}>{plan.name || 'Plano sem nome'}</div>
         <Badge cor="neutral">{plan.status || 'Backlog'}</Badge>
       </div>
 
-      <div className="hub-card-body">
+      <div style={hubStyles.cardBody}>
+        {/* Objetivos como chips */}
         {Array.isArray(plan.objectives) && plan.objectives.length > 0 && (
-          <div className="hub-card-objectives">
+          <div style={hubStyles.cardObjectives}>
             {plan.objectives.slice(0, 3).map((o) => (
-              <span key={o} className="hub-chip">{o}</span>
+              <span key={o} style={hubStyles.chip}>{o}</span>
             ))}
           </div>
         )}
 
-        <div className="hub-card-row">
-          <span className="hub-muted">Tarefas</span>
-          <span className="hub-strong">{tasksDone}/{tasksTotal}</span>
+        {/* Tarefas */}
+        <div style={hubStyles.cardRow}>
+          <span style={hubStyles.muted}>Tarefas</span>
+          <span style={hubStyles.strong}>{tasksDone}/{tasksTotal}</span>
         </div>
-        <ProgressBar pct={progress} cor={progress >= 100 ? colors.success : colors.primary} />
 
-        <div className="hub-card-row">
-          <span className="hub-muted">Custo</span>
-          <span className="hub-strong">{moeda(Number(plan.cost || 0))}</span>
+        {/* Barra de progresso */}
+        <ProgressBar
+          pct={progress}
+          cor={progress >= 100 ? colors.success : colors.primary}
+        />
+
+        {/* Custo */}
+        <div style={hubStyles.cardRow}>
+          <span style={hubStyles.muted}>Custo</span>
+          <span style={hubStyles.strong}>{moeda(Number(plan.cost || 0))}</span>
         </div>
       </div>
     </div>

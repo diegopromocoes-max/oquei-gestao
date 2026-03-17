@@ -3,6 +3,7 @@ import { Card, Modal, Textarea, Btn, Input } from '../../components/ui';
 import TaskList from '../components/TaskList';
 import { useTasks } from '../hooks/useTasks';
 import { completeTask, reopenTask, deleteTask } from '../services/taskService';
+import { hubStyles } from '../styles/hubStyles';
 
 const toDate = (v) => (v ? new Date(v) : null);
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -82,7 +83,7 @@ export default function MinhaMesaPage({ userData, selectedCityId }) {
   };
 
   return (
-    <div className="hub-stack">
+    <div style={hubStyles.stack}>
       <Card title="Minha Mesa" subtitle="Tarefas da minha responsabilidade">
         <TaskList title="Atrasadas" tasks={grouped.overdue} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
         <TaskList title="Hoje" tasks={grouped.today} onComplete={handleComplete} onReopen={handleReopen} onDelete={handleDelete} />
@@ -96,9 +97,9 @@ export default function MinhaMesaPage({ userData, selectedCityId }) {
         title={finishTask ? `Finalizar tarefa: ${finishTask.title || 'Sem titulo'}` : 'Finalizar tarefa'}
         size="lg"
       >
-        <div className="hub-modal">
-          <div className="hub-modal-section">
-            <div className="hub-modal-title">Relatorio (opcional)</div>
+        <div style={hubStyles.modal}>
+          <div style={hubStyles.modalSection}>
+            <div style={hubStyles.modalTitle}>Relatorio (opcional)</div>
             <Textarea
               label="Relatorio"
               value={finishReport}
@@ -107,8 +108,8 @@ export default function MinhaMesaPage({ userData, selectedCityId }) {
             />
           </div>
           {finishTask?.kpiEnabled && (
-            <div className="hub-modal-section">
-              <div className="hub-modal-title">Resultado do KPI</div>
+            <div style={hubStyles.modalSection}>
+              <div style={hubStyles.modalTitle}>Resultado do KPI</div>
               <Input
                 type="number"
                 label={finishTask.kpiName ? `KPI: ${finishTask.kpiName}` : 'Resultado'}
@@ -118,7 +119,7 @@ export default function MinhaMesaPage({ userData, selectedCityId }) {
               />
             </div>
           )}
-          <div className="hub-actions">
+          <div style={hubStyles.actions}>
             <Btn variant="secondary" onClick={() => { setFinishTask(null); setFinishReport(''); setFinishKpiResult(''); }}>Cancelar</Btn>
             <Btn onClick={handleConfirmFinish}>Finalizar tarefa</Btn>
           </div>

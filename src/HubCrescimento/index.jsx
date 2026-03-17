@@ -7,7 +7,7 @@ import MeetingsPage from './pages/MeetingsPage';
 import DashboardGrowth from './pages/DashboardGrowth';
 import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import './styles/hubStyles.css';
+import { hubStyles } from "./styles/hubStyles";
 
 const TAB_LABELS = ['Visao Geral', 'Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
 
@@ -80,7 +80,7 @@ export default function HubCrescimento({ userData }) {
       subtitle="Planejamento estrategico e execucao com baixo atrito"
     >
       <Card>
-        <div className="hub-toolbar">
+        <div style={hubStyles.toolbar}>
           <div style={{ minWidth: '240px' }}>
             <Select
               label="Cidade"
@@ -115,7 +115,7 @@ export default function HubCrescimento({ userData }) {
         <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
       )}
 
-      <div className="hub-content">
+      <div style={hubStyles.content}>
         {isGrowthTeam && <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />}
 
         {!isGrowthTeam && activeTab === 'Visao Geral' && (
