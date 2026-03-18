@@ -21,7 +21,9 @@ export default function TabMetasCidades({ selectedMonth, isMaster, userData }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedClusters, setExpandedClusters] = useState({});
 
-  const canEdit = isMaster || userData?.role === 'coordinator' || userData?.role === 'coordenador';
+  const roleNorm = String(userData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  const isGrowth = ['growthteam','growth_team','equipegrowth'].includes(roleNorm);
+  const canEdit  = isMaster || isGrowth; // growth_team tem edição colaborativa
 
   useEffect(() => {
     const fetchData = async () => {

@@ -41,7 +41,8 @@ export default function GestaoMetas({ userData }) {
   const [activeTab, setActiveTab] = useState('canais');
 
   // Verifica se é Coordenador ou Diretor
-  const isMaster = userData?.role === 'coordinator' || userData?.role === 'coordenador' || userData?.role === 'diretor' || userData?.role === 'master';
+  const roleNorm  = String(userData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  const isMaster  = ['coordinator','coordenador','master','diretor','growthteam','growth_team','equipegrowth'].includes(roleNorm);
 
   const ActiveComponent = TAB_CONTENT[activeTab];
 

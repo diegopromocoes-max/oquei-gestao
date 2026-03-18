@@ -33,7 +33,7 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
   const [simulations,      setSimulations]      = useState({});
   const [loading,          setLoading]          = useState(true);
 
-  const [selectedCityId,  setSelectedCityId]  = useState('');
+  const [selectedCityId,  setSelectedCityId]  = useState(() => localStorage.getItem('sop_lastCity') || '');
   const [growthPercent,   setGrowthPercent]   = useState(0.0);
   const [churnPercent,    setChurnPercent]    = useState(0.0);
   const [distMethod,      setDistMethod]      = useState(DIST_METHODS.AUTO);
@@ -42,13 +42,17 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
   const [growthInputMode, setGrowthInputMode] = useState('percent');
   const [churnInputMode,  setChurnInputMode]  = useState('percent');
   const [showConfirm,     setShowConfirm]     = useState(false);
+  const [savedInsight,    setSavedInsight]    = useState(null); // insight travado da IA
 
   // ── Firebase listeners ──────────────────────────────────────────────────────
   useEffect(() => {
     const myCluster = String(userData?.clusterId || '').trim();
-    const isCoord   = userData?.role === 'coordinator' || userData?.role === 'coordenador';
+    const roleNorm  = String(userData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isCoord   = ['coordinator','coordenador','master','diretor'].includes(roleNorm);
+    const isGrowth  = ['growthteam','growth_team','equipegrowth'].includes(roleNorm);
 
-    const cityQuery = isCoord
+    // growth_team tem visão global de cidades (decisão RN02 flexibilizada)
+    const cityQuery = (isCoord || isGrowth)
       ? collection(db, 'cities')
       : query(collection(db, 'cities'), where('clusterId', '==', myCluster));
 
@@ -57,7 +61,12 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setCities(list);
-        setSelectedCityId(prev => prev || (list[0]?.id ?? ''));
+        setSelectedCityId(prev => {
+          if (prev && list.find(c => c.id === prev)) return prev; // mantém cidade salva
+          const saved = localStorage.getItem('sop_lastCity');
+          if (saved && list.find(c => c.id === saved)) return saved;
+          return list[0]?.id ?? '';
+        });
         setLoading(false);
       }),
       onSnapshot(collection(db, 'sales_channels'), snap => {
@@ -97,6 +106,8 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
     setGrowthPercent(saved?.growthPercent ?? 0);
     setChurnPercent(saved?.churnPercent  ?? 0);
     setDistMethod(saved?.distMethod      ?? DIST_METHODS.AUTO);
+    // Carrega o insight travado salvo para esta cidade
+    setSavedInsight(saved?.savedInsight ?? null);
   }, [selectedCityId, loading]); // eslint-disable-line
 
   // ── Mix histórico de canais (últimos 3 meses) ───────────────────────────────
@@ -288,7 +299,7 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
     try {
       await setDoc(
         doc(db, 'sop_simulations', `${selectedMonth}_${cityData.id}`),
-        { cityId: cityData.id, month: selectedMonth, growthPercent, churnPercent, distMethod, locked: !isLocked, updatedAt: new Date().toISOString() },
+        { cityId: cityData.id, month: selectedMonth, growthPercent, churnPercent, distMethod, locked: !isLocked, savedInsight: savedInsight ?? null, updatedAt: new Date().toISOString() },
         { merge: true }
       );
     } catch {
@@ -338,7 +349,10 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <select
                 value={selectedCityId}
-                onChange={e => setSelectedCityId(e.target.value)}
+                onChange={e => {
+                  setSelectedCityId(e.target.value);
+                  localStorage.setItem('sop_lastCity', e.target.value);
+                }}
                 style={{ appearance: 'none', border: '1px solid var(--border)', background: 'var(--bg-app)', fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', cursor: 'pointer', outline: 'none', padding: '9px 42px 9px 14px', borderRadius: '11px', fontFamily: 'inherit', transition: 'border-color 0.2s', minWidth: '200px' }}
                 onFocus={e => e.currentTarget.style.borderColor = colors.primary}
                 onBlur={e =>  e.currentTarget.style.borderColor = 'var(--border)'}
@@ -444,6 +458,19 @@ export default function TabSimuladorSOP({ selectedMonth, userData }) {
             cityData={cityData}
             growthPercent={growthPercent}
             churnPercent={churnPercent}
+            savedInsight={savedInsight}
+            onSaveInsight={async (insights) => {
+              setSavedInsight(insights);
+              // Persiste no Firestore junto com a simulação da cidade
+              try {
+                const { setDoc: sd, doc: dc } = await import('firebase/firestore');
+                await sd(
+                  dc(db, 'sop_simulations', `${selectedMonth}_${cityData.id}`),
+                  { cityId: cityData.id, month: selectedMonth, savedInsight: insights, updatedAt: new Date().toISOString() },
+                  { merge: true }
+                );
+              } catch (e) { console.warn('Insight nao persistido no Firestore:', e); }
+            }}
           />
         </div>
 

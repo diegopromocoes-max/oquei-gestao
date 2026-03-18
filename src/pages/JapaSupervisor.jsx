@@ -6,7 +6,8 @@ import {
   Info, Plus, X, Layout, Globe, Navigation, Calendar
 } from 'lucide-react';
 
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors } from '../styles/globalStyles';
+import { Card, Btn, Modal, Input, Select, InfoBox } from '../components/ui';
 
 // Coordenadas de segurança (Fallback) caso a cidade ainda não tenha Lat/Lon cadastrada na Estrutura
 const FALLBACK_COORDS = {
@@ -341,59 +342,50 @@ export default function JapaSupervisor({ userData }) {
   };
 
   const RoadmapView = () => (
-    <div style={local.mapContainer}>
-      <div style={local.roadLine}></div>
-      <div style={{...local.vanActor, transform: `translateY(${vanPosition}px)`}}>
-        <div style={local.vanPulse}></div>
-        <div style={local.vanBody}><Truck size={20} color="white" /></div>
-        <div style={local.vanLabel}>Japa Aqui</div>
+    <div style={{ position: 'relative', marginTop: '20px' }}>
+      <div style={{ position: 'absolute', left: '70px', top: '20px', bottom: '20px', width: '4px', background: 'var(--border)', borderRadius: '2px', zIndex: 0 }}></div>
+      <div style={{ position: 'absolute', left: '52px', top: 0, zIndex: 10, transition: 'transform 1s cubic-bezier(0.25, 1, 0.5, 1)', display:'flex', alignItems:'center', transform: `translateY(${vanPosition}px)` }}>
+        <div style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', border: `2px solid ${colors.primary}`, animation: 'ping 1.5s infinite', zIndex:1 }}></div>
+        <div style={{ width: '40px', height: '40px', background: colors.primary, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 12px ${colors.primary}44`, position:'relative', zIndex:2 }}><Truck size={20} color="white" /></div>
+        <div style={{ position: 'absolute', left: '50px', background: colors.primary, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '800', whiteSpace:'nowrap' }}>Japa Aqui</div>
       </div>
 
-      <div style={local.stopsContainer}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
         {actions.map((item) => {
           const status = getStatus(item.date);
           const dateObj = new Date(item.date + 'T12:00:00');
 
           return (
-            <div key={item.id} style={local.stopRow}>
-              <div style={local.dateSide}>
-                <span style={{...local.dayNum, color: status === 'past' ? 'var(--text-muted)' : 'var(--text-brand)'}}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'stretch', minHeight: '120px' }}>
+              <div style={{ width: '50px', textAlign: 'right', paddingTop: '20px', paddingRight: '20px' }}>
+                <span style={{ display: 'block', fontSize: '20px', fontWeight: '900', lineHeight: 1, color: status === 'past' ? 'var(--text-muted)' : 'var(--text-brand)' }}>
                   {dateObj.getDate()}
                 </span>
-                <span style={local.monthName}>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)' }}>
                   {dateObj.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}
                 </span>
               </div>
 
-              <div style={local.pinWrapper}>
-                 <div style={{
-                   ...local.pinDot, 
-                   background: status === 'past' ? 'var(--border)' : status === 'today' ? 'var(--text-brand)' : 'var(--bg-card)',
-                   border: status === 'future' ? '4px solid var(--text-brand)' : 'none'
-                 }}>
+              <div style={{ width: '40px', display: 'flex', justifyContent: 'center', paddingTop: '24px', position: 'relative' }}>
+                 <div style={{ width: '16px', height: '16px', borderRadius: '50%', zIndex: 1, display:'flex', alignItems:'center', justifyContent:'center', background: status === 'past' ? 'var(--border)' : status === 'today' ? 'var(--text-brand)' : 'var(--bg-card)', border: status === 'future' ? '4px solid var(--text-brand)' : 'none' }}>
                    {status === 'past' && <CheckCircle size={12} color="white"/>}
                  </div>
               </div>
 
-              <div style={{
-                ...local.cityCard,
-                opacity: status === 'past' ? 0.6 : 1,
-                borderColor: status === 'today' ? 'var(--text-brand)' : 'var(--border)',
-                boxShadow: status === 'today' ? 'var(--shadow-sm)' : 'none'
-              }}>
-                <h3 style={local.cityName}>
+              <div style={{ flex: 1, background: 'var(--bg-card)', borderRadius: '16px', padding: '20px', marginBottom: '20px', marginLeft: '20px', position: 'relative', border: '1px solid var(--border)', opacity: status === 'past' ? 0.6 : 1, borderColor: status === 'today' ? 'var(--text-brand)' : 'var(--border)', boxShadow: status === 'today' ? 'var(--shadow-sm)' : 'none' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 5px 0', display:'flex', alignItems:'center' }}>
                   <MapPin size={16} style={{marginRight:'5px', color:'#ef4444'}}/>
                   {item.city}
                 </h3>
-                <p style={local.activityText}>{item.activity || item.title}</p>
-                <div style={local.metaRow}>
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500', margin: 0 }}>{item.activity || item.title}</p>
+                <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px', alignItems: 'center' }}>
                   <span><Clock size={12}/> {item.time}</span>
                   <span>•</span>
                   <span>{item.location}</span>
                 </div>
                 
                 {item.requesterId === auth.currentUser?.uid && (
-                  <button onClick={() => handleDelete(item.id)} style={local.deleteLink}>Cancelar</button>
+                  <button onClick={() => handleDelete(item.id)} style={{ position: 'absolute', top: '20px', right: '20px', border: 'none', background: 'none', color: colors.danger, fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}>Cancelar</button>
                 )}
               </div>
             </div>
@@ -413,32 +405,54 @@ export default function JapaSupervisor({ userData }) {
         `}
       </style>
 
-      <div style={global.header}>
-        <div style={global.iconHeader}><Truck size={32} color="white"/></div>
-        <div>
-          <h1 style={global.title}>Rota do Japa</h1>
-          <p style={global.subtitle}>Acompanhe a van e solicite ações para a sua loja.</p>
+
+      {/* ── Cabeçalho padrão Oquei Gestão ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+        border: '1px solid var(--border)', borderRadius: '20px',
+        padding: '24px 32px', marginBottom: '24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #EA580C, #DC2626)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(234,88,12,0.35)',
+          }}>
+            <Truck size={26} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Rota do Japa
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Acompanhe a van e solicite ações · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
         </div>
+        
       </div>
 
-      <div style={local.noticeBox}>
-        <div style={local.noticeIcon}><Info size={24} color="var(--text-brand)"/></div>
+      <div style={{ background: colors.primaryLight, border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', marginBottom: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+        <div style={{ background: 'var(--bg-card)', padding: '12px', borderRadius: '50%' }}><Info size={24} color="var(--text-brand)"/></div>
         <div>
-          <h3 style={local.noticeTitle}>Gestão de Rota</h3>
-          <p style={local.noticeText}>
+          <h3 style={{ fontSize: '16px', fontWeight: '800', color: colors.primary, marginBottom: '5px', marginTop: 0 }}>Gestão de Rota</h3>
+          <p style={{ fontSize: '14px', color: 'var(--text-main)', margin: 0 }}>
             O mapa abaixo mostra o trajeto programado. Para adicionar sua loja, crie uma solicitação!
           </p>
         </div>
       </div>
 
-      <div style={local.content}>
+      <div style={{ position: 'relative' }}>
         
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', flexWrap: 'wrap', gap: '15px'}}>
-           <div style={local.toggleContainer}>
-             <button onClick={() => setViewMode('map')} style={viewMode === 'map' ? local.toggleBtnActive : local.toggleBtn}>
+           <div style={{ background: 'var(--bg-panel)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', border: '1px solid var(--border)' }}>
+             <button onClick={() => setViewMode('map')} style={viewMode === 'map' ? { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' } : { background: 'transparent', border: 'none', color: 'var(--text-muted)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
                <Globe size={16}/> Mapa Satélite
              </button>
-             <button onClick={() => setViewMode('roadmap')} style={viewMode === 'roadmap' ? local.toggleBtnActive : local.toggleBtn}>
+             <button onClick={() => setViewMode('roadmap')} style={viewMode === 'roadmap' ? { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' } : { background: 'transparent', border: 'none', color: 'var(--text-muted)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
                <Layout size={16}/> Lista Vertical
              </button>
            </div>
@@ -502,7 +516,7 @@ export default function JapaSupervisor({ userData }) {
                  )}
               </div>
 
-              <button type="submit" style={{...global.btnPrimary, background: 'var(--text-brand)', marginTop: '10px'}} disabled={loading}>
+              <button type="submit" style={{ marginTop: '10px' }} disabled={loading}>
                 {loading ? 'A Guardar...' : 'Adicionar ao Cronograma'}
               </button>
             </form>
@@ -546,7 +560,7 @@ export default function JapaSupervisor({ userData }) {
               </div>
               
               <div style={global.field}><label style={global.label}>Detalhes (Opcional)</label><textarea style={{...global.textarea, minHeight:'80px'}} placeholder="Descreva a estratégia..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
-              <button type="submit" style={{...global.btnPrimary, background: 'var(--text-brand)'}} disabled={loading}>{loading ? 'Enviando...' : 'Enviar Pedido'}</button>
+              <button type="submit" disabled={loading}>{loading ? 'Enviando...' : 'Enviar Pedido'}</button>
             </form>
           </div>
         </div>
@@ -554,32 +568,4 @@ export default function JapaSupervisor({ userData }) {
     </div>
   );
 }
-
-const local = {
-  noticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', marginBottom: '30px', display: 'flex', gap: '20px', alignItems: 'center' },
-  noticeIcon: { background: 'var(--bg-card)', padding: '12px', borderRadius: '50%' },
-  noticeTitle: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-brand)', marginBottom: '5px', marginTop: 0 },
-  noticeText: { fontSize: '14px', color: 'var(--text-main)', margin: 0 },
-  content: { position: 'relative' },
-  toggleContainer: { background: 'var(--bg-panel)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', border: '1px solid var(--border)' },
-  toggleBtn: { background: 'transparent', border: 'none', color: 'var(--text-muted)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
-  toggleBtnActive: { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '12px 20px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-sm)' },
-  mapContainer: { position: 'relative', marginTop: '20px', animation: 'fadeIn 0.3s' },
-  roadLine: { position: 'absolute', left: '70px', top: '20px', bottom: '20px', width: '4px', background: 'var(--border)', borderRadius: '2px', zIndex: 0 },
-  vanActor: { position: 'absolute', left: '52px', top: '0', zIndex: 10, transition: 'transform 1s cubic-bezier(0.25, 1, 0.5, 1)', display:'flex', alignItems:'center' },
-  vanBody: { width: '40px', height: '40px', background: 'var(--text-brand)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.4)', position:'relative', zIndex:2 },
-  vanPulse: { position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', border: '2px solid var(--text-brand)', animation: 'ping 1.5s infinite', zIndex:1 },
-  vanLabel: { position: 'absolute', left: '50px', background: 'var(--text-brand)', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', whiteSpace:'nowrap' },
-  stopsContainer: { display: 'flex', flexDirection: 'column', gap: '0px' },
-  stopRow: { display: 'flex', alignItems: 'stretch', minHeight: '120px' },
-  dateSide: { width: '50px', textAlign: 'right', paddingTop: '20px', paddingRight: '20px' },
-  dayNum: { display: 'block', fontSize: '20px', fontWeight: '900', lineHeight: 1, color: 'var(--text-main)' },
-  monthName: { fontSize: '10px', fontWeight: 'bold', color: 'var(--text-muted)' },
-  pinWrapper: { width: '40px', display: 'flex', justifyContent: 'center', paddingTop: '24px', position: 'relative' },
-  pinDot: { width: '16px', height: '16px', borderRadius: '50%', background: 'white', border: '4px solid var(--border)', zIndex: 1, display:'flex', alignItems:'center', justifyContent:'center' },
-  cityCard: { flex: 1, background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', padding: '20px', marginBottom: '20px', marginLeft: '20px', position: 'relative' },
-  cityName: { fontSize: '16px', fontWeight: 'bold', color: 'var(--text-main)', margin: '0 0 5px 0', display:'flex', alignItems:'center' },
-  activityText: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500', margin: 0 },
-  metaRow: { display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px', alignItems: 'center' },
-  deleteLink: { position: 'absolute', top: '20px', right: '20px', border: 'none', background: 'none', color: '#ef4444', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }
-};
+;

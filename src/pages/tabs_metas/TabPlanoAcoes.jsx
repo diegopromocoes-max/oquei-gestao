@@ -44,11 +44,13 @@ export default function TabPlanoAcoes({ selectedMonth, userData }) {
 
   useEffect(() => {
     setLoading(true);
-    const myCluster = String(userData?.clusterId || "").trim();
-    const isCoord = userData?.role === 'coordinator' || userData?.role === 'coordenador';
+    const myCluster = String(userData?.clusterId || '').trim();
+    const roleNorm  = String(userData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isCoord   = ['coordinator','coordenador','master','diretor'].includes(roleNorm);
+    const isGrowth  = ['growthteam','growth_team','equipegrowth'].includes(roleNorm);
 
     const unsubs = [
-      onSnapshot(isCoord ? collection(db, 'cities') : query(collection(db, 'cities'), where('clusterId', '==', myCluster)), snap => {
+      onSnapshot((isCoord || isGrowth) ? collection(db, 'cities') : query(collection(db, 'cities'), where('clusterId', '==', myCluster)), snap => {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setCities(list);

@@ -6,7 +6,8 @@ import {
   Pin, Star, CalendarDays, X, PlusCircle, CheckCircle2, ChevronDown, ShieldCheck
 } from 'lucide-react';
 
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors } from '../styles/globalStyles';
+import { Btn, Modal} from '../components/ui';
 
 export default function Comunicados({ userData }) {
   const [messages, setMessages] = useState([]);
@@ -22,8 +23,6 @@ const canPin = userData?.role === 'coordinator' || userData?.role === 'superviso
 
 const [form, setForm] = useState({ text: '', to: 'all', priority: 1 });
 
-  // Datas para o Cabeçalho
-  const todayDateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const unreadCount = messages.filter(m => !m.read).length;
 
 useEffect(() => {
@@ -52,7 +51,7 @@ useEffect(() => {
         return a.name.localeCompare(b.name);
       });
       setRecipients(list);
-    } catch (err) { window.alert(err.message); }
+    } catch (err) { window.showToast?.(err.message, 'error'); }
   };
 
   const fetchMessages = async () => {
@@ -79,7 +78,7 @@ useEffect(() => {
 
       setMessages(msgsWithReadStatus);
       markAsReadBatch(msgsWithReadStatus);
-    } catch (err) { window.alert(err.message); }
+    } catch (err) { window.showToast?.(err.message, 'error'); }
     setLoading(false);
   };
 
@@ -96,7 +95,7 @@ useEffect(() => {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!form.text.trim()) return;
-    if (!form.to) return window.alert("Selecione um destinatário válido.");
+    if (!form.to) { window.showToast?.('Selecione um destinatário válido.', 'error'); return; }
     setSending(true);
 
     try {
@@ -118,7 +117,7 @@ useEffect(() => {
 setForm({ ...form, text: '', priority: 1, to: 'all' });
       setIsComposing(false);
       fetchMessages(); 
-    } catch (err) { window.alert(err.message); }
+    } catch (err) { window.showToast?.(err.message, 'error'); }
     setSending(false);
   };
 
@@ -128,7 +127,7 @@ setForm({ ...form, text: '', priority: 1, to: 'all' });
       await updateDoc(doc(db, "messages", msg.id), { pinned: !msg.pinned });
       fetchMessages();
     } catch (err) {
-      window.alert("Erro ao fixar a mensagem.");
+      window.showToast?.('Erro ao fixar a mensagem.', 'error');
     }
   };
 
@@ -163,31 +162,46 @@ setForm({ ...form, text: '', priority: 1, to: 'all' });
   const pinnedMessages = messages.filter(m => m.pinned);
 
   return (
-    <div style={{...global.container, maxWidth: '1000px', display: 'flex', flexDirection: 'column', height: '90vh', padding: '20px 40px'}}>
+    <div style={{...global.container, maxWidth: '1000px', display: 'flex', flexDirection: 'column', padding: '0'}}>
       
-      {/* CABEÇALHO DASHBOARD-STYLE */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '20px', marginBottom: '20px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'var(--text-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.25)' }}>
-            <Megaphone size={28} color="white" />
+
+      {/* ── Cabeçalho padrão Oquei Gestão ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+        border: '1px solid var(--border)', borderRadius: '20px',
+        padding: '24px 32px', marginBottom: '24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #F59E0B, #2563EB)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(245,158,11,0.35)',
+          }}>
+            <Megaphone size={26} color="#fff" />
           </div>
           <div>
-            <h1 style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 5px 0', letterSpacing: '-0.02em' }}>Mural de Comunicados</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '600' }}>
-               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><CalendarDays size={16}/> <span style={{textTransform: 'capitalize'}}>{todayDateStr}</span></span>
-               <span style={{ color: 'var(--border)' }}>•</span>
-               <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: unreadCount > 0 ? '#ef4444' : 'var(--text-muted)' }}>
-                 <MessageCircle size={16}/> {unreadCount} não lidas
-               </span>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Mural de Comunicados
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Mensagens e avisos da equipe · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={fetchMessages} style={{...global.iconBtn, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)'}} title="Atualizar">
-            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {unreadCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px', padding: '6px 12px', fontSize: '12px', fontWeight: '800', color: '#ef4444' }}>
+              <MessageCircle size={14} /> {unreadCount} não lida{unreadCount !== 1 ? 's' : ''}
+            </div>
+          )}
+          <button onClick={fetchMessages} style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: '10px', padding: '9px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Atualizar">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button onClick={() => setIsComposing(true)} style={{...global.btnPrimary, background: 'var(--text-brand)'}}>
-            <PlusCircle size={18} /> Nova Mensagem
+          <button onClick={() => setIsComposing(true)} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: colors.primary, color: '#fff', border: 'none', borderRadius: '10px', padding: '9px 18px', fontSize: '13px', fontWeight: '800', cursor: 'pointer' }}>
+            <PlusCircle size={16} /> Nova Mensagem
           </button>
         </div>
       </div>
@@ -394,27 +408,13 @@ setForm({ ...form, text: '', priority: 1, to: 'all' });
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ESTILOS DE ANIMAÇÃO GLOBAIS
-if (typeof document !== 'undefined') {
-  const styleId = 'chat-animations';
-  if (!document.getElementById(styleId)) {
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.innerHTML = `
-      @keyframes slideUp {
-        from { transform: translateY(20px); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    <style>{`
+      @keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      .custom-scrollbar::-webkit-scrollbar { width: 5px; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
       .hide-scrollbar::-webkit-scrollbar { display: none; }
       .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    `;
-    document.head.appendChild(style);
-  }
+    `}</style>
+    </div>
+  );
 }

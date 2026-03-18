@@ -38,6 +38,7 @@ export default function LayoutGlobal({
   activeTab,
   onTabChange,
   onLogout,
+  extraFooter,
   appName = 'OQUEI CRM',
   logoUrl = null,
 }) {
