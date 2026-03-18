@@ -223,8 +223,12 @@ export default function VisaoGeralGrowth({ userData, onNavigate }) {
     const load = async () => {
       setLoading(true);
       try {
-        const snap  = await getDocs(query(collection(db, 'action_plans'), where('month', '==', mesAtual)));
-        // ✅ FIX: excluir planos deletados (deleted: true)
+        // Filtra deleted tanto na query quanto no cliente (dupla garantia)
+        const snap  = await getDocs(query(
+          collection(db, 'action_plans'),
+          where('month', '==', mesAtual),
+          where('deleted', '!=', true)
+        ));
         const plans = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !p.deleted);
 
         const ativos      = plans.filter(p => p.status !== 'Cancelada' && p.status !== 'Finalizada').length;
@@ -363,17 +367,31 @@ export default function VisaoGeralGrowth({ userData, onNavigate }) {
         <KpiBox label="Finalizadas"    value={loading ? '...' : kpis.finalizados}   icon={Trophy}      color={colors.success} sub="este mês" />
       </div>
 
-      {/* ── Atalhos + Planos recentes ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px', alignItems: 'start' }}>
+      {/* ── Acesso Rápido — largura total ── */}
+      <Card title="Acesso Rápido" subtitle="Navegue diretamente para qualquer módulo">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '12px', marginTop: '4px' }}>
+          {SHORTCUTS.map(s => (
+            <ShortcutCard key={s.id} icon={s.icon} label={s.label} color={s.color} onClick={() => onNavigate?.(s.id)} />
+          ))}
+        </div>
+      </Card>
 
-        <Card title="Acesso Rápido" subtitle="Navegue diretamente para qualquer módulo">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '12px', marginTop: '4px' }}>
-            {SHORTCUTS.map(s => (
-              <ShortcutCard key={s.id} icon={s.icon} label={s.label} color={s.color} onClick={() => onNavigate?.(s.id)} />
-            ))}
-          </div>
+      {/* ── Agenda + Tarefas + Planos Recentes ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', alignItems: 'start' }}>
+
+        <Card
+          title="Próximos Eventos"
+          subtitle="Sua agenda dos próximos 14 dias"
+          actions={
+            <Btn size="sm" variant="secondary" onClick={() => onNavigate?.('agenda')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              Agenda <ArrowRight size={13} />
+            </Btn>
+          }
+        >
+          <AgendaPanel events={agenda} loading={loadingExtra} onNavigate={onNavigate} />
         </Card>
 
+        {/* Planos Recentes — agora na linha de baixo, 3ª coluna */}
         <Card
           title="Planos Recentes"
           subtitle="Ações deste mês"
@@ -391,7 +409,6 @@ export default function VisaoGeralGrowth({ userData, onNavigate }) {
                   {recentPlans.map(p => <PlanRow key={p.id} plan={p} />)}
                 </div>
           }
-
           {kpis.minhasTarefas > 0 && (
             <div style={{
               marginTop: '16px', padding: '12px 14px', borderRadius: '12px',
@@ -405,22 +422,6 @@ export default function VisaoGeralGrowth({ userData, onNavigate }) {
               <Btn size="sm" onClick={() => onNavigate?.('hub')} style={{ marginLeft: 'auto', flexShrink: 0 }}>Ver</Btn>
             </div>
           )}
-        </Card>
-      </div>
-
-      {/* ── Agenda + Minhas Tarefas ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
-
-        <Card
-          title="Próximos Eventos"
-          subtitle="Sua agenda dos próximos 14 dias"
-          actions={
-            <Btn size="sm" variant="secondary" onClick={() => onNavigate?.('agenda')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              Agenda <ArrowRight size={13} />
-            </Btn>
-          }
-        >
-          <AgendaPanel events={agenda} loading={loadingExtra} onNavigate={onNavigate} />
         </Card>
 
         <Card

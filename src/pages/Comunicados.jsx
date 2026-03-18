@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 import { styles as global, colors } from '../styles/globalStyles';
-import { Btn, Modal} from '../components/ui';
+import { Btn, Modal, colors as uiColors } from '../components/ui'; // Renomeado para uiColors
 
 export default function Comunicados({ userData }) {
   const [messages, setMessages] = useState([]);

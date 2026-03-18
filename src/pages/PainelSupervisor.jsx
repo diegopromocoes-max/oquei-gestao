@@ -145,6 +145,8 @@ export default function PainelSupervisor({ userData }) {
       activeTab={activeView}
       onTabChange={setActiveView}
       onLogout={() => authSignOut(auth)}
+      appName="HUB OQUEI"
+      logoUrl="https://lh6.googleusercontent.com/proxy/OQmnkD6TxExvN5uvw-zWOpJHZ6qW-J6aJaUPlJX4Y06C_IRXAN3CooFhuzMisQmGCpNS9aQkpjPNcH2YOZs-CeiOuVKjlDO6oqSsDIFrSS2hGse8ug"
     >
       <Suspense fallback={<ModuleFallback />}>
         {renderContent()}

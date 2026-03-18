@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from "../firebase";
 import { Page, colors } from "../components/ui";
-import { RefreshCcw, LayoutGrid, BrainCircuit, Share2, TrendingUp, Users } from 'lucide-react';
+import { FlaskConical, RefreshCcw, LayoutGrid, BrainCircuit, Share2, TrendingUp, Users } from 'lucide-react';
 
 // IMPORTAÇÃO DAS ABAS (VIEWS) APONTANDO PARA A PASTA
 import RadarView from './LaboratorioChurn/RadarView';
@@ -131,8 +131,39 @@ export default function LaboratorioChurn({ userData }) {
           <input 
             type="month" value={selectedMonth} 
             onChange={e => { setSelectedMonth(e.target.value); setSelectedCity(null); }} 
-            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '800', outline: 'none', cursor: 'pointer' }} 
-          />
+            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}></input>
+
+  <div style={{
+  background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+  border: '1px solid var(--border)',
+  borderRadius: '20px',
+  padding: '24px',
+  marginBottom: '30px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center'
+}}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #EF4444, #7C3AED)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(239,68,68,0.35)',
+          }}>
+            <FlaskConical size={26} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Laboratório Churn
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Análise de cancelamentos, radar e retenção · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+        </div>
+        
+      </div>
+ 
         </div>
       }
     >

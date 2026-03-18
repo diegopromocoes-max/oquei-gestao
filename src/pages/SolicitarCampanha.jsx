@@ -11,28 +11,43 @@ export default function SolicitarCampanha() {
   const formUrl = "http://oferta.oquei.com.br/briefing-interno"; 
 
   return (
-    <div className="animated-view" style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      
-      {/* CABEÇALHO */}
-      <div style={styles.header}>
-        <div>
-          <h2 style={styles.title}>
-            <Megaphone color={colors?.warning || '#f59e0b'} size={28} />
-            Solicitação de Campanha
-          </h2>
-          <p style={styles.subtitle}>
-            Portal oficial para requisição de artes, eventos e ações de marketing.
-          </p>
+    <div style={{ padding: '0', height: '100%', display: 'flex', flexDirection: 'column' }} className="animated-view">
+
+      {/* ── Cabeçalho padrão Oquei Gestão ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+        border: '1px solid var(--border)', borderRadius: '20px',
+        padding: '24px 32px', marginBottom: '24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #F59E0B, #EF4444)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(245,158,11,0.35)',
+          }}>
+            <Megaphone size={26} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Solicitar Campanha
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Envie o briefing da campanha para a equipe de marketing · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* AVISO RÁPIDO */}
       <div style={styles.alertBox}>
         <Info size={16} color={colors?.primary || '#3b82f6'} style={{ flexShrink: 0 }} />
-        <span>Certifique-se de preencher todos os detalhes do briefing com atenção para garantir a agilidade da equipa de Marketing na entrega.</span>
+        <span>Certifique-se de preencher todos os detalhes do briefing com atenção para garantir a agilidade da equipe de Marketing na entrega.</span>
       </div>
 
-      {/* BANNER DE AÇÃO COMPACTO (Foco reduzido no botão) */}
+      {/* BANNER DE AÇÃO COMPACTO */}
       <div style={styles.actionBanner}>
         <div>
           <h3 style={styles.bannerTitle}>Pronto para iniciar?</h3>
@@ -49,8 +64,8 @@ export default function SolicitarCampanha() {
           <ExternalLink size={18} /> Abrir Formulário Oficial
         </a>
       </div>
-
-      {/* DIRETRIZES DE ATENDIMENTO (Agora com total destaque) */}
+      
+      {/* DIRETRIZES DE ATENDIMENTO (SLA) */}
       <div style={{ marginTop: '30px' }}>
         <h3 style={styles.sectionHeader}>Diretrizes de Atendimento e Prazos (SLA)</h3>
         
@@ -127,7 +142,6 @@ const styles = {
   
   alertBox: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', color: '#1e3a8a', fontSize: '13px', fontWeight: '600', marginBottom: '20px' },
   
-  // NOVO BANNER COMPACTO
   actionBanner: { 
     background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '16px', 
     padding: '20px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 

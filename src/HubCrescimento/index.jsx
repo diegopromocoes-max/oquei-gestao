@@ -7,6 +7,7 @@ import MeetingsPage from './pages/MeetingsPage';
 import DashboardGrowth from './pages/DashboardGrowth';
 import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
+import { Zap } from 'lucide-react';
 import { hubStyles } from "./styles/hubStyles";
 
 const TAB_LABELS = ['Visao Geral', 'Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
@@ -81,8 +82,37 @@ export default function HubCrescimento({ userData }) {
   return (
     <Page
       title="Hub de Crescimento"
-      subtitle="Planejamento estrategico e execucao com baixo atrito"
+      subtitle="Planejamento estratégico e execução"
     >
+
+      {/* ── Cabeçalho padrão Oquei Gestão ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+        border: '1px solid var(--border)', borderRadius: '20px',
+        padding: '24px 32px', marginBottom: '24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #2563EB, #7C3AED)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(37,99,235,0.35)',
+          }}>
+            <Zap size={26} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Hub de Crescimento
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Planejamento estratégico e execução com baixo atrito · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+        </div>
+        
+      </div>
       <Card>
         <div style={hubStyles.toolbar}>
           <div style={{ minWidth: '240px' }}>

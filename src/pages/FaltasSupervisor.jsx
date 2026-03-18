@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 // IMPORTAÇÃO DOS ESTILOS GLOBAIS
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors } from '../styles/globalStyles';
 
 export default function FaltasSupervisor({ userData }) {
   const [activeTab, setActiveTab] = useState('gestao');

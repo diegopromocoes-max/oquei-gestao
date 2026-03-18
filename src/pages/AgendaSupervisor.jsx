@@ -177,30 +177,76 @@ export default function AgendaSupervisor({ userData }) {
           </div>
 
           {/* Grade de dias */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px', alignItems: 'start' }}>
             {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e-${i}`} />)}
             {daysArray.map(day => {
-              const dayEvts   = getEventsForDay(day);
+              const dayEvts    = getEventsForDay(day);
               const isSelected = selectedDate.getDate() === day && selectedDate.getMonth() === currentDate.getMonth();
               const isToday    = new Date().getDate() === day && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
+              const hasEvts    = dayEvts.length > 0;
               return (
                 <div
                   key={day}
                   onClick={() => setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
                   style={{
-                    aspectRatio: '1', borderRadius: '10px', cursor: 'pointer', transition: '0.15s',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    minHeight: hasEvts ? 'auto' : '40px',
+                    borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'stretch',
                     fontSize: '14px', fontWeight: isSelected || isToday ? '800' : '500',
-                    background: isSelected ? colors.primary : isToday ? `${colors.primary}18` : 'transparent',
+                    background: isSelected ? colors.primary : isToday ? `${colors.primary}18` : hasEvts ? 'var(--bg-panel)' : 'transparent',
                     color: isSelected ? '#fff' : isToday ? colors.primary : 'var(--text-main)',
+                    border: isSelected ? 'none' : hasEvts ? `1px solid var(--border)` : '1px solid transparent',
+                    overflow: 'hidden',
                   }}
                 >
-                  <span>{day}</span>
-                  {dayEvts.length > 0 && (
-                    <div style={{ display: 'flex', gap: '2px', marginTop: '3px' }}>
-                      {dayEvts.slice(0, 3).map((ev, i) => (
-                        <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: isSelected ? '#fff' : TYPE_COLOR[ev.type] || colors.primary }} />
-                      ))}
+                  {/* Número do dia */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: hasEvts ? '6px 4px 4px' : '0',
+                    minHeight: '38px',
+                    fontWeight: isSelected || isToday ? '900' : '600',
+                  }}>
+                    {day}
+                  </div>
+
+                  {/* Etiquetas de eventos */}
+                  {hasEvts && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 3px 5px' }}>
+                      {dayEvts.slice(0, 2).map((ev, i) => {
+                        const evColor = isSelected ? 'rgba(255,255,255,0.85)' : (TYPE_COLOR[ev.type] || colors.primary);
+                        const evBg    = isSelected ? 'rgba(255,255,255,0.18)' : `${evColor}18`;
+                        const loc     = ev.location
+                          ? (ev.location.includes('http') ? '🔗' : `📍 ${ev.location.slice(0, 10)}${ev.location.length > 10 ? '…' : ''}`)
+                          : null;
+                        return (
+                          <div key={i} style={{
+                            background: evBg,
+                            borderLeft: `2px solid ${evColor}`,
+                            borderRadius: '3px',
+                            padding: '2px 4px',
+                            fontSize: '9px',
+                            fontWeight: '700',
+                            color: isSelected ? '#fff' : 'var(--text-main)',
+                            lineHeight: 1.3,
+                            overflow: 'hidden',
+                          }}>
+                            {/* Título */}
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isSelected ? '#fff' : evColor }}>
+                              {ev.title}
+                            </div>
+                            {/* Horário */}
+                            <div style={{ opacity: 0.8, display: 'flex', gap: '3px', alignItems: 'center', fontSize: '8px', marginTop: '1px' }}>
+                              <span>⏰ {ev.time}</span>
+                              {loc && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {dayEvts.length > 2 && (
+                        <div style={{ fontSize: '8px', fontWeight: '800', color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)', textAlign: 'center', paddingBottom: '2px' }}>
+                          +{dayEvts.length - 2} mais
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -52,6 +52,35 @@ export default function GestaoMetas({ userData }) {
       subtitle="Planejamento 360º: Canais de Venda, Distribuição por Cidades, Churn, Simulação e Planos de Ação."
       actions={
         <div style={{ ...styles.row, gap: '8px' }}>
+
+      {/* ── Cabeçalho padrão Oquei Gestão ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+        border: '1px solid var(--border)', borderRadius: '20px',
+        padding: '24px 32px', marginBottom: '24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #10B981, #2563EB)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(16,185,129,0.35)',
+          }}>
+            <Target size={26} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+              Planejamento e Metas
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
+              Canais, cidades, churn, simulação e planos de ação · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+        </div>
+        
+      </div>
           <Calendar size={16} color="var(--text-muted)" />
           <input
             type="month"
