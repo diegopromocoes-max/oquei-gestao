@@ -3,7 +3,7 @@ import { db, auth } from '../firebase';
 import { collection, query, getDocs, addDoc, serverTimestamp, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { 
   Megaphone, Send, User, CheckCircle, MessageCircle, Users, RefreshCw, 
-  Pin, Star, CalendarDays, X, PlusCircle, CheckCircle2, ChevronDown
+  Pin, Star, CalendarDays, X, PlusCircle, CheckCircle2, ChevronDown, ShieldCheck
 } from 'lucide-react';
 
 import { styles as global } from '../styles/globalStyles';
@@ -17,19 +17,19 @@ export default function Comunicados({ userData }) {
   
   const chatEndRef = useRef(null);
 
-  const canSendToAll = userData?.role === 'coordinator' || userData?.role === 'supervisor';
-  const canPin = userData?.role === 'coordinator' || userData?.role === 'supervisor';
+  const canSendToAll = ['coordinator', 'supervisor', 'growth_team', 'GROWTH_TEAM', 'growthteam'].includes(userData?.role);
+const canPin = userData?.role === 'coordinator' || userData?.role === 'supervisor';
 
-  const [form, setForm] = useState({ text: '', to: canSendToAll ? 'all' : 'coordinator', priority: 1 });
+const [form, setForm] = useState({ text: '', to: 'all', priority: 1 });
 
   // Datas para o Cabeçalho
   const todayDateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const unreadCount = messages.filter(m => !m.read).length;
 
-  useEffect(() => {
-    fetchMessages();
-    if (canSendToAll) fetchUsers();
-  }, [userData]);
+useEffect(() => {
+  fetchMessages();
+  fetchUsers();
+}, [userData]);
 
   // Auto-scroll para a última mensagem ao carregar
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function Comunicados({ userData }) {
         createdAt: serverTimestamp()
       });
 
-      setForm({ ...form, text: '', priority: 1, to: canSendToAll ? 'all' : 'coordinator' });
+setForm({ ...form, text: '', priority: 1, to: 'all' });
       setIsComposing(false);
       fetchMessages(); 
     } catch (err) { window.alert(err.message); }

@@ -1,37 +1,66 @@
 import { db } from '../../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
-export const getUsers = async ({ cityId, clusterId, fallbackAll = false } = {}) => {
-  const queries = [];
-  if (cityId && cityId !== '__all__') {
-    queries.push(query(collection(db, 'users'), where('cityId', '==', cityId)));
-  }
-  if (clusterId) {
-    queries.push(query(collection(db, 'users'), where('clusterId', '==', clusterId)));
-  }
-  if (queries.length === 0) {
-    queries.push(collection(db, 'users'));
-  }
+// Roles que sempre devem aparecer na lista de responsáveis,
+// independente de cityId ou clusterId
+const ALWAYS_INCLUDE_ROLES = ['coordinator', 'coordenador', 'master', 'diretor', 'supervisor', 'growth_team', 'GROWTH_TEAM'];
 
-  const snaps = await Promise.all(queries.map((q) => getDocs(q)));
+export const getUsers = async ({ cityId, clusterId, fallbackAll = false } = {}) => {
   const map = new Map();
-  snaps.forEach((snap) => {
+
+  const addToMap = (snap) => {
     snap.docs.forEach((d) => {
       map.set(d.id, { id: d.id, ...d.data() });
     });
-  });
+  };
 
-  let list = Array.from(map.values())
-    .filter((u) => u.active !== false)
-    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  try {
+    // 1. Busca usuários pelo filtro de cidade/cluster fornecido
+    if (cityId && cityId !== '__all__') {
+      const snap = await getDocs(query(collection(db, 'users'), where('cityId', '==', cityId)));
+      addToMap(snap);
+    } else if (clusterId) {
+      const snap = await getDocs(query(collection(db, 'users'), where('clusterId', '==', clusterId)));
+      addToMap(snap);
+    }
 
-  if (fallbackAll && list.length === 0) {
-    const allSnap = await getDocs(collection(db, 'users'));
-    list = allSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((u) => u.active !== false)
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    // 2. Sempre busca coordenadores e supervisores (aparecem em qualquer dropdown)
+    for (const role of ['coordinator', 'supervisor', 'growth_team']) {
+      const snap = await getDocs(query(collection(db, 'users'), where('role', '==', role)));
+      addToMap(snap);
+    }
+    // Variantes de role do coordenador
+    for (const role of ['coordenador', 'master', 'diretor', 'GROWTH_TEAM']) {
+      try {
+        const snap = await getDocs(query(collection(db, 'users'), where('role', '==', role)));
+        addToMap(snap);
+      } catch { /* ignora se não houver usuários com esse role */ }
+    }
+
+    // 3. Se ainda não há ninguém E fallbackAll está ativo, busca todos
+    if (map.size === 0 && fallbackAll) {
+      const allSnap = await getDocs(collection(db, 'users'));
+      addToMap(allSnap);
+    }
+  } catch (err) {
+    console.error('getUsers error:', err);
+    // Fallback silencioso — tenta buscar todos se as queries específicas falharem
+    if (fallbackAll && map.size === 0) {
+      try {
+        const allSnap = await getDocs(collection(db, 'users'));
+        addToMap(allSnap);
+      } catch { /* sem acesso nenhum */ }
+    }
   }
 
-  return list;
+  return Array.from(map.values())
+    .filter((u) => u.active !== false)
+    .sort((a, b) => {
+      // Ordena: coordenadores primeiro, depois supervisores, depois os demais
+      const order = { coordinator: 0, coordenador: 0, master: 0, diretor: 0, supervisor: 1, growth_team: 2 };
+      const oa = order[String(a.role).toLowerCase()] ?? 3;
+      const ob = order[String(b.role).toLowerCase()] ?? 3;
+      if (oa !== ob) return oa - ob;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
 };

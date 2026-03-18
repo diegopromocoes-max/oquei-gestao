@@ -103,8 +103,8 @@ const S = {
   textarea: { padding: '11px 13px', borderRadius: '9px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', color: 'var(--text-main)', background: 'var(--bg-input, var(--bg-app))', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical', minHeight: '88px' },
 
   overlay:     { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, animation: 'ui-fadeInFast 0.2s ease-out' },
-  modalBox:    { background: 'var(--bg-card)', padding: '28px 32px', borderRadius: '20px', width: '90%', maxWidth: '520px', border: '1px solid var(--border-md, rgba(255,255,255,0.12))', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', animation: 'ui-scaleIn 0.22s ease-out' },
-  modalBoxLg:  { background: 'var(--bg-card)', padding: '32px 36px', borderRadius: '20px', width: '90%', maxWidth: '760px', border: '1px solid var(--border-md, rgba(255,255,255,0.12))', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', animation: 'ui-scaleIn 0.22s ease-out' },
+  modalBox:    { background: 'var(--bg-card)', padding: '28px 32px', borderRadius: '20px', width: '90%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-md, rgba(255,255,255,0.12))', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', animation: 'ui-scaleIn 0.22s ease-out' },
+  modalBoxLg:  { background: 'var(--bg-card)', padding: '32px 36px', borderRadius: '20px', width: '90%', maxWidth: '760px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border-md, rgba(255,255,255,0.12))', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', animation: 'ui-scaleIn 0.22s ease-out' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '22px', gap: '12px' },
   modalTitle:  { fontSize: '19px', fontWeight: '900', color: 'var(--text-main)', margin: 0, letterSpacing: '-0.02em' },
   modalFooter: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px', paddingTop: '18px', borderTop: '1px solid var(--border)' },

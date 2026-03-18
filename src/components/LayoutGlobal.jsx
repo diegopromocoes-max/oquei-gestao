@@ -38,6 +38,8 @@ export default function LayoutGlobal({
   activeTab,
   onTabChange,
   onLogout,
+  appName = 'OQUEI CRM',
+  logoUrl = null,
 }) {
   const [collapsed,  setCollapsed]  = useState(false);
   const [theme, setTheme] = useState(() => {
@@ -198,14 +200,18 @@ const toggleTheme = () => {
         }}>
           <div style={{
             width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+            background: logoUrl ? 'transparent' : 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
+            boxShadow: logoUrl ? 'none' : '0 4px 12px rgba(37,99,235,0.4)',
+            overflow: 'hidden',
           }}>
-            <Zap size={17} color="#ffffff" fill="#ffffff" />
+            {logoUrl
+              ? <img src={logoUrl} alt="Logo" style={{ width: '34px', height: '34px', objectFit: 'contain', borderRadius: '9px' }} />
+              : <Zap size={17} color="#ffffff" fill="#ffffff" />
+            }
           </div>
           <span style={{ ...fade, fontWeight: '900', color: 'var(--text-main)', fontSize: '16px', letterSpacing: '-0.5px' }}>
-            OQUEI CRM
+            {appName}
           </span>
         </div>
 

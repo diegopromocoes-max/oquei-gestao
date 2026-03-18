@@ -18,8 +18,8 @@ export default function CatalogoRoteadores({ userData }) {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Permissão
-  const canManage = String(userData?.role).toLowerCase().includes('coord') || String(userData?.role).toLowerCase().includes('superv');
+  // Qualquer usuário autenticado pode editar no painel Growth
+  const canManage = true;
 
   // Estados do Formulário (Status atualizados)
   const [formData, setFormData] = useState({

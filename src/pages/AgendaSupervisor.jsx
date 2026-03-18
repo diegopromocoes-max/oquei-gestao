@@ -146,7 +146,7 @@ export default function AgendaSupervisor({ userData }) {
       <div style={styles.header}>
         <div style={styles.iconHeader}><CalendarDays size={24} color="white"/></div>
         <div>
-          <h1 style={styles.title}>Agenda do Supervisor</h1>
+          <h1 style={styles.title}>{userData?.role === 'growth_team' ? 'Minha Agenda' : 'Agenda do Supervisor'}</h1>
           <p style={styles.subtitle}>Gerencie suas reuniões e compromissos externos.</p>
         </div>
       </div>

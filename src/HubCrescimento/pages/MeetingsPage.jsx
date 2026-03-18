@@ -456,7 +456,7 @@ function MeetingCard({ meeting, onOpenAta, onConvert }) {
  */
 function AgendaList({ items, onConvert, onRemove, readOnly }) {
   if (!items || items.length === 0) {
-    return <div style={hubStyles.muted} style={{ fontSize: '13px' }}>Nenhum item de ata registrado.</div>;
+return <div style={{ ...hubStyles.muted, fontSize: '13px' }}>Nenhum item de ata registrado.</div>;
   }
 
   return (
