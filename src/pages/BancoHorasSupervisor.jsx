@@ -1,567 +1,673 @@
-import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
-import { 
-  Clock, Search, User, AlertTriangle, 
-  ArrowUpCircle, ArrowDownCircle, History, X, BarChart3, 
-  LayoutGrid, List, Camera, Trophy, AlertOctagon, Activity
+// ============================================================
+//  BancoHorasSupervisor.jsx — Oquei Gestão
+//
+//  Lógica:
+//  · hourBalance        → valor ABSOLUTO extraído do relatório.
+//                         Cada atualização SUBSTITUI (não soma).
+//  · manualAdjustments  → contador de ajustes manuais de ponto
+//                         no mês. Ao atingir 4, perde bonificação POQ.
+//  · adjustmentHistory  → array de log: { date, balance, reason,
+//                         supervisor, manualCount }
+//
+//  Firestore (users/{uid}):
+//    hourBalance:       number   (saldo atual — substituição)
+//    manualAdjustments: number   (qtd ajustes manuais no mês)
+//    adjustmentHistory: array[]  (histórico de lançamentos)
+// ============================================================
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { db } from '../firebase';
+import {
+  collection, query, where, getDocs,
+  doc, updateDoc, arrayUnion, serverTimestamp,
+} from 'firebase/firestore';
+import {
+  Clock, Search, User, AlertTriangle, AlertOctagon,
+  LayoutGrid, List, TrendingUp, TrendingDown,
+  History, Plus, Minus, X, Info, ShieldAlert,
+  CheckCircle2, Trophy,
 } from 'lucide-react';
+import { Page, Card, KpiCard, DataTable, Btn, Modal, Badge } from '../components/ui';
+import { colors } from '../globalStyles';
 
-export default function BancoHorasSupervisor({ userData }) {
-  const [loading, setLoading] = useState(true);
-  const [attendants, setAttendants] = useState([]);
-  const [filteredAttendants, setFilteredAttendants] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [supervisors, setSupervisors] = useState([]); 
-  
-  const [viewMode, setViewMode] = useState('grid'); 
+// ── Constantes POQ ────────────────────────────────────────────
+const POQ_LIMIT       = 4;   // ajustes manuais que causam perda da bonificação
+const POQ_ALERT_FROM  = 3;   // a partir de quantos ajustes exibe alerta amarelo
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [selectedCity, setSelectedCity] = useState('');
+const ROLES_ATENDENTE = ['attendant', 'atendente'];
 
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [editBalance, setEditBalance] = useState({ 
-    status: 'positive', 
-    hours: '', 
-    supervisor: userData?.name || 'Supervisor', 
-    manualAdjustments: 0 
-  });
-  
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', city: '', photo: null });
-  
-  useEffect(() => {
-    fetchData();
-  }, [userData]);
+// ── Helpers de status POQ ────────────────────────────────────
+const poqStatus = (count = 0) => {
+  if (count >= POQ_LIMIT)   return { cor: 'danger',  label: '❌ Perdeu POQ',  icon: 'block'   };
+  if (count >= POQ_ALERT_FROM) return { cor: 'warning', label: '⚠ Risco POQ', icon: 'warning' };
+  return                           { cor: 'success', label: '✅ OK',           icon: 'ok'      };
+};
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      // 1. OBTÉM CIDADES DO CLUSTER DO SUPERVISOR (Para evitar vazamento de dados)
-      let qCities;
-      if (userData?.role === 'coordinator') {
-        qCities = query(collection(db, "cities"));
-      } else {
-        qCities = query(collection(db, "cities"), where("clusterId", "==", userData?.clusterId || ''));
-      }
-      
-      const snapCities = await getDocs(qCities);
-      const myCitiesIds = snapCities.docs.map(d => d.id);
-      const myCitiesNames = snapCities.docs.map(d => d.data().name);
+const balanceColor = (b) => b > 0 ? colors.success : b < 0 ? colors.danger : colors.neutral;
 
-      // Preenche o dropdown de filtro com as cidades reais encontradas
-      setCities([...new Set(myCitiesNames)]);
-
-      // 2. OBTÉM ATENDENTES E FILTRA APENAS OS DAS SUAS CIDADES
-      const qUsers = query(collection(db, "users"), where("role", "==", "attendant"));
-      const snapUsers = await getDocs(qUsers);
-      
-      const list = snapUsers.docs
-        .map(d => ({ 
-          id: d.id, 
-          ...d.data(), 
-          balance: d.data().balance || 0,
-          manualAdjustments: d.data().manualAdjustments || 0,
-          history: d.data().history || [],
-          photo: d.data().photo || null
-        }))
-        // Filtro de Segurança: Coordenador vê tudo, Supervisor vê só as suas cidades
-        .filter(u => userData?.role === 'coordinator' || myCitiesIds.includes(u.cityId) || myCitiesNames.includes(u.cityId));
-      
-      setAttendants(list);
-      setFilteredAttendants(list);
-
-      // 3. OBTÉM SUPERVISORES (Para exibir no Histórico)
-      const qSup = query(collection(db, "users"), where("role", "==", "supervisor"));
-      const snapSup = await getDocs(qSup);
-      setSupervisors(snapSup.docs.map(d => d.data().name));
-
-    } catch (err) { console.error(err); }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    let result = attendants;
-    if (searchTerm) result = result.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    if (selectedCity) result = result.filter(a => a.cityId === selectedCity);
-    if (filterType === 'positive') result = result.filter(a => a.balance > 0);
-    if (filterType === 'negative') result = result.filter(a => a.balance < 0);
-    if (filterType === 'alert') result = result.filter(a => a.manualAdjustments > 4);
-    setFilteredAttendants(result);
-  }, [searchTerm, selectedCity, filterType, attendants]);
-
-  const stats = {
-    total: attendants.length,
-    globalBalance: attendants.reduce((acc, curr) => acc + curr.balance, 0),
-    positiveCount: attendants.filter(a => a.balance >= 0).length,
-    negativeCount: attendants.filter(a => a.balance < 0).length,
-    alertCount: attendants.filter(a => a.manualAdjustments > 4).length,
-    topPositives: [...attendants].filter(a => a.balance > 0).sort((a,b) => b.balance - a.balance).slice(0, 5),
-    topNegatives: [...attendants].filter(a => a.balance < 0).sort((a,b) => a.balance - b.balance).slice(0, 5),
-    topAdjustments: [...attendants].filter(a => a.manualAdjustments > 0).sort((a,b) => b.manualAdjustments - a.manualAdjustments).slice(0, 5),
-  };
-
-  const formatMinutes = (totalMinutes) => {
-    if (isNaN(totalMinutes)) return "00:00";
-    const isNegative = totalMinutes < 0;
-    const abs = Math.abs(totalMinutes);
-    const h = Math.floor(abs / 60);
-    const m = abs % 60;
-    return `${isNegative ? '-' : '+'}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  };
-
-  const convertToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
-  };
-  
-  const processFile = async (event, context) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      try {
-          const base64 = await convertToBase64(file);
-          if (context === 'edit') setEditForm(prev => ({ ...prev, photo: base64 }));
-      } catch (err) {
-          console.error(err);
-          alert("Erro ao processar imagem");
-      }
-  };
-
-  const updateEmployee = async () => {
-      if(!selectedEmployee) return;
-      try {
-          await updateDoc(doc(db, "users", selectedEmployee.id), {
-              name: editForm.name,
-              cityId: editForm.city, 
-              photo: editForm.photo
-          });
-          alert("Perfil atualizado!");
-          setIsEditing(false);
-          fetchData();
-      } catch(e) {
-          alert("Erro de Permissão: A sua conta de Supervisor não tem permissão para editar utilizadores diretamente no banco de dados. Verifique as regras do Firebase.");
-      }
-  };
-
-  const formatTimeInput = (e) => {
-    let value = e.target.value.replace(/\D/g, ''); 
-    if (value.length > 4) value = value.slice(0, 4);
-    if (value.length >= 3) {
-        value = value.slice(0, 2) + ':' + value.slice(2);
-    }
-    setEditBalance({ ...editBalance, hours: value });
-  };
-
-  const saveBalance = async () => {
-    if (!editBalance.hours || editBalance.hours.length < 3) return alert("Informe o saldo no formato HH:MM");
-    if (!editBalance.supervisor) return alert("Selecione o supervisor responsável.");
-
-    try {
-      const [hStr, mStr] = editBalance.hours.split(':');
-      const hours = parseInt(hStr);
-      const minutes = parseInt(mStr);
-      let totalMinutes = (hours * 60) + minutes;
-
-      if (editBalance.status === 'negative') totalMinutes = -totalMinutes;
-
-      const newEntry = {
-        date: new Date().toISOString(),
-        supervisor: editBalance.supervisor,
-        amount: formatMinutes(totalMinutes), 
-        rawAmount: totalMinutes,
-        reason: `Atualização de Saldo (Ajustes: ${editBalance.manualAdjustments})`
-      };
-
-      const userRef = doc(db, "users", selectedEmployee.id);
-      
-      await updateDoc(userRef, {
-        balance: totalMinutes,
-        manualAdjustments: parseInt(editBalance.manualAdjustments),
-        history: arrayUnion(newEntry),
-        lastUpdate: serverTimestamp()
-      });
-
-      alert("Banco de horas atualizado com sucesso!");
-      
-      setEditBalance({ ...editBalance, hours: '' });
-      setSelectedEmployee(null);
-      fetchData(); 
-
-    } catch (err) { 
-      alert("Erro ao salvar: O Supervisor não tem permissão direta na Firestore para editar o banco de dados do utilizador. Solicite ajuste nas regras do banco (Adicione isSupervisor() à regra de users)."); 
-    }
-  };
-
-  const openDetails = (emp) => {
-    setSelectedEmployee(emp);
-    setIsEditing(false);
-    setEditForm({ name: emp.name, city: emp.cityId, photo: emp.photo });
-    
-    const currentMinutes = emp.balance || 0;
-    const absMinutes = Math.abs(currentMinutes);
-    const hh = String(Math.floor(absMinutes / 60)).padStart(2, '0');
-    const mm = String(absMinutes % 60).padStart(2, '0');
-
-    setEditBalance({
-        status: currentMinutes >= 0 ? 'positive' : 'negative',
-        hours: `${hh}:${mm}`,
-        supervisor: userData?.name || 'Supervisor', 
-        manualAdjustments: emp.manualAdjustments || 0
-    });
-  };
-
-  const KpiCard = ({ label, value, sub, color, icon: Icon }) => (
-    <div style={{...styles.card, borderLeft: `4px solid ${color}`}}>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'start'}}>
-        <div>
-          <p style={{fontSize:'11px', fontWeight:'800', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}>{label}</p>
-          <h3 style={{fontSize:'28px', fontWeight:'900', color:'var(--text-main)', marginTop:'5px'}}>{value}</h3>
-          {sub && <p style={{fontSize:'12px', color: color, fontWeight:'bold', marginTop:'5px'}}>{sub}</p>}
-        </div>
-        <div style={{padding:'10px', borderRadius:'12px', background: `${color}15`, color: color}}>
-          <Icon size={24} />
-        </div>
-      </div>
-    </div>
-  );
-
+// ── Banner de alerta POQ ──────────────────────────────────────
+function PoqBanner({ count }) {
+  if (count < POQ_ALERT_FROM) return null;
+  const lost = count >= POQ_LIMIT;
   return (
-    <div style={styles.container}>
-      
-      <div style={styles.header}>
-        <div style={styles.iconHeader}><Clock size={28} color="white"/></div>
-        <div>
-          <h1 style={styles.title}>Banco de Horas & POQ</h1>
-          <p style={styles.subtitle}>Gestão de tempo e produtividade da equipe.</p>
-        </div>
-      </div>
-
-      <div style={styles.grid4}>
-        <KpiCard label="Colaboradores" value={stats.total} sub={`${stats.alertCount} com POQ Zerado`} color="#3b82f6" icon={User} />
-        <KpiCard label="Saldo Global" value={formatMinutes(stats.globalBalance)} sub="Total Acumulado" color={stats.globalBalance >= 0 ? "#10b981" : "#ef4444"} icon={BarChart3} />
-        <KpiCard label="Positivos" value={stats.positiveCount} color="#10b981" icon={ArrowUpCircle} />
-        <KpiCard label="Negativos" value={stats.negativeCount} color="#ef4444" icon={ArrowDownCircle} />
-      </div>
-
-      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:'20px', marginBottom:'30px'}}>
-        
-        <div style={styles.rankingCard}>
-           <h3 style={{...styles.cardTitle, color: '#10b981'}}><Trophy size={18}/> Top Créditos</h3>
-           <div style={styles.rankingList}>
-             {stats.topPositives.map((att, i) => (
-               <div key={att.id} style={styles.rankingItem}>
-                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                   <span style={{fontWeight:'bold', color:'var(--text-muted)', width:'15px'}}>{i+1}</span>
-                   <span style={{fontWeight:'600', color:'var(--text-main)'}}>{att.name.split(' ')[0]}</span>
-                 </div>
-                 <span style={{fontWeight:'bold', color:'#10b981'}}>{formatMinutes(att.balance)}</span>
-               </div>
-             ))}
-             {stats.topPositives.length === 0 && <p style={styles.emptyText}>Sem saldos positivos.</p>}
-           </div>
-        </div>
-
-        <div style={styles.rankingCard}>
-           <h3 style={{...styles.cardTitle, color: '#ef4444'}}><AlertOctagon size={18}/> Top Débitos</h3>
-           <div style={styles.rankingList}>
-             {stats.topNegatives.map((att, i) => (
-               <div key={att.id} style={styles.rankingItem}>
-                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                   <span style={{fontWeight:'bold', color:'var(--text-muted)', width:'15px'}}>{i+1}</span>
-                   <span style={{fontWeight:'600', color:'var(--text-main)'}}>{att.name.split(' ')[0]}</span>
-                 </div>
-                 <span style={{fontWeight:'bold', color:'#ef4444'}}>{formatMinutes(att.balance)}</span>
-               </div>
-             ))}
-             {stats.topNegatives.length === 0 && <p style={styles.emptyText}>Sem saldos negativos.</p>}
-           </div>
-        </div>
-
-        <div style={styles.rankingCard}>
-           <h3 style={{...styles.cardTitle, color: '#f59e0b'}}><Activity size={18}/> Top Ajustes Manuais</h3>
-           <div style={styles.rankingList}>
-             {stats.topAdjustments.map((att, i) => (
-               <div key={att.id} style={styles.rankingItem}>
-                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                   <span style={{fontWeight:'bold', color:'var(--text-muted)', width:'15px'}}>{i+1}</span>
-                   <div>
-                     <span style={{fontWeight:'600', color:'var(--text-main)', display:'block'}}>{att.name.split(' ')[0]}</span>
-                     {att.manualAdjustments > 4 && <span style={{fontSize:'9px', background:'var(--bg-danger-light)', color:'#ef4444', padding:'1px 4px', borderRadius:'4px', fontWeight:'bold'}}>POQ ZERADO</span>}
-                   </div>
-                 </div>
-                 <span style={{fontWeight:'bold', color: att.manualAdjustments > 4 ? '#ef4444' : '#f59e0b'}}>{att.manualAdjustments}</span>
-               </div>
-             ))}
-             {stats.topAdjustments.length === 0 && <p style={styles.emptyText}>Sem ajustes manuais.</p>}
-           </div>
-        </div>
-      </div>
-
-      <div style={styles.toolbar}>
-        <div style={styles.searchBox}>
-          <Search size={18} color="var(--text-muted)" />
-          <input style={styles.searchInput} placeholder="Buscar colaborador..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
-        
-        <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
-          <select style={styles.select} value={selectedCity} onChange={e => setSelectedCity(e.target.value)}>
-            <option value="">Todas as Cidades</option>
-            {cities.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          
-          <div style={styles.viewToggle}>
-            <button onClick={() => setViewMode('grid')} style={viewMode === 'grid' ? styles.viewBtnActive : styles.viewBtn}><LayoutGrid size={18}/></button>
-            <button onClick={() => setViewMode('list')} style={viewMode === 'list' ? styles.viewBtnActive : styles.viewBtn}><List size={18}/></button>
-          </div>
-        </div>
-      </div>
-
-      {viewMode === 'grid' && (
-        <div style={styles.gridCards}>
-          {filteredAttendants.map(att => (
-            <div key={att.id} style={styles.employeeCard} onClick={() => openDetails(att)}>
-              <div style={styles.cardHeaderBanner}>
-                <span style={{
-                  ...styles.statusBadge, 
-                  background: att.balance >= 0 ? 'var(--bg-success-light)' : 'var(--bg-danger-light)',
-                  color: att.balance >= 0 ? '#10b981' : '#ef4444'
-                }}>
-                  {att.balance >= 0 ? 'POSITIVO' : 'NEGATIVO'}
-                </span>
-              </div>
-              
-              <div style={styles.cardAvatarWrapper}>
-                 {att.photo ? (
-                    <img src={att.photo} alt={att.name} style={styles.cardAvatarImg} />
-                 ) : (
-                    <div style={styles.cardAvatarPlaceholder}>{att.name.charAt(0)}</div>
-                 )}
-              </div>
-              
-              <div style={{textAlign:'center', marginTop:'10px', paddingBottom:'20px'}}>
-                <h3 style={styles.cardName}>{att.name}</h3>
-                <p style={styles.cardRole}>{att.cityId}</p>
-                
-                <div style={styles.cardBalance}>
-                   <span style={{fontSize:'10px', fontWeight:'bold', color:'var(--text-muted)', textTransform:'uppercase'}}>Saldo Atual</span>
-                   <div style={{fontSize:'24px', fontWeight:'900', color: att.balance >= 0 ? '#10b981' : '#ef4444'}}>
-                     {formatMinutes(att.balance)}
-                   </div>
-                </div>
-
-                {att.manualAdjustments > 4 && (
-                   <div style={styles.alertPoq}>⚠️ POQ ZERADO ({att.manualAdjustments})</div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {viewMode === 'list' && (
-        <div style={styles.tableCard}>
-          <table style={styles.table}>
-            <thead>
-              <tr style={{background:'var(--bg-panel)', borderBottom:'1px solid var(--border)'}}>
-                <th style={styles.th}>Colaborador</th>
-                <th style={styles.th}>Cidade</th>
-                <th style={{...styles.th, textAlign:'center'}}>Ajustes</th>
-                <th style={{...styles.th, textAlign:'right'}}>Saldo</th>
-                <th style={styles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAttendants.map(att => (
-                <tr key={att.id} style={{borderBottom:'1px solid var(--border)'}}>
-                  <td style={styles.td}>
-                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                      {att.photo ? <img src={att.photo} style={{width:32, height:32, borderRadius:'50%', objectFit:'cover'}} /> : <div style={{...styles.avatar, width:32, height:32, fontSize:12}}>{att.name.charAt(0)}</div>}
-                      <span style={{fontWeight:'bold', color:'var(--text-main)'}}>{att.name}</span>
-                    </div>
-                  </td>
-                  <td style={styles.td}>{att.cityId}</td>
-                  <td style={{...styles.td, textAlign:'center'}}>
-                    <span style={{padding:'2px 6px', borderRadius:'4px', background: att.manualAdjustments > 4 ? 'var(--bg-danger-light)' : 'var(--bg-panel)', color: att.manualAdjustments > 4 ? '#ef4444' : 'var(--text-muted)', fontWeight:'bold', fontSize:'11px'}}>
-                      {att.manualAdjustments}
-                    </span>
-                  </td>
-                  <td style={{...styles.td, textAlign:'right', fontWeight:'bold', color: att.balance >= 0 ? '#10b981' : '#ef4444'}}>
-                    {formatMinutes(att.balance)}
-                  </td>
-                  <td style={styles.td}>
-                    <button onClick={() => openDetails(att)} style={styles.actionBtn}>Gerenciar</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {selectedEmployee && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalHeader}>
-              <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
-                 <div style={{position:'relative'}}>
-                    {selectedEmployee.photo ? (
-                       <img src={selectedEmployee.photo} style={{width:60, height:60, borderRadius:'16px', objectFit:'cover'}} />
-                    ) : (
-                       <div style={{width:60, height:60, borderRadius:'16px', background:'var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', fontSize:'24px', color:'var(--text-muted)'}}>{selectedEmployee.name.charAt(0)}</div>
-                    )}
-                    <label htmlFor="photo-upload" style={styles.cameraBtn}>
-                       <Camera size={14} color="white" />
-                       <input id="photo-upload" type="file" style={{display:'none'}} onChange={(e) => processFile(e, 'edit')} />
-                    </label>
-                 </div>
-                 <div>
-                    <h3 style={{fontSize:'20px', fontWeight:'bold', color:'var(--text-main)', margin:0}}>{selectedEmployee.name}</h3>
-                    <p style={{fontSize:'12px', color:'var(--text-muted)', margin:0}}>{selectedEmployee.cityId} • {selectedEmployee.email}</p>
-                 </div>
-              </div>
-              <button onClick={() => {setSelectedEmployee(null);}} style={styles.closeBtn}><X size={24}/></button>
-            </div>
-            
-            {isEditing ? (
-               <div style={{marginBottom:'20px', padding:'15px', background:'var(--bg-panel)', borderRadius:'12px', border:'1px solid var(--border)'}}>
-                  <h4 style={{fontSize:'12px', fontWeight:'bold', color:'var(--text-main)', marginBottom:'10px'}}>Editar Dados</h4>
-                  <input value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})} style={{...styles.input, marginBottom:'10px'}} placeholder="Nome" />
-                  <select value={editForm.city} onChange={e=>setEditForm({...editForm, city:e.target.value})} style={styles.select}>
-                     <option value="">Selecione a Loja</option>
-                     {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
-                     <button onClick={updateEmployee} style={{...styles.saveBtn, padding:'10px'}}>Salvar Dados</button>
-                     <button onClick={() => setIsEditing(false)} style={styles.btnSecondary}>Cancelar</button>
-                  </div>
-               </div>
-            ) : (
-               <button onClick={() => setIsEditing(true)} style={{fontSize:'11px', color:'var(--text-brand)', background:'none', border:'none', cursor:'pointer', marginBottom:'20px', fontWeight:'bold'}}>Editar Nome/Loja</button>
-            )}
-
-            <div style={{background: 'var(--bg-panel)', borderRadius: '16px', padding: '20px', border: '1px solid var(--border)'}}>
-              <h4 style={{fontSize:'12px', fontWeight:'bold', color:'var(--text-muted)', marginBottom:'15px', textTransform:'uppercase'}}>Atualizar Status Atual</h4>
-              
-              <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
-                <button type="button" onClick={() => setEditBalance({...editBalance, status: 'positive'})} style={{...styles.toggleBtn, background: editBalance.status === 'positive' ? 'var(--bg-success-light)' : 'var(--bg-card)', color: editBalance.status === 'positive' ? '#10b981' : 'var(--text-muted)', borderColor: editBalance.status === 'positive' ? '#10b981' : 'var(--border)'}}>
-                  <ArrowUpCircle size={16}/> Saldo Positivo
-                </button>
-                <button type="button" onClick={() => setEditBalance({...editBalance, status: 'negative'})} style={{...styles.toggleBtn, background: editBalance.status === 'negative' ? 'var(--bg-danger-light)' : 'var(--bg-card)', color: editBalance.status === 'negative' ? '#ef4444' : 'var(--text-muted)', borderColor: editBalance.status === 'negative' ? '#ef4444' : 'var(--border)'}}>
-                  <ArrowDownCircle size={16}/> Saldo Negativo
-                </button>
-              </div>
-
-              <div style={{display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'20px'}}>
-                 <input 
-                   type="text" 
-                   value={editBalance.hours} 
-                   onChange={formatTimeInput} 
-                   placeholder="00:00" 
-                   style={{
-                     fontSize: '40px', fontWeight: '900', color: editBalance.status === 'positive' ? '#10b981' : '#ef4444',
-                     width: '180px', textAlign: 'center', background: 'transparent', border: 'none', outline: 'none'
-                   }} 
-                 />
-              </div>
-
-              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 15px', background:'var(--bg-card)', borderRadius:'10px', border:'1px solid var(--border)', marginBottom:'15px'}}>
-                 <span style={{fontSize:'13px', fontWeight:'bold', color:'var(--text-main)'}}>Ajustes Manuais (Mês)</span>
-                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                    <button onClick={() => setEditBalance({...editBalance, manualAdjustments: Math.max(0, editBalance.manualAdjustments - 1)})} style={styles.circleBtn}>-</button>
-                    <span style={{fontWeight:'bold', fontSize:'16px', color: 'var(--text-main)'}}>{editBalance.manualAdjustments}</span>
-                    <button onClick={() => setEditBalance({...editBalance, manualAdjustments: editBalance.manualAdjustments + 1})} style={styles.circleBtn}>+</button>
-                 </div>
-              </div>
-              
-              <button onClick={saveBalance} style={styles.saveBtn}>Salvar Atualização</button>
-            </div>
-
-            <div style={{marginTop:'30px', borderTop:'1px solid var(--border)', paddingTop:'20px'}}>
-              <h4 style={{fontSize:'14px', fontWeight:'bold', color:'var(--text-main)', marginBottom:'10px', display:'flex', alignItems:'center', gap:'5px'}}>
-                <History size={16}/> Histórico de Atualizações
-              </h4>
-              <div style={{maxHeight:'150px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'8px'}} className="hide-scrollbar">
-                {selectedEmployee.history?.slice().reverse().map((h, i) => (
-                  <div key={i} style={{fontSize:'12px', display:'flex', justifyContent:'space-between', padding:'10px', background:'var(--bg-panel)', border:'1px solid var(--border)', borderRadius:'8px'}}>
-                    <div>
-                      <span style={{fontWeight:'bold', color:'var(--text-main)'}}>Atualizado por {h.supervisor}</span>
-                      <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{new Date(h.date).toLocaleString()} • Ajustes: {h.adjustmentsSnapshot || h.reason?.replace(/\D/g, '') || 0}</div>
-                    </div>
-                    <span style={{fontWeight:'bold', color: h.amount.includes('+') ? '#10b981' : '#ef4444'}}>
-                      {h.amount}
-                    </span>
-                  </div>
-                ))}
-                {(!selectedEmployee.history || selectedEmployee.history.length === 0) && <p style={{fontSize:'12px', color:'var(--text-muted)', textAlign:'center'}}>Nenhum registro.</p>}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: '10px',
+      background: lost ? `${colors.danger}12` : `${colors.warning}12`,
+      border: `1px solid ${lost ? colors.danger : colors.warning}40`,
+      borderLeft: `4px solid ${lost ? colors.danger : colors.warning}`,
+      borderRadius: '10px', padding: '12px 14px',
+      fontSize: '13px', color: 'var(--text-main)', fontWeight: '600',
+    }}>
+      {lost
+        ? <AlertOctagon size={16} color={colors.danger} style={{ flexShrink: 0, marginTop: '1px' }} />
+        : <AlertTriangle size={16} color={colors.warning} style={{ flexShrink: 0, marginTop: '1px' }} />
+      }
+      <span>
+        {lost
+          ? <><strong style={{ color: colors.danger }}>Bonificação POQ perdida.</strong> {count} ajustes manuais de ponto registrados no mês (limite: {POQ_LIMIT}).</>
+          : <><strong style={{ color: colors.warning }}>Atenção:</strong> {count} de {POQ_LIMIT} ajustes manuais usados. Mais {POQ_LIMIT - count} ajuste{POQ_LIMIT - count > 1 ? 's' : ''} e a bonificação POQ será perdida.</>
+        }
+      </span>
     </div>
   );
 }
 
-const styles = {
-  container: { padding: '40px', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Inter', sans-serif", animation: 'fadeIn 0.4s ease-out' },
-  header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px' },
-  iconHeader: { width: '45px', height: '45px', borderRadius: '12px', background: 'var(--text-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' },
-  title: { fontSize: '24px', fontWeight: '800', color: 'var(--text-main)', margin: 0 },
-  subtitle: { fontSize: '14px', color: 'var(--text-muted)', margin: 0 },
-  
-  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
-  card: { background: 'var(--bg-card)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
+// ── Componente principal ──────────────────────────────────────
+export default function BancoHorasSupervisor({ userData }) {
 
-  toolbar: { display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '15px', marginBottom: '30px' },
-  searchBox: { display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-card)', padding: '10px 15px', borderRadius: '12px', border: '1px solid var(--border)', flex: 1, minWidth: '250px' },
-  searchInput: { border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '14px', color: 'var(--text-main)' },
-  select: { padding: '10px 15px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', fontSize:'13px', fontWeight:'600' },
-  
-  viewToggle: { display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '4px' },
-  viewBtn: { padding: '8px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', borderRadius: '8px' },
-  viewBtnActive: { padding: '8px', border: 'none', background: 'var(--bg-primary-light)', color: 'var(--text-brand)', cursor: 'pointer', borderRadius: '8px' },
+  const [loading,    setLoading]    = useState(true);
+  const [attendants, setAttendants] = useState([]);
+  const [cities,     setCities]     = useState([]);
+  const [viewMode,   setViewMode]   = useState('list');
 
-  rankingCard: { background: 'var(--bg-card)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' },
-  rankingList: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  rankingItem: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '5px 0', borderBottom: '1px solid var(--bg-panel)' },
-  emptyText: { textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px', padding: '10px', fontStyle: 'italic' },
-  cardTitle: { fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', margin: 0 },
+  // Filtros
+  const [search,     setSearch]     = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const [balFilter,  setBalFilter]  = useState('all');
+  const [poqFilter,  setPoqFilter]  = useState('all'); // all | risk | lost
 
-  gridCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '25px' },
-  employeeCard: { background: 'var(--bg-card)', borderRadius: '20px', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)', cursor: 'pointer', transition: 'transform 0.2s', position: 'relative' },
-  cardHeaderBanner: { height: '60px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)', display:'flex', justifyContent:'center', alignItems:'start', paddingTop:'10px' },
-  cardAvatarWrapper: { width: '80px', height: '80px', borderRadius: '50%', border: '4px solid var(--bg-card)', margin: '-40px auto 0', overflow: 'hidden', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  cardAvatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  cardAvatarPlaceholder: { fontSize: '32px', fontWeight: 'bold', color: 'var(--text-muted)' },
-  
-  statusBadge: { fontSize: '10px', fontWeight: '900', padding: '4px 10px', borderRadius: '20px' },
-  cardName: { fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', margin: '0' },
-  cardRole: { fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  cardBalance: { marginTop: '15px', padding: '15px', background: 'var(--bg-panel)', borderTop: '1px solid var(--border)' },
-  alertPoq: { background: 'var(--bg-danger-light)', color: '#ef4444', fontSize: '10px', fontWeight: 'bold', textAlign: 'center', padding: '5px' },
+  // Modal
+  const [modalEmp,  setModalEmp]  = useState(null);
+  const [modalTab,  setModalTab]  = useState('balance'); // balance | manual | history
+  const [saving,    setSaving]    = useState(false);
 
-  tableCard: { background: 'var(--bg-card)', borderRadius: '20px', border: '1px solid var(--border)', overflow: 'hidden' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { padding: '15px', textAlign: 'left', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  td: { padding: '15px', fontSize: '14px', color: 'var(--text-main)' },
-  avatar: { width: '32px', height: '32px', borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'var(--text-muted)' },
-  actionBtn: { padding: '6px 12px', borderRadius: '8px', background: 'var(--bg-panel)', color: 'var(--text-main)', border: 'none', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', border: '1px solid var(--border)' },
-  
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 6, 23, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modalBox: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border)' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px' },
-  closeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' },
-  cameraBtn: { position: 'absolute', bottom: 0, right: 0, background: 'var(--text-brand)', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg-card)', cursor: 'pointer' },
+  // Formulário — banco de horas (substituição)
+  const [newBalance, setNewBalance] = useState('');
+  const [balReason,  setBalReason]  = useState('');
 
-  toggleBtn: { flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', fontWeight: 'bold', fontSize: '13px' },
-  input: { padding: '12px', borderRadius: '10px', border: '1px solid var(--border)', width: '100%', boxSizing: 'border-box', outline: 'none', background: 'var(--bg-app)', color: 'var(--text-main)' },
-  saveBtn: { padding: '14px', borderRadius: '12px', background: 'var(--text-brand)', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer', width: '100%' },
-  circleBtn: { width: '32px', height: '32px', borderRadius: '8px', background: 'var(--bg-card)', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-main)' },
-  btnSecondary: { background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }
-};
+  // Formulário — ajuste manual de ponto
+  const [manualDelta,  setManualDelta]  = useState('1'); // quantos ajustes manuais registrar
+  const [manualReason, setManualReason] = useState('');
+
+  const roleNorm = String(userData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  const isMaster = ['coordinator', 'coordenador', 'master', 'diretor'].includes(roleNorm);
+
+  // ── Carregamento ──────────────────────────────────────────
+  useEffect(() => {
+    if (!userData) return;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const citiesSnap = await getDocs(collection(db, 'cities'));
+        const citiesList = citiesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setCities(citiesList);
+
+        const usersSnap = await getDocs(
+          query(collection(db, 'users'), where('role', 'in', ROLES_ATENDENTE))
+        );
+        const all = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        if (isMaster) {
+          setAttendants(all);
+        } else {
+          const myCluster = String(userData.clusterId || '').trim();
+          setAttendants(all.filter(att => {
+            const cidade  = citiesList.find(c => c.id === att.cityId);
+            return String(cidade?.clusterId || '').trim() === myCluster;
+          }));
+        }
+      } catch (err) {
+        console.error('[BancoHoras]', err);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [userData, isMaster]);
+
+  // ── Filtragem ─────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return attendants.filter(emp => {
+      const matchSearch = (emp.name || '').toLowerCase().includes(search.toLowerCase());
+      const matchCity   = !cityFilter || emp.cityId === cityFilter;
+      const bal         = emp.hourBalance || 0;
+      const matchBal    =
+        balFilter === 'positive' ? bal > 0  :
+        balFilter === 'negative' ? bal < 0  :
+        balFilter === 'critical' ? Math.abs(bal) > 20 : true;
+      const adj         = emp.manualAdjustments || 0;
+      const matchPoq    =
+        poqFilter === 'risk' ? adj >= POQ_ALERT_FROM :
+        poqFilter === 'lost' ? adj >= POQ_LIMIT       : true;
+      return matchSearch && matchCity && matchBal && matchPoq;
+    });
+  }, [attendants, search, cityFilter, balFilter, poqFilter]);
+
+  // ── KPIs ──────────────────────────────────────────────────
+  const kpis = useMemo(() => ({
+    saldo:   filtered.reduce((s, e) => s + (e.hourBalance || 0), 0),
+    critico: filtered.filter(e => Math.abs(e.hourBalance || 0) > 20).length,
+    poqRisk: attendants.filter(e => (e.manualAdjustments || 0) >= POQ_ALERT_FROM && (e.manualAdjustments || 0) < POQ_LIMIT).length,
+    poqLost: attendants.filter(e => (e.manualAdjustments || 0) >= POQ_LIMIT).length,
+    total:   attendants.length,
+  }), [filtered, attendants]);
+
+  // ── Helpers ───────────────────────────────────────────────
+  const cityName = (cityId) =>
+    cities.find(c => c.id === cityId)?.name || cityId || '—';
+
+  const openModal = (emp) => {
+    setModalEmp(emp);
+    setModalTab('balance');
+    setNewBalance(emp.hourBalance != null ? String(emp.hourBalance) : '');
+    setBalReason('');
+    setManualDelta('1');
+    setManualReason('');
+  };
+  const closeModal = () => setModalEmp(null);
+
+  // ── Salvar banco de horas (substituição) ──────────────────
+  const saveBalance = async () => {
+    const val = parseFloat(newBalance);
+    if (isNaN(val))          return window.showToast?.('Informe um saldo válido.', 'error');
+    if (!balReason.trim())   return window.showToast?.('Informe o motivo do lançamento.', 'error');
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', modalEmp.id), {
+        hourBalance: val,
+        adjustmentHistory: arrayUnion({
+          date:       new Date().toISOString(),
+          balance:    val,
+          reason:     balReason,
+          supervisor: userData?.name || 'Supervisor',
+          type:       'balance_update',
+        }),
+      });
+      setAttendants(prev =>
+        prev.map(u => u.id === modalEmp.id
+          ? { ...u, hourBalance: val,
+              adjustmentHistory: [...(u.adjustmentHistory || []), { date: new Date().toISOString(), balance: val, reason: balReason, type: 'balance_update' }] }
+          : u
+        )
+      );
+      // Atualiza o modal com o novo estado
+      setModalEmp(prev => ({ ...prev, hourBalance: val }));
+      window.showToast?.('Banco de horas atualizado!', 'success');
+      setBalReason('');
+    } catch (err) {
+      window.showToast?.('Erro ao salvar: ' + err.message, 'error');
+    }
+    setSaving(false);
+  };
+
+  // ── Registrar ajuste manual de ponto ─────────────────────
+  const saveManual = async () => {
+    const qty = parseInt(manualDelta);
+    if (!qty || qty < 1)       return window.showToast?.('Informe a quantidade de ajustes.', 'error');
+    if (!manualReason.trim())  return window.showToast?.('Informe o motivo.', 'error');
+    setSaving(true);
+    try {
+      const current     = modalEmp.manualAdjustments || 0;
+      const newCount    = current + qty;
+      await updateDoc(doc(db, 'users', modalEmp.id), {
+        manualAdjustments: newCount,
+        adjustmentHistory: arrayUnion({
+          date:        new Date().toISOString(),
+          type:        'manual_adjustment',
+          qty,
+          totalAfter:  newCount,
+          reason:      manualReason,
+          supervisor:  userData?.name || 'Supervisor',
+        }),
+      });
+      setAttendants(prev =>
+        prev.map(u => u.id === modalEmp.id
+          ? { ...u, manualAdjustments: newCount }
+          : u
+        )
+      );
+      setModalEmp(prev => ({ ...prev, manualAdjustments: newCount }));
+      window.showToast?.(
+        newCount >= POQ_LIMIT
+          ? `⚠ ${modalEmp.name?.split(' ')[0]} atingiu ${newCount} ajustes — POQ perdido!`
+          : `Registrado. Total: ${newCount}/${POQ_LIMIT} ajustes.`,
+        newCount >= POQ_LIMIT ? 'error' : 'success'
+      );
+      setManualDelta('1');
+      setManualReason('');
+    } catch (err) {
+      window.showToast?.('Erro: ' + err.message, 'error');
+    }
+    setSaving(false);
+  };
+
+  // ── Zerar ajustes manuais (início de novo mês) ────────────
+  const resetManual = async (emp) => {
+    if (!window.confirm(`Zerar ajustes manuais de ${emp.name}? Use no início de cada mês.`)) return;
+    try {
+      await updateDoc(doc(db, 'users', emp.id), {
+        manualAdjustments: 0,
+        adjustmentHistory: arrayUnion({
+          date:       new Date().toISOString(),
+          type:       'manual_reset',
+          reason:     'Reset mensal',
+          supervisor: userData?.name || 'Supervisor',
+        }),
+      });
+      setAttendants(prev => prev.map(u => u.id === emp.id ? { ...u, manualAdjustments: 0 } : u));
+      if (modalEmp?.id === emp.id) setModalEmp(prev => ({ ...prev, manualAdjustments: 0 }));
+      window.showToast?.('Ajustes manuais zerados.', 'success');
+    } catch { window.showToast?.('Erro ao zerar.', 'error'); }
+  };
+
+  // ── Colunas da tabela ─────────────────────────────────────
+  const columns = [
+    {
+      key: 'nome', label: 'Colaborador',
+      render: (_v, row) => {
+        if (!row) return null;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0, background: `${colors.primary}20`, color: colors.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '15px' }}>
+              {(row.name || '?').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '14px' }}>{row.name || '(sem nome)'}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{cityName(row.cityId)}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'saldo', label: 'Saldo de Horas',
+      render: (_v, row) => {
+        if (!row) return null;
+        const b = row.hourBalance || 0;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+            {b > 0 ? <TrendingUp size={14} color={colors.success} /> : b < 0 ? <TrendingDown size={14} color={colors.danger} /> : null}
+            <span style={{ fontWeight: '900', fontSize: '16px', color: balanceColor(b) }}>
+              {b > 0 ? '+' : ''}{b.toFixed(1)}h
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'poq', label: 'POQ / Ajustes Manuais',
+      render: (_v, row) => {
+        if (!row) return null;
+        const adj = row.manualAdjustments || 0;
+        const st  = poqStatus(adj);
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Badge cor={st.cor}>{st.label}</Badge>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700' }}>
+              {adj}/{POQ_LIMIT}
+            </span>
+            {/* Barrinhas de progresso */}
+            <div style={{ display: 'flex', gap: '3px' }}>
+              {Array.from({ length: POQ_LIMIT }).map((_, i) => (
+                <div key={i} style={{ width: '10px', height: '10px', borderRadius: '3px', background: i < adj ? (adj >= POQ_LIMIT ? colors.danger : adj >= POQ_ALERT_FROM ? colors.warning : colors.success) : 'var(--border)' }} />
+              ))}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'acoes', label: '', align: 'right',
+      render: (_v, row) => {
+        if (!row) return null;
+        return (
+          <Btn size="sm" variant="secondary" onClick={() => openModal(row)}>
+            Gerenciar
+          </Btn>
+        );
+      },
+    },
+  ];
+
+  // ── Estilos ───────────────────────────────────────────────
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', color: 'var(--text-main)', background: 'var(--bg-app)', fontFamily: 'inherit', boxSizing: 'border-box' };
+  const lbl = { fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' };
+
+  // ── Render ────────────────────────────────────────────────
+  return (
+    <Page title="Banco de Horas" subtitle="Controle de saldos e ajustes manuais de ponto (POQ).">
+
+      {/* Alerta global POQ */}
+      {(kpis.poqLost > 0 || kpis.poqRisk > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {kpis.poqLost > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: `${colors.danger}10`, border: `1px solid ${colors.danger}30`, borderLeft: `4px solid ${colors.danger}`, borderRadius: '12px', padding: '12px 16px', fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>
+              <AlertOctagon size={18} color={colors.danger} style={{ flexShrink: 0 }} />
+              <span><strong style={{ color: colors.danger }}>{kpis.poqLost} colaborador{kpis.poqLost > 1 ? 'es' : ''}</strong> atingiu o limite de {POQ_LIMIT} ajustes manuais e <strong style={{ color: colors.danger }}>perdeu a bonificação POQ</strong> neste mês.</span>
+            </div>
+          )}
+          {kpis.poqRisk > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: `${colors.warning}10`, border: `1px solid ${colors.warning}30`, borderLeft: `4px solid ${colors.warning}`, borderRadius: '12px', padding: '12px 16px', fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>
+              <AlertTriangle size={18} color={colors.warning} style={{ flexShrink: 0 }} />
+              <span><strong style={{ color: colors.warning }}>{kpis.poqRisk} colaborador{kpis.poqRisk > 1 ? 'es' : ''}</strong> está em risco de perder a bonificação POQ ({POQ_ALERT_FROM}+ ajustes).</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <KpiCard label="Saldo Total" valor={`${kpis.saldo >= 0 ? '+' : ''}${kpis.saldo.toFixed(1)}h`} icon={<Clock size={22} />} accent={kpis.saldo >= 0 ? colors.success : colors.danger} />
+        <KpiCard label="Saldo Crítico (>20h)" valor={kpis.critico} icon={<AlertTriangle size={22} />} accent={colors.danger} />
+        <KpiCard label="Em Risco POQ" valor={kpis.poqRisk} icon={<AlertTriangle size={22} />} accent={colors.warning} />
+        <KpiCard label="Perderam POQ" valor={kpis.poqLost} icon={<AlertOctagon size={22} />} accent={colors.danger} />
+        <KpiCard label="Atendentes" valor={kpis.total} icon={<User size={22} />} accent={colors.primary} />
+      </div>
+
+      {/* Filtros */}
+      <Card>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          {/* Busca */}
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <label style={lbl}>Buscar</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0 12px' }}>
+              <Search size={14} color="var(--text-muted)" />
+              <input style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', padding: '11px 0', fontSize: '14px', color: 'var(--text-main)', fontFamily: 'inherit' }} placeholder="Nome..." value={search} onChange={e => setSearch(e.target.value)} />
+              {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={13} /></button>}
+            </div>
+          </div>
+          {/* Cidade */}
+          <div style={{ minWidth: '160px' }}>
+            <label style={lbl}>Cidade</label>
+            <select style={inp} value={cityFilter} onChange={e => setCityFilter(e.target.value)}>
+              <option value="">Todas</option>
+              {cities.map(c => <option key={c.id} value={c.id}>{c.name || c.id}</option>)}
+            </select>
+          </div>
+          {/* Saldo */}
+          <div style={{ minWidth: '150px' }}>
+            <label style={lbl}>Saldo</label>
+            <select style={inp} value={balFilter} onChange={e => setBalFilter(e.target.value)}>
+              <option value="all">Todos</option>
+              <option value="positive">Com crédito (+)</option>
+              <option value="negative">Com débito (-)</option>
+              <option value="critical">Críticos (&gt;20h)</option>
+            </select>
+          </div>
+          {/* POQ */}
+          <div style={{ minWidth: '150px' }}>
+            <label style={lbl}>POQ</label>
+            <select style={inp} value={poqFilter} onChange={e => setPoqFilter(e.target.value)}>
+              <option value="all">Todos</option>
+              <option value="risk">Em risco (3+ aj.)</option>
+              <option value="lost">Perderam POQ (4+)</option>
+            </select>
+          </div>
+          {/* View toggle */}
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '10px', padding: '4px' }}>
+            <button onClick={() => setViewMode('list')} style={{ padding: '7px 11px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: viewMode === 'list' ? colors.primary : 'transparent', color: viewMode === 'list' ? '#fff' : 'var(--text-muted)', display: 'flex' }}><List size={16} /></button>
+            <button onClick={() => setViewMode('grid')} style={{ padding: '7px 11px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: viewMode === 'grid' ? colors.primary : 'transparent', color: viewMode === 'grid' ? '#fff' : 'var(--text-muted)', display: 'flex' }}><LayoutGrid size={16} /></button>
+          </div>
+        </div>
+        {!loading && <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>{filtered.length} de {attendants.length} colaboradores</div>}
+      </Card>
+
+      {/* Lista / Grid */}
+      {viewMode === 'list' ? (
+        <DataTable columns={columns} data={filtered} loading={loading} emptyMsg="Nenhum colaborador encontrado." />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+          {loading ? (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Carregando...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Nenhum colaborador encontrado.</div>
+          ) : filtered.map(emp => {
+            const bal = emp.hourBalance || 0;
+            const adj = emp.manualAdjustments || 0;
+            const st  = poqStatus(adj);
+            return (
+              <div key={emp.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderTop: `3px solid ${adj >= POQ_LIMIT ? colors.danger : Math.abs(bal) > 20 ? colors.danger : bal >= 0 ? colors.success : colors.warning}`, borderRadius: '16px', padding: '18px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Avatar + nome */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0, background: `${colors.primary}20`, color: colors.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '17px' }}>
+                    {(emp.name || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '900', color: 'var(--text-main)', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.name}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{cityName(emp.cityId)}</div>
+                  </div>
+                  {adj >= POQ_ALERT_FROM && <AlertTriangle size={16} color={adj >= POQ_LIMIT ? colors.danger : colors.warning} />}
+                </div>
+                {/* Saldo */}
+                <div style={{ background: 'var(--bg-app)', borderRadius: '10px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo</span>
+                  <span style={{ fontSize: '20px', fontWeight: '900', color: balanceColor(bal) }}>{bal > 0 ? '+' : ''}{bal.toFixed(1)}h</span>
+                </div>
+                {/* POQ */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Badge cor={st.cor}>{st.label}</Badge>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {Array.from({ length: POQ_LIMIT }).map((_, i) => (
+                      <div key={i} style={{ width: '12px', height: '12px', borderRadius: '3px', background: i < adj ? (adj >= POQ_LIMIT ? colors.danger : adj >= POQ_ALERT_FROM ? colors.warning : colors.success) : 'var(--border)' }} />
+                    ))}
+                  </div>
+                </div>
+                <Btn variant="secondary" size="sm" onClick={() => openModal(emp)} style={{ width: '100%', justifyContent: 'center' }}>Gerenciar</Btn>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Modal de gerenciamento ── */}
+      <Modal open={!!modalEmp} onClose={closeModal} size="lg"
+        title={modalEmp ? `${modalEmp.name || 'Colaborador'} · ${cityName(modalEmp?.cityId)}` : ''}
+        footer={
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <Btn variant="secondary" onClick={closeModal}>Fechar</Btn>
+          </div>
+        }
+      >
+        {modalEmp && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Alerta POQ individual */}
+            <PoqBanner count={modalEmp.manualAdjustments || 0} />
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '10px', padding: '4px' }}>
+              {[
+                { id: 'balance', label: '⏱ Banco de Horas' },
+                { id: 'manual',  label: '📋 Ajustes Manuais' },
+                { id: 'history', label: '🕘 Histórico' },
+              ].map(tab => (
+                <button key={tab.id} onClick={() => setModalTab(tab.id)}
+                  style={{ flex: 1, padding: '8px', borderRadius: '7px', border: 'none', cursor: 'pointer', fontWeight: '800', fontSize: '12px', background: modalTab === tab.id ? colors.primary : 'transparent', color: modalTab === tab.id ? '#fff' : 'var(--text-muted)', transition: 'all 0.12s' }}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* TAB: Banco de Horas */}
+            {modalTab === 'balance' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Saldo atual */}
+                <div style={{ background: 'var(--bg-app)', borderRadius: '12px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Atual</div>
+                    <div style={{ fontSize: '26px', fontWeight: '900', color: balanceColor(modalEmp.hourBalance || 0), marginTop: '2px' }}>
+                      {(modalEmp.hourBalance || 0) > 0 ? '+' : ''}{(modalEmp.hourBalance || 0).toFixed(1)}h
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+                    <Info size={13} style={{ marginBottom: '4px' }} /><br />
+                    O valor inserido<br /><strong>substitui</strong> o saldo atual
+                  </div>
+                </div>
+
+                <div>
+                  <label style={lbl}>Novo Saldo (extraído do relatório) *</label>
+                  <input style={inp} type="number" step="0.5" placeholder="Ex: -3.5 ou +8" value={newBalance} onChange={e => setNewBalance(e.target.value)} />
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                    Use valores negativos para débito (ex: -4.5) e positivos para crédito (ex: 8).
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>Motivo / Referência *</label>
+                  <textarea style={{ ...inp, minHeight: '70px', resize: 'vertical' }} placeholder="Ex: Fechamento semana 12 — relatório Tangerino 18/03/2026" value={balReason} onChange={e => setBalReason(e.target.value)} />
+                </div>
+
+                {/* Preview */}
+                {newBalance !== '' && !isNaN(parseFloat(newBalance)) && (
+                  <div style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}30`, borderRadius: '10px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>Novo saldo após atualização</span>
+                    <span style={{ fontSize: '18px', fontWeight: '900', color: balanceColor(parseFloat(newBalance)) }}>
+                      {parseFloat(newBalance) > 0 ? '+' : ''}{parseFloat(newBalance).toFixed(1)}h
+                    </span>
+                  </div>
+                )}
+
+                <Btn onClick={saveBalance} loading={saving} style={{ width: '100%', justifyContent: 'center' }}>
+                  Atualizar Banco de Horas
+                </Btn>
+              </div>
+            )}
+
+            {/* TAB: Ajustes Manuais de Ponto */}
+            {modalTab === 'manual' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Status POQ visual */}
+                <div style={{ background: 'var(--bg-app)', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ajustes Manuais no Mês</div>
+                      <div style={{ fontSize: '28px', fontWeight: '900', color: (modalEmp.manualAdjustments || 0) >= POQ_LIMIT ? colors.danger : (modalEmp.manualAdjustments || 0) >= POQ_ALERT_FROM ? colors.warning : colors.success, marginTop: '2px' }}>
+                        {modalEmp.manualAdjustments || 0}
+                        <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}> / {POQ_LIMIT}</span>
+                      </div>
+                    </div>
+                    <Btn size="sm" variant="danger" onClick={() => resetManual(modalEmp)}>
+                      Zerar (reset mensal)
+                    </Btn>
+                  </div>
+                  {/* Progresso visual */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {Array.from({ length: POQ_LIMIT }).map((_, i) => {
+                      const adj = modalEmp.manualAdjustments || 0;
+                      const filled = i < adj;
+                      const col = adj >= POQ_LIMIT ? colors.danger : adj >= POQ_ALERT_FROM ? colors.warning : colors.success;
+                      return (
+                        <div key={i} style={{ flex: 1, height: '20px', borderRadius: '6px', background: filled ? col : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '900', color: filled ? '#fff' : 'var(--text-muted)', transition: 'all 0.2s' }}>
+                          {i + 1}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {(modalEmp.manualAdjustments || 0) >= POQ_LIMIT
+                      ? `❌ Limite atingido — bonificação POQ perdida neste mês.`
+                      : `Restam ${POQ_LIMIT - (modalEmp.manualAdjustments || 0)} ajuste(s) antes de perder o POQ.`
+                    }
+                  </div>
+                </div>
+
+                {/* Formulário de registro */}
+                {(modalEmp.manualAdjustments || 0) < POQ_LIMIT ? (
+                  <>
+                    <div>
+                      <label style={lbl}>Quantidade de ajustes a registrar</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[1, 2, 3].map(n => (
+                          <button key={n} onClick={() => setManualDelta(String(n))}
+                            style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '16px', background: manualDelta === String(n) ? colors.primary : 'var(--bg-app)', color: manualDelta === String(n) ? '#fff' : 'var(--text-muted)', outline: `1px solid ${manualDelta === String(n) ? colors.primary : 'var(--border)'}`, transition: 'all 0.12s' }}>
+                            +{n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lbl}>Motivo *</label>
+                      <textarea style={{ ...inp, minHeight: '70px', resize: 'vertical' }} placeholder="Ex: Esqueceu bater ponto na entrada — 17/03/2026" value={manualReason} onChange={e => setManualReason(e.target.value)} />
+                    </div>
+                    {/* Alerta do que vai acontecer */}
+                    {(() => {
+                      const after = (modalEmp.manualAdjustments || 0) + parseInt(manualDelta || 1);
+                      if (after >= POQ_LIMIT) return (
+                        <div style={{ background: `${colors.danger}10`, border: `1px solid ${colors.danger}30`, borderRadius: '10px', padding: '10px 13px', fontSize: '12px', fontWeight: '700', color: colors.danger, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AlertOctagon size={14} /> Após registrar, o colaborador terá {after} ajustes e <strong>perderá a bonificação POQ</strong>.
+                        </div>
+                      );
+                      if (after >= POQ_ALERT_FROM) return (
+                        <div style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}30`, borderRadius: '10px', padding: '10px 13px', fontSize: '12px', fontWeight: '700', color: colors.warning, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AlertTriangle size={14} /> Após registrar, o colaborador terá {after}/{POQ_LIMIT} ajustes. <strong>Próximo do limite POQ.</strong>
+                        </div>
+                      );
+                      return null;
+                    })()}
+                    <Btn onClick={saveManual} loading={saving} style={{ width: '100%', justifyContent: 'center' }}>
+                      Registrar Ajuste Manual
+                    </Btn>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '20px', color: colors.danger, fontWeight: '700', fontSize: '14px' }}>
+                    Limite de {POQ_LIMIT} ajustes atingido. Use "Zerar (reset mensal)" no início do próximo mês.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: Histórico */}
+            {modalTab === 'history' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {!(modalEmp.adjustmentHistory?.length) ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    <History size={28} style={{ opacity: 0.3, marginBottom: '8px' }} /><br />Nenhum lançamento registrado ainda.
+                  </div>
+                ) : (
+                  [...(modalEmp.adjustmentHistory || [])]
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .map((h, i) => {
+                      const isManual  = h.type === 'manual_adjustment';
+                      const isReset   = h.type === 'manual_reset';
+                      const icon      = isManual ? '📋' : isReset ? '🔄' : '⏱';
+                      const col       = isManual ? colors.warning : isReset ? colors.info : colors.primary;
+                      return (
+                        <div key={i} style={{ display: 'flex', gap: '12px', padding: '12px 14px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderLeft: `3px solid ${col}`, borderRadius: '10px' }}>
+                          <div style={{ fontSize: '18px', flexShrink: 0 }}>{icon}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                              <div style={{ fontWeight: '800', fontSize: '13px', color: 'var(--text-main)' }}>
+                                {isManual  ? `+${h.qty} ajuste${h.qty > 1 ? 's' : ''} manual${h.qty > 1 ? 'is' : ''} (total: ${h.totalAfter}/${POQ_LIMIT})`
+                                : isReset  ? 'Reset mensal de ajustes'
+                                : `Saldo atualizado → ${h.balance >= 0 ? '+' : ''}${h.balance?.toFixed(1)}h`}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                {new Date(h.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                              {h.reason} · <span style={{ fontWeight: '700' }}>{h.supervisor}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            )}
+
+          </div>
+        )}
+      </Modal>
+    </Page>
+  );
+}

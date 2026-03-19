@@ -56,7 +56,7 @@ const MENU_ITEMS = [
   { id: 'apuracao_resultados', 'data-tour': 'tour-apuracao',label: 'Apuração de Resultados', icon: BarChart2,     section: 'INTELIGÊNCIA' },
   { id: 'hub_oquei', 'data-tour': 'tour-hub-oquei',          label: 'Hub Oquei / Radar',      icon: Radar,         section: 'INTELIGÊNCIA' },
   { id: 'laboratorio_churn', 'data-tour': 'tour-churn',  label: 'Laboratório Churn',      icon: FlaskConical,  section: 'INTELIGÊNCIA' },
-  { id: 'oquei_insights',                               label: 'Oquei Pesquisas',         icon: Telescope,     section: 'INTELIGÊNCIA' },
+  { id: 'oquei_insights',                               label: 'Oquei Insights',         icon: Telescope,     section: 'INTELIGÊNCIA' },
 ];
 
 // ── Logo Oquei (URL da logo) ──────────────────────────────────

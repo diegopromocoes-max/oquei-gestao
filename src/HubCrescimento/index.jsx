@@ -1,16 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Page, Card, Select, Input, Tabs, InfoBox } from '../components/ui';
+import { db } from '../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { 
+  Zap, Eye, Trello, User, CalendarDays, PieChart, MapPin, Calendar
+} from 'lucide-react';
+
+import { styles as global, colors } from '../styles/globalStyles';
+import { InfoBox } from '../components/ui';
+
+// IMPORTAÇÃO DAS PÁGINAS (VIEWS)
 import OverviewPage from './pages/OverviewPage';
 import KanbanPage from './pages/KanbanPage';
 import MinhaMesaPage from './pages/MinhaMesaPage';
 import MeetingsPage from './pages/MeetingsPage';
 import DashboardGrowth from './pages/DashboardGrowth';
-import { db } from '../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { Zap } from 'lucide-react';
-import { hubStyles } from "./styles/hubStyles";
 
-const TAB_LABELS = ['Visao Geral', 'Kanban', 'Minha Mesa', 'Reunioes', 'Dashboard'];
+// CONFIGURAÇÃO DAS ABAS PADRONIZADAS
+const TABS_CONFIG = [
+  { id: 'Visao Geral', label: 'Visão Geral', icon: Eye },
+  { id: 'Kanban', label: 'Quadro Kanban', icon: Trello },
+  { id: 'Minha Mesa', label: 'Minha Mesa', icon: User },
+  { id: 'Reunioes', label: 'Reuniões', icon: CalendarDays },
+  { id: 'Dashboard', label: 'Dashboard', icon: PieChart }
+];
 
 const isCoordinatorRole = (role) => {
   const r = String(role || '').toLowerCase();
@@ -26,7 +38,7 @@ export default function HubCrescimento({ userData }) {
   const [cities, setCities] = useState([]);
   const [selectedCityId, setSelectedCityId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [activeTab, setActiveTab] = useState(TAB_LABELS[0]);
+  const [activeTab, setActiveTab] = useState('Visao Geral');
   const [selectedGrowthPlan, setSelectedGrowthPlan] = useState(null);
 
   const isGrowthTeam = isGrowthTeamRole(userData?.role);
@@ -72,7 +84,6 @@ export default function HubCrescimento({ userData }) {
   }, [selectedCityId, selectedMonth, selectedGrowthPlan]);
 
   const cityOptions = useMemo(() => {
-    // Equipe de Growth e Coordenadores podem ver "Todas as cidades"
     if (isCoordinator || isGrowthTeam) {
       return [{ value: '__all__', label: 'Todas as cidades' }, ...cities.map((c) => ({ value: c.id, label: c.name || c.nome }))];
     }
@@ -80,73 +91,75 @@ export default function HubCrescimento({ userData }) {
   }, [cities, isCoordinator, isGrowthTeam]);
 
   return (
-    <Page
-      title="Hub de Crescimento"
-      subtitle="Planejamento estratégico e execução"
-    >
-
-      {/* ── Cabeçalho padrão Oquei Gestão ── */}
-      <div style={{
-        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
-        border: '1px solid var(--border)', borderRadius: '20px',
-        padding: '24px 32px', marginBottom: '24px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #2563EB, #7C3AED)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 6px 18px rgba(37,99,235,0.35)',
-          }}>
-            <Zap size={26} color="#fff" />
+    <div style={{ ...global.container, maxWidth: '1400px' }}>
+      
+      {/* ── CABEÇALHO PADRÃO OQUEI STRATEGY ── */}
+      <div style={local.headerWrapper}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ ...local.iconBox, background: `linear-gradient(135deg, ${colors.primary}, #0ea5e9)`, boxShadow: `0 8px 20px ${colors.primary}40` }}>
+            <Zap size={28} color="#fff" />
           </div>
           <div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
-              Hub de Crescimento
-            </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
-              Planejamento estratégico e execução com baixo atrito · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            <div style={local.headerTitle}>Hub de Crescimento</div>
+            <div style={local.headerSubtitle}>
+              Planejamento estratégico e execução · {new Date().toLocaleDateString('pt-BR')}
             </div>
           </div>
         </div>
-        
-      </div>
-      <Card>
-        <div style={hubStyles.toolbar}>
-          <div style={{ minWidth: '240px' }}>
-            <Select
-              label="Cidade"
-              value={selectedCityId}
-              onChange={(e) => setSelectedCityId(e.target.value)}
-              options={cityOptions}
-              // Bloqueia a troca apenas se for atendente comum preso a uma cidade
-              disabled={(!isCoordinator && !isGrowthTeam) && !!userData?.cityId}
-            />
-          </div>
-          <div style={{ minWidth: '180px' }}>
-            <Input
-              type="month"
-              label="Mes"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-            />
-          </div>
-        </div>
-      </Card>
 
-      {/* Mostra qual o plano selecionado para todos os perfis */}
+        {/* ── CONTROLOS INTEGRADOS NO CABEÇALHO ── */}
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          
+          {/* Seletor de Cidade */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-app)', padding: '10px 16px', borderRadius: '14px', border: '1px solid var(--border)' }}>
+            <MapPin size={16} color="var(--text-muted)" />
+            <select 
+              value={selectedCityId} 
+              onChange={(e) => setSelectedCityId(e.target.value)} 
+              disabled={(!isCoordinator && !isGrowthTeam) && !!userData?.cityId}
+              style={local.selectControl}
+            >
+              {cityOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+          </div>
+
+          {/* Seletor de Mês */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-app)', padding: '10px 16px', borderRadius: '14px', border: '1px solid var(--border)' }}>
+            <Calendar size={16} color="var(--text-muted)" />
+            <input 
+              type="month" 
+              value={selectedMonth} 
+              onChange={(e) => setSelectedMonth(e.target.value)} 
+              style={local.inputControl}
+            />
+          </div>
+
+        </div>
+      </div>
+
+      {/* AVISOS GERAIS */}
       {selectedGrowthPlan && (
-        <InfoBox type="info">Plano geral atual: {selectedGrowthPlan.name}</InfoBox>
+        <div style={{ marginBottom: '20px' }}>
+          <InfoBox type="info">Plano geral atual: <strong>{selectedGrowthPlan.name}</strong></InfoBox>
+        </div>
       )}
 
-      {/* Agora as Tabs são exibidas para toda a equipa */}
-      <Tabs tabs={TAB_LABELS} active={activeTab} onChange={setActiveTab} />
+      {/* ── NAVEGAÇÃO POR ABAS (PILLS) ── */}
+      <div style={local.navBar}>
+        {TABS_CONFIG.map(tab => (
+          <button 
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)} 
+            style={activeTab === tab.id ? { ...local.navBtnActive, color: colors.primary, borderColor: colors.primary } : local.navBtn}
+          >
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <div style={hubStyles.content}>
+      {/* ── CONTEÚDO DINÂMICO ── */}
+      <div className="animated-view" style={{ background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', minHeight: '500px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginTop: '25px' }}>
         
-        {/* Visão Geral acessível a todos */}
         {activeTab === 'Visao Geral' && (
           <OverviewPage
             userData={userData}
@@ -158,12 +171,10 @@ export default function HubCrescimento({ userData }) {
           />
         )}
 
-        {/* Aviso de que precisa de selecionar um plano antes de ver as restantes abas */}
         {['Kanban', 'Reunioes', 'Dashboard'].includes(activeTab) && !selectedGrowthPlan && (
-          <InfoBox type="warning">Selecione um plano geral na Visao Geral.</InfoBox>
+          <InfoBox type="warning">Selecione um plano geral na aba "Visão Geral" para liberar esta visualização.</InfoBox>
         )}
 
-        {/* As abas agora não têm o bloqueio de !isGrowthTeam */}
         {activeTab === 'Kanban' && selectedGrowthPlan && (
           <KanbanPage
             userData={userData}
@@ -173,12 +184,10 @@ export default function HubCrescimento({ userData }) {
           />
         )}
         
-        {/* Minha Mesa acessível a todos (já estava) */}
         {activeTab === 'Minha Mesa' && (
           <MinhaMesaPage userData={userData} selectedCityId={selectedCityId} />
         )}
         
-        {/* Reuniões acessível a todos */}
         {activeTab === 'Reunioes' && selectedGrowthPlan && (
           <MeetingsPage
             userData={userData}
@@ -188,7 +197,6 @@ export default function HubCrescimento({ userData }) {
           />
         )}
         
-        {/* Dashboard acessível a todos */}
         {activeTab === 'Dashboard' && selectedGrowthPlan && (
           <DashboardGrowth
             selectedCityId={selectedCityId}
@@ -196,7 +204,37 @@ export default function HubCrescimento({ userData }) {
             selectedGrowthPlan={selectedGrowthPlan}
           />
         )}
+
       </div>
-    </Page>
+
+      <style>{`
+        @keyframes fadeInView { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animated-view { animation: fadeInView 0.3s ease forwards; }
+      `}</style>
+    </div>
   );
 }
+
+// --- ESTILOS LOCAIS PADRONIZADOS OQUEI STRATEGY ---
+const local = {
+  headerWrapper: {
+    background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+    border: '1px solid var(--border)', borderRadius: '24px',
+    padding: '24px 32px', marginBottom: '25px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    flexWrap: 'wrap', gap: '20px', boxShadow: 'var(--shadow-sm)',
+  },
+  iconBox: {
+    width: '56px', height: '56px', borderRadius: '16px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' },
+  headerSubtitle: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' },
+
+  selectControl: { border: 'none', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '800', outline: 'none', cursor: 'pointer', maxWidth: '200px' },
+  inputControl: { border: 'none', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '900', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' },
+
+  navBar: { display: 'flex', gap: '8px', background: 'var(--bg-card)', padding: '8px', borderRadius: '18px', border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'nowrap' },
+  navBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '800', transition: '0.2s', background: 'transparent', color: 'var(--text-muted)' },
+  navBtnActive: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', transition: '0.2s', background: 'var(--bg-panel)', boxShadow: 'var(--shadow-sm)' },
+};

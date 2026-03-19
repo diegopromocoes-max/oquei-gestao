@@ -109,16 +109,16 @@ export default function MeetingsPage({
       agendaItems: prev.agendaItems.filter((_, i) => i !== index),
     }));
 
-  // ── Criar reunião ──────────────────────────────────────────────────────────
+ // ── Criar reunião ──────────────────────────────────────────────────────────
   const handleCreateMeeting = async () => {
-    if (!selectedCityId || selectedCityId === '__all__') {
-      window.showToast?.('Selecione uma cidade.', 'error'); return;
-    }
+    // 1. TRAVA DE CIDADE REMOVIDA AQUI para permitir reuniões do Hub/Globais
+    
     if (!form.date) {
       window.showToast?.('Informe a data da reuniao.', 'error'); return;
     }
     if (form.participantUids.length === 0) {
-      window.showToast?.('Selecione pelo menos um participante.', 'error'); return;
+      window.showToast?.('Selecione pelo menos um participante.', 'error');
+      return;
     }
 
     setSaving(true);
@@ -130,12 +130,12 @@ export default function MeetingsPage({
           name: u.name || u.nome || u.displayName || 'Sem nome',
           role: u.role || '',
         }));
-
       const selectedPlans = plans.filter((p) => form.planIds.includes(p.id));
 
       await createMeeting(
         {
-          cityId:      selectedCityId,
+          // Se estiver em "Todas as cidades", salva como global
+          cityId:      selectedCityId === '__all__' ? 'global' : (selectedCityId || null),
           title:       form.title || 'Reuniao de Growth',
           date:        form.date,
           time:        form.time,
@@ -146,7 +146,6 @@ export default function MeetingsPage({
         },
         userData,
       );
-
       setForm(emptyForm());
       window.showToast?.('Reuniao criada com sucesso.', 'success');
     } catch (err) {

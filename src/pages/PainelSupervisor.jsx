@@ -11,7 +11,7 @@ import {
   Store, Clock, TrendingUp, Zap, Globe, Megaphone,
   FileCheck, CalendarClock, Wallet, LayoutGrid, UserX, Activity,
   Tv, Flame, Settings, Gift, HeartHandshake, MonitorPlay,
-  MapPin, Users, UserPlus, ShoppingBag, Router, Target, UploadCloud
+  MapPin, Users, UserPlus, ShoppingBag, Router, Target, UploadCloud, Telescope
 } from 'lucide-react';
 
 import LayoutGlobal from '../components/LayoutGlobal';
@@ -39,6 +39,7 @@ const Comunicados           = lazy(() => import('./Comunicados'));
 const Wallboard             = lazy(() => import('./Wallboard'));
 const HubOquei              = lazy(() => import('./HubOquei'));
 const LaboratorioChurn      = lazy(() => import('./LaboratorioChurn'));
+const OqueiInsights         = lazy(() => import('../OqueiInsights'));
 const PainelVendas          = lazy(() => import('./PainelVendas'));
 const SalaDeGuerra          = lazy(() => import('./SalaDeGuerra'));
 const BancoHorasSupervisor  = lazy(() => import('./BancoHorasSupervisor'));
@@ -68,6 +69,7 @@ export default function PainelSupervisor({ userData }) {
     { id: 'wallboard',           label: 'Modo TV',                icon: Tv,             section: 'Principal',    color: colors.info },
     { id: 'hub_oquei',           label: 'HubOquei Radar',         icon: Zap,            section: 'Inteligência', color: colors.info },
     { id: 'churn',               label: 'Laboratório Churn',      icon: Activity,       section: 'Inteligência', color: colors.purple },
+    { id: 'oquei_insights',      label: 'Oquei Pesquisas',         icon: Telescope,      section: 'Inteligência', color: colors.danger },
     { id: 'admin_supervisores',  label: 'Supervisores',           icon: UserPlus,       section: 'Gestão',       color: colors.purple },
     { id: 'atendentes',          label: 'Time de Vendas',         icon: Users,          section: 'Gestão' },
     { id: 'estrutura',           label: 'Estrutura Lojas',        icon: MapPin,         section: 'Gestão',       color: colors.primary },
@@ -97,6 +99,7 @@ export default function PainelSupervisor({ userData }) {
       case 'dashboard':           return <DashboardSupervisor userData={userData} setActiveView={setActiveView} />;
       case 'hub_oquei':           return <HubOquei userData={userData} />;
       case 'churn':               return <LaboratorioChurn userData={userData} />;
+      case 'oquei_insights':      return <OqueiInsights userData={userData} />;
       case 'admin_supervisores':  return <GestaoSupervisores userData={userData} />;
       case 'atendentes':          return <GestaoAtendentes userData={userData} />;
       case 'estrutura':           return <GestaoEstrutura />;
@@ -145,8 +148,6 @@ export default function PainelSupervisor({ userData }) {
       activeTab={activeView}
       onTabChange={setActiveView}
       onLogout={() => authSignOut(auth)}
-      appName="HUB OQUEI"
-      logoUrl="https://lh6.googleusercontent.com/proxy/OQmnkD6TxExvN5uvw-zWOpJHZ6qW-J6aJaUPlJX4Y06C_IRXAN3CooFhuzMisQmGCpNS9aQkpjPNcH2YOZs-CeiOuVKjlDO6oqSsDIFrSS2hGse8ug"
     >
       <Suspense fallback={<ModuleFallback />}>
         {renderContent()}

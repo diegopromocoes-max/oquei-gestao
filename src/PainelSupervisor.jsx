@@ -1,5 +1,5 @@
 // ============================================================
-//  PainelCoordenador.jsx — Oquei Gestão
+//  PainelSupervisor.jsx — Oquei Gestão
 //  Sprint 1 — Tarefa 1.3: React.lazy() + lazyNamed()
 //  Sprint 1 — Tarefa 1.7: URL params via useModuleNav
 // ============================================================
@@ -23,16 +23,16 @@ const lazyNamed = (importFn, name) =>
   lazy(() => importFn().then(m => ({ default: m[name] })));
 
 // ── Módulos lazy ───────────────────────────────────────────────
-const DashboardCoordenador  = lazy(() => import('./DashboardCoordenador'));
+const DashboardSupervisor   = lazy(() => import('./DashboardSupervisor'));
 const GestaoSupervisores    = lazyNamed(() => import('./GestaoColaboradores'), 'GestaoSupervisores');
 const GestaoAtendentes      = lazyNamed(() => import('./GestaoColaboradores'), 'GestaoAtendentes');
 const GestaoEstrutura       = lazy(() => import('./GestaoEstrutura'));
 const GestaoProdutos        = lazy(() => import('./GestaoProdutos'));
 const GestaoMetas           = lazy(() => import('./GestaoMetas'));
 const ApuracaoResultados    = lazy(() => import('./ApuracaoResultados'));
-const HubCrescimento        = lazy(() => import('./HubCrescimento'));
+const HubCrescimento     = lazy(() => import('./HubCrescimento'));
 const LojasOquei            = lazy(() => import('./LojasOquei'));
-const FaltasSupervisor      = lazy(() => import('./FaltasSupervisor/index.jsx'));
+const FaltasSupervisor      = lazy(() => import('./FaltasSupervisor'));
 const RhSupervisor          = lazy(() => import('./RhSupervisor'));
 const DesencaixeSupervisor  = lazy(() => import('./DesencaixeSupervisor'));
 const Comunicados           = lazy(() => import('./Comunicados'));
@@ -58,18 +58,18 @@ const ModuleFallback = () => (
   </div>
 );
 
-export default function PainelCoordenador({ userData }) {
+export default function PainelSupervisor({ userData }) {
   // 1.7 — Navegação sincronizada com URL
-  // Ao recarregar: /coordenador/churn → volta direto pro Laboratório Churn
+  // Ao recarregar: /supervisor/patrocinio → volta direto pro Patrocínio
   const [activeView, setActiveView] = useModuleNav('dashboard');
 
   const MENU_ITEMS = [
-    { id: 'dashboard',           label: 'Visão Master',           icon: Globe,          section: 'Principal',    color: colors.warning },
+    { id: 'dashboard',           label: 'Visão Geral',            icon: Globe,          section: 'Principal',    color: colors.warning },
     { id: 'comunicados',         label: 'Comunicados',            icon: Megaphone,      section: 'Principal',    color: colors.primary },
     { id: 'wallboard',           label: 'Modo TV',                icon: Tv,             section: 'Principal',    color: colors.info },
     { id: 'hub_oquei',           label: 'HubOquei Radar',         icon: Zap,            section: 'Inteligência', color: colors.info },
     { id: 'churn',               label: 'Laboratório Churn',      icon: Activity,       section: 'Inteligência', color: colors.purple },
-    { id: 'oquei_insights',      label: 'Oquei Pesquisas',         icon: Telescope,      section: 'Inteligência', color: colors.danger },
+    { id: 'oquei_insights',      label: 'Oquei Insights',         icon: Telescope,      section: 'Inteligência', color: colors.danger },
     { id: 'admin_supervisores',  label: 'Supervisores',           icon: UserPlus,       section: 'Gestão',       color: colors.purple },
     { id: 'atendentes',          label: 'Time de Vendas',         icon: Users,          section: 'Gestão' },
     { id: 'estrutura',           label: 'Estrutura Lojas',        icon: MapPin,         section: 'Gestão',       color: colors.primary },
@@ -96,7 +96,7 @@ export default function PainelCoordenador({ userData }) {
 
   const renderContent = () => {
     switch (activeView) {
-      case 'dashboard':           return <DashboardCoordenador userData={userData} setActiveView={setActiveView} />;
+      case 'dashboard':           return <DashboardSupervisor userData={userData} setActiveView={setActiveView} />;
       case 'hub_oquei':           return <HubOquei userData={userData} />;
       case 'churn':               return <LaboratorioChurn userData={userData} />;
       case 'oquei_insights':      return <OqueiInsights userData={userData} />;
@@ -128,7 +128,7 @@ export default function PainelCoordenador({ userData }) {
       case 'links':               return <LinksUteis userData={userData} />;
       case 'configuracoes':       return <Configuracoes userData={userData} />;
       case 'roteadores':          return <CatalogoRoteadores userData={userData} />;
-      default:                    return <DashboardCoordenador userData={userData} setActiveView={setActiveView} />;
+      default:                    return <DashboardSupervisor userData={userData} setActiveView={setActiveView} />;
     }
   };
 

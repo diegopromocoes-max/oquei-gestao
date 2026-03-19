@@ -30,9 +30,9 @@ const GestaoEstrutura       = lazy(() => import('./GestaoEstrutura'));
 const GestaoProdutos        = lazy(() => import('./GestaoProdutos'));
 const GestaoMetas           = lazy(() => import('./GestaoMetas'));
 const ApuracaoResultados    = lazy(() => import('./ApuracaoResultados'));
-const HubCrescimento        = lazy(() => import('./HubCrescimento'));
+const HubCrescimento = lazy(() => import('./HubCrescimento'));
 const LojasOquei            = lazy(() => import('./LojasOquei'));
-const FaltasSupervisor      = lazy(() => import('./FaltasSupervisor/index.jsx'));
+const FaltasSupervisor      = lazy(() => import('./FaltasSupervisor'));
 const RhSupervisor          = lazy(() => import('./RhSupervisor'));
 const DesencaixeSupervisor  = lazy(() => import('./DesencaixeSupervisor'));
 const Comunicados           = lazy(() => import('./Comunicados'));
@@ -69,7 +69,7 @@ export default function PainelCoordenador({ userData }) {
     { id: 'wallboard',           label: 'Modo TV',                icon: Tv,             section: 'Principal',    color: colors.info },
     { id: 'hub_oquei',           label: 'HubOquei Radar',         icon: Zap,            section: 'Inteligência', color: colors.info },
     { id: 'churn',               label: 'Laboratório Churn',      icon: Activity,       section: 'Inteligência', color: colors.purple },
-    { id: 'oquei_insights',      label: 'Oquei Pesquisas',         icon: Telescope,      section: 'Inteligência', color: colors.danger },
+    { id: 'oquei_insights',      label: 'Oquei Insights',         icon: Telescope,      section: 'Inteligência', color: colors.danger },
     { id: 'admin_supervisores',  label: 'Supervisores',           icon: UserPlus,       section: 'Gestão',       color: colors.purple },
     { id: 'atendentes',          label: 'Time de Vendas',         icon: Users,          section: 'Gestão' },
     { id: 'estrutura',           label: 'Estrutura Lojas',        icon: MapPin,         section: 'Gestão',       color: colors.primary },

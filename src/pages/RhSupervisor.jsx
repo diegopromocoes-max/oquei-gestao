@@ -6,10 +6,10 @@ import {
   FileCheck, Clock, Calendar, Search, User, MapPin, AlignLeft, 
   CheckCircle2, XCircle, AlertCircle, ShieldAlert, Send, 
   FileText, Users, AlertTriangle, UserMinus, TrendingUp, 
-  Briefcase, Paperclip, History, Mail, Shield, CheckCircle
+  Briefcase, Paperclip, History, Mail, Shield, CheckCircle, X
 } from 'lucide-react';
 
-import { styles as global } from '../styles/globalStyles';
+import { styles as global, colors } from '../styles/globalStyles';
 
 export default function RhSupervisor({ userData, onRHAutomation }) {
   const [activeTab, setActiveTab] = useState('nova'); // 'nova', 'aprovacoes', 'historico'
@@ -119,7 +119,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
       
       snapAbsences.docs.forEach(d => {
          const data = d.data();
-         if (data.type !== 'falta' && data.type !== 'atestado' && storeIds.includes(data.storeId)) {
+         if (data.type !== 'falta' && data.type !== 'ferias' && storeIds.includes(data.storeId)) {
              combined.push({ id: d.id, _collection: 'absences', ...data });
          }
       });
@@ -257,7 +257,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
       await addDoc(collection(db, "rh_requests"), requestData);
       generatePDF(requestData);
 
-      alert("✅ Solicitação enviada com sucesso!");
+      alert("Solicitação enviada com sucesso e PDF gerado!");
       setForm({ ...form, description: '', reason: '', newRole: '', newSalary: '', atestadoDays: '', cid: '', targetId: '' });
       setFileName(null);
       fetchHistory();
@@ -342,86 +342,94 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
       case 'atestado': label = 'Atestado'; color = colors.rose; bg = '#db277715'; break;
       default: label = type;
     }
-    return <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: `1px solid ${color}30` }}>{label}</span>;
+    return <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', border: `1px solid ${color}30` }}>{label}</span>;
   };
 
   return (
-    <div style={{ ...global.container, maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ ...global.container, maxWidth: '1200px' }}>
       
-      <div style={global.header}>
-        <div style={{...global.iconHeader, background: colors.rose}}><FileCheck size={28} color="white"/></div>
-        <div>
-          <h1 style={global.title}>Departamento de RH</h1>
-          <p style={global.subtitle}>Gerencie advertências, atestados e avalie solicitações.</p>
+      {/* ── CABEÇALHO PADRÃO OQUEI STRATEGY ── */}
+      <div style={local.headerWrapper}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ ...local.iconBox, background: `linear-gradient(135deg, ${colors.rose}, #be185d)`, boxShadow: `0 8px 20px ${colors.rose}40` }}>
+            <FileCheck size={28} color="#fff" />
+          </div>
+          <div>
+            <div style={local.headerTitle}>Departamento de RH</div>
+            <div style={local.headerSubtitle}>
+              Gestão de advertências, atestados e aprovações · {new Date().toLocaleDateString('pt-BR')}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div style={local.tabsContainer}>
-        <button onClick={() => setActiveTab('nova')} style={activeTab === 'nova' ? local.tabActive : local.tab}>
+      {/* ── NAVEGAÇÃO POR ABAS (PILLS) ── */}
+      <div style={local.navBar}>
+        <button onClick={() => setActiveTab('nova')} style={activeTab === 'nova' ? { ...local.navBtnActive, color: colors.rose, borderColor: colors.rose } : local.navBtn}>
           <FileText size={16} /> Nova Solicitação
         </button>
-        <button onClick={() => setActiveTab('aprovacoes')} style={activeTab === 'aprovacoes' ? local.tabActive : local.tab}>
+        <button onClick={() => setActiveTab('aprovacoes')} style={activeTab === 'aprovacoes' ? { ...local.navBtnActive, color: colors.warning, borderColor: colors.warning } : local.navBtn}>
           <ShieldAlert size={16} /> Central de Aprovações
         </button>
-        <button onClick={() => setActiveTab('historico')} style={activeTab === 'historico' ? local.tabActive : local.tab}>
+        <button onClick={() => setActiveTab('historico')} style={activeTab === 'historico' ? { ...local.navBtnActive, color: colors.primary, borderColor: colors.primary } : local.navBtn}>
           <History size={16} /> Meu Histórico
         </button>
       </div>
 
-      <div style={global.card}>
+      {/* CONTEÚDO DAS ABAS */}
+      <div style={{ marginTop: '30px', paddingBottom: '40px' }}>
         
         {/* ========================================== */}
         {/* ABA 1: NOVA SOLICITAÇÃO                    */}
         {/* ========================================== */}
         {activeTab === 'nova' && (
-          <div style={{animation: 'fadeIn 0.4s'}}>
+          <div className="animated-view" style={{ ...global.card, padding: '30px', borderRadius: '24px' }}>
             <div style={local.rhNoticeBox}>
-              <div style={{display: 'flex', gap: '15px'}}>
-                <div style={{background: 'var(--bg-app)', padding: '10px', borderRadius: '50%', height: 'fit-content'}}>
-                  <Mail size={24} color="var(--text-brand)" />
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <div style={{ background: 'var(--bg-app)', padding: '12px', borderRadius: '50%' }}>
+                  <Mail size={24} color={colors.primary} />
                 </div>
                 <div>
-                  <h3 style={{fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '10px', fontSize: '15px'}}>Informação ao Gestor</h3>
-                  <ul style={{fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.6', paddingLeft: '20px', margin: 0}}>
-                    <li>O documento PDF será gerado automaticamente.</li>
-                    <li>A solicitação entrará como <strong>Pendente</strong> para avaliação da Coordenação.</li>
-                  </ul>
+                  <h3 style={{ fontWeight: '900', color: 'var(--text-main)', margin: '0 0 4px 0', fontSize: '15px' }}>Informação ao Gestor</h3>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.5' }}>O documento PDF será gerado automaticamente. A solicitação entrará como <strong>Pendente</strong> para avaliação da Coordenação.</p>
                 </div>
               </div>
             </div>
             
             {isCoordinator && (
-              <div style={{marginBottom: '25px', padding: '15px', background: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border)'}}>
-                 <label style={global.label}>Quem será o alvo da solicitação?</label>
-                 <div style={{display:'flex', gap:'20px', marginTop:'10px'}}>
-                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'atendente'} onChange={() => setTargetType('atendente')} /><Users size={16} /> Atendente</label>
-                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'supervisor'} onChange={() => setTargetType('supervisor')} /><Shield size={16} /> Supervisor</label>
+              <div style={{ marginBottom: '30px', padding: '20px', background: 'var(--bg-app)', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                 <label style={local.label}>Quem será o alvo da solicitação?</label>
+                 <div style={{ display:'flex', gap:'20px', marginTop:'10px' }}>
+                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'atendente'} onChange={() => setTargetType('atendente')} style={{ accentColor: colors.primary, transform: 'scale(1.2)' }} /><Users size={16} /> Atendente / Vendedor</label>
+                    <label style={local.radioLabel}><input type="radio" checked={targetType === 'supervisor'} onChange={() => setTargetType('supervisor')} style={{ accentColor: colors.primary, transform: 'scale(1.2)' }} /><Shield size={16} /> Supervisor / Líder</label>
                  </div>
               </div>
             )}
             
+            <label style={local.label}>Tipo de Documento</label>
             <div style={local.typeGrid}>
               {Object.entries(REQUEST_TYPES).map(([key, data]) => (
-                <button key={key} onClick={() => setRequestType(key)} style={{...local.typeCard, borderColor: requestType === key ? data.color : 'transparent', backgroundColor: requestType === key ? data.bg : 'var(--bg-app)'}}>
+                <button key={key} onClick={() => setRequestType(key)} style={{...local.typeCard, borderColor: requestType === key ? data.color : 'var(--border)', backgroundColor: requestType === key ? data.bg : 'var(--bg-app)', boxShadow: requestType === key ? 'var(--shadow-sm)' : 'none' }}>
                   <data.icon size={24} color={data.color} style={{marginBottom: '10px'}} />
-                  <span style={{fontWeight: 'bold', color: 'var(--text-main)'}}>{data.label}</span>
+                  <span style={{fontWeight: '900', color: 'var(--text-main)', fontSize: '13px'}}>{data.label}</span>
+                  <span style={{fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px'}}>{data.desc}</span>
                 </button>
               ))}
             </div>
 
-            <form onSubmit={handleCreateRequest} style={global.form}>
+            <form onSubmit={handleCreateRequest} style={{ ...global.form, marginTop: '30px' }}>
               <div style={global.row}>
                 {targetType === 'atendente' ? (
                    <>
                      <div style={global.field}>
-                       <label style={global.label}>Loja</label>
+                       <label style={local.label}>Loja</label>
                        <select style={global.select} value={form.storeId} onChange={handleStoreChange} required>
                          <option value="">Selecione...</option>
                          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                        </select>
                      </div>
                      <div style={global.field}>
-                       <label style={global.label}>Colaborador</label>
+                       <label style={local.label}>Colaborador</label>
                        <select style={global.select} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required disabled={!form.storeId}>
                          <option value="">Selecione...</option>
                          {attendants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -430,7 +438,7 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
                    </>
                 ) : (
                    <div style={{...global.field, gridColumn: '1 / -1'}}>
-                      <label style={global.label}>Selecione o Supervisor</label>
+                      <label style={local.label}>Selecione o Supervisor</label>
                       <select style={global.select} value={form.targetId} onChange={e => setForm({...form, targetId: e.target.value})} required>
                          <option value="">Selecione...</option>
                          {supervisors.map(s => <option key={s.id} value={s.id}>{s.name} ({s.clusterId})</option>)}
@@ -441,45 +449,45 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 
               {requestType === 'atestado' ? (
                 <div style={global.row}>
-                  <div style={global.field}><label style={global.label}>Data Início</label><input type="date" style={global.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required /></div>
-                  <div style={global.field}><label style={global.label}>Dias</label><input type="number" style={global.input} placeholder="Ex: 3" value={form.atestadoDays} onChange={e => setForm({...form, atestadoDays: e.target.value})} required /></div>
+                  <div style={global.field}><label style={local.label}>Data Início</label><input type="date" style={global.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required /></div>
+                  <div style={global.field}><label style={local.label}>Dias</label><input type="number" style={global.input} placeholder="Ex: 3" value={form.atestadoDays} onChange={e => setForm({...form, atestadoDays: e.target.value})} required /></div>
                 </div>
               ) : (
                 <div style={global.field}>
-                  <label style={global.label}>Data do Fato / Sugerida</label>
+                  <label style={local.label}>Data do Fato / Sugerida</label>
                   <input type="date" style={global.input} value={form.dateEvent} onChange={e => setForm({...form, dateEvent: e.target.value})} required />
                 </div>
               )}
 
               {(requestType === 'advertencia' || requestType === 'suspensao') && (
                 <div style={global.field}>
-                  <label style={global.label}>Motivo Principal</label>
+                  <label style={local.label}>Motivo Principal</label>
                   <select style={global.select} value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} required>
                     <option value="">Selecione...</option>
                     <option value="Insubordinação">Insubordinação</option>
                     <option value="Faltas">Faltas/Atrasos</option>
-                    <option value="Comportamento">Comportamento</option>
+                    <option value="Comportamento">Comportamento Inadequado</option>
                     <option value="Performance">Baixa Performance</option>
                   </select>
                 </div>
               )}
 
               <div style={global.field}>
-                <label style={global.label}>Descrição Detalhada</label>
-                <textarea style={global.textarea} placeholder="Descreva o ocorrido..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
+                <label style={local.label}>Descrição Detalhada</label>
+                <textarea style={{ ...global.textarea, minHeight: '120px' }} placeholder="Descreva os fatos detalhadamente..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
               </div>
 
               <div style={global.field}>
-                <label style={global.label}>Anexar Arquivo</label>
-                <label htmlFor="file-upload" style={{border: '2px dashed var(--border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--bg-app)', gap: '10px'}}>
-                   <input id="file-upload" type="file" style={{display: 'none'}} onChange={handleFileChange} />
-                   <Paperclip size={24} color="var(--text-muted)" />
-                   <span style={{fontSize: '13px', color: 'var(--text-muted)', marginTop: '5px'}}>{fileName ? `Arquivo: ${fileName}` : "Clique para anexar"}</span>
+                <label style={local.label}>Anexar Arquivo (Opcional)</label>
+                <label htmlFor="file-upload" style={{ border: '2px dashed var(--border)', borderRadius: '16px', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--bg-app)', gap: '10px', transition: '0.2s' }}>
+                   <input id="file-upload" type="file" style={{ display: 'none' }} onChange={handleFileChange} />
+                   <Paperclip size={28} color="var(--text-muted)" />
+                   <span style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: '800', marginTop: '5px' }}>{fileName ? `Arquivo: ${fileName}` : "Clique para anexar documento ou print"}</span>
                 </label>
               </div>
 
-              <button type="submit" style={{...global.btnPrimary, backgroundColor: currentType.color}} disabled={loading}>
-                {loading ? 'Processando...' : `Enviar e Gerar PDF`}
+              <button type="submit" style={{ ...global.btnPrimary, backgroundColor: currentType.color, height: '54px', borderRadius: '14px', fontWeight: '900', fontSize: '15px', marginTop: '10px' }} disabled={loading}>
+                {loading ? 'Processando e Gerando PDF...' : `Enviar Solicitação e Gerar PDF`} <Send size={18}/>
               </button>
             </form>
           </div>
@@ -489,91 +497,104 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
         {/* ABA 2: CENTRAL DE APROVAÇÕES               */}
         {/* ========================================== */}
         {activeTab === 'aprovacoes' && (
-          <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-            <div style={local.toolbar}>
-              <div style={global.searchBox}>
+          <div className="animated-view">
+            <div style={{ ...global.toolbar, background: 'var(--bg-card)', padding: '15px 25px', borderRadius: '20px', border: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between' }}>
+              <div style={{ ...global.searchBox, margin: 0, flex: 1, minWidth: '250px' }}>
                 <Search size={18} color="var(--text-muted)" />
-                <input type="text" placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={global.searchInput} />
+                <input type="text" placeholder="Procurar colaborador ou unidade..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={global.searchInput} />
               </div>
-              <div style={local.filterGroup}>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {['Pendente', 'Aprovado', 'Rejeitado', 'Todos'].map(status => (
                   <button key={status} onClick={() => setFilterStatus(status)} style={filterStatus === status ? local.filterBtnActive : local.filterBtn}>{status}</button>
                 ))}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: selectedApproval ? '1fr 400px' : '1fr', gap: '25px', transition: 'all 0.3s' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: selectedApproval ? '1fr 450px' : '1fr', gap: '30px', transition: 'all 0.3s', marginTop: '30px' }}>
+              
+              {/* LISTA DE CARDS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {loading ? (
-                  <div style={local.emptyState}>Carregando solicitações...</div>
+                  <div style={local.emptyState}>Carregando solicitações do sistema...</div>
                 ) : filteredApprovals.length === 0 ? (
                   <div style={local.emptyState}>
                     <ShieldAlert size={40} style={{ margin: '0 auto 15px auto', color: 'var(--border)' }} />
-                    Nenhuma solicitação {filterStatus !== 'Todos' ? filterStatus.toLowerCase() : ''} encontrada.
+                    Nenhuma solicitação {filterStatus !== 'Todos' ? filterStatus.toLowerCase() : ''} no momento.
                   </div>
                 ) : (
                   filteredApprovals.map(req => (
-                    <div key={req.id} onClick={() => setSelectedApproval(req)} style={{...local.requestCard, borderColor: selectedApproval?.id === req.id ? 'var(--text-brand)' : 'transparent', boxShadow: selectedApproval?.id === req.id ? 'var(--shadow-sm)' : 'none', border: '1px solid var(--border)'}}>
+                    <div key={req.id} onClick={() => setSelectedApproval(req)} className="hover-lift" style={{...local.requestCard, borderColor: selectedApproval?.id === req.id ? 'var(--text-brand)' : 'var(--border)', boxShadow: selectedApproval?.id === req.id ? 'var(--shadow-sm)' : 'none' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           {getTypeBadge(req.type)}
                           {getStatusBadge(req.status || 'Pendente')}
                         </div>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800' }}>
                           {new Date(req.createdAt?.toDate() || Date.now()).toLocaleDateString('pt-BR')}
                         </span>
                       </div>
-                      <h3 style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 5px 0' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
                         {req.targetName || req.attendantName || 'Indefinido'}
                       </h3>
-                      <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={14}/> {req.storeName || req.storeId}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><User size={14}/> {req.supervisorName || 'Gestor'}</span>
+                      <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={14}/> {req.storeName || req.storeId}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><User size={14}/> Solicitante: {req.supervisorName || 'Gestor'}</span>
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              {/* PAINEL DE DETALHES (Aprovações) */}
+              {/* PAINEL DE DETALHES (STICKY) */}
               {selectedApproval && (
                 <div style={local.detailsPanel}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>Detalhes da Solicitação</h3>
-                    <button onClick={() => setSelectedApproval(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><XCircle size={20}/></button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}><AlignLeft size={20} color="var(--text-brand)"/> Resumo e Avaliação</h3>
+                    <button onClick={() => setSelectedApproval(null)} style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '10px', padding: '6px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18}/></button>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div style={{ background: 'var(--bg-app)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
-                        <div style={{ width: '40px', height: '40px', background: 'var(--text-brand)', color: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+                    <div style={{ background: 'var(--bg-app)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '48px', height: '48px', background: 'var(--text-brand)', color: '#ffffff', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '900' }}>
                           {(selectedApproval.targetName || selectedApproval.attendantName || 'U')[0]}
                         </div>
                         <div>
-                          <h4 style={{ margin: 0, fontSize: '16px', color: 'var(--text-main)' }}>{selectedApproval.targetName || selectedApproval.attendantName}</h4>
-                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Unidade: {selectedApproval.storeName || selectedApproval.storeId}</p>
+                          <h4 style={{ margin: '0 0 4px 0', fontSize: '18px', color: 'var(--text-main)', fontWeight: '900' }}>{selectedApproval.targetName || selectedApproval.attendantName}</h4>
+                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Unidade: {selectedApproval.storeName || selectedApproval.storeId}</p>
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                      <div><label style={local.detailLabel}>Status</label><div>{getStatusBadge(selectedApproval.status || 'Pendente')}</div></div>
-                      <div><label style={local.detailLabel}>Data Informada</label><p style={local.detailValue}>{selectedApproval.dateEvent || selectedApproval.startDate ? new Date(selectedApproval.dateEvent || selectedApproval.startDate).toLocaleDateString() : 'N/A'}</p></div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                      <div style={{ background: 'var(--bg-app)', padding: '15px', borderRadius: '12px', border: '1px dashed var(--border)' }}>
+                         <label style={local.label}>Status do Pedido</label>
+                         <div style={{ marginTop: '8px' }}>{getStatusBadge(selectedApproval.status || 'Pendente')}</div>
+                      </div>
+                      <div style={{ background: 'var(--bg-app)', padding: '15px', borderRadius: '12px', border: '1px dashed var(--border)' }}>
+                         <label style={local.label}>Data Informada</label>
+                         <p style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: '8px 0 0 0' }}>{selectedApproval.dateEvent || selectedApproval.startDate ? new Date(selectedApproval.dateEvent || selectedApproval.startDate).toLocaleDateString() : 'N/A'}</p>
+                      </div>
                     </div>
+
                     <div>
-                      <label style={local.detailLabel}><AlignLeft size={14} /> Justificativa / Descrição</label>
+                      <label style={local.label}>Justificativa / Descrição</label>
                       <div style={local.observationBox}>{selectedApproval.reason || selectedApproval.description || 'Sem descrição.'}</div>
                     </div>
+
                     {selectedApproval.supervisorReason && (
                       <div>
-                        <label style={local.detailLabel}>Parecer Final</label>
-                        <div style={{...local.observationBox, borderColor: selectedApproval.status === 'Rejeitado' ? '#ef444450' : '#10b98150' }}>
+                        <label style={local.label}>Parecer Final da Coordenação</label>
+                        <div style={{...local.observationBox, background: selectedApproval.status === 'Rejeitado' ? 'var(--bg-danger-light)' : 'var(--bg-success-light)', borderColor: selectedApproval.status === 'Rejeitado' ? 'var(--border-danger)' : 'var(--border-success)', color: selectedApproval.status === 'Rejeitado' ? colors.danger : colors.success, fontWeight: '800' }}>
                           {selectedApproval.supervisorReason}
                         </div>
                       </div>
                     )}
+
                     {(selectedApproval.status === 'Pendente' || !selectedApproval.status) && (
-                      <div style={{ display: 'flex', gap: '15px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
-                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={{...global.btnPrimary, background: colors.danger, flex: 1}}><XCircle size={18}/> Rejeitar</button>
-                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={{...global.btnPrimary, background: colors.success, flex: 1}}><CheckCircle2 size={18}/> Aprovar</button>
+                      <div style={{ display: 'flex', gap: '15px', marginTop: '10px', paddingTop: '25px', borderTop: '1px solid var(--border)' }}>
+                        <button onClick={() => handleActionClick(selectedApproval, 'rejeitar')} style={{...global.btnPrimary, background: colors.danger, flex: 1, borderRadius: '14px', fontWeight: '900'}}><XCircle size={18}/> Rejeitar</button>
+                        <button onClick={() => handleActionClick(selectedApproval, 'aprovar')} style={{...global.btnPrimary, background: colors.success, flex: 1, borderRadius: '14px', fontWeight: '900'}}><CheckCircle2 size={18}/> Aprovar</button>
                       </div>
                     )}
                   </div>
@@ -587,30 +608,33 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
         {/* ABA 3: MEU HISTÓRICO DE ENVIOS             */}
         {/* ========================================== */}
         {activeTab === 'historico' && (
-          <div style={{animation: 'fadeIn 0.4s'}}>
-            <div style={local.tableCard}>
-              <table style={local.table}>
+          <div className="animated-view">
+            <div style={{ background: 'var(--bg-card)', borderRadius: '24px', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={local.tableHeaderRow}>
-                    <th style={local.th}>Data Envio</th>
-                    <th style={local.th}>Tipo</th>
-                    <th style={local.th}>Alvo</th>
-                    <th style={local.th}>Status</th>
+                  <tr style={{ background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' }}>
+                    <th style={local.th}>Data de Envio</th>
+                    <th style={local.th}>Tipo do Documento</th>
+                    <th style={local.th}>Colaborador Alvo</th>
+                    <th style={local.th}>Status Atual</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {historyList.map(item => {
+                  {historyList.map((item, i) => {
                     const typeConfig = REQUEST_TYPES[item.type] || REQUEST_TYPES.advertencia;
                     return (
-                      <tr key={item.id} style={local.tableRow}>
+                      <tr key={item.id} style={{ borderBottom: i === historyList.length - 1 ? 'none' : '1px solid var(--border)', transition: 'background 0.2s' }}>
                         <td style={local.td}>{item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'Hoje'}</td>
-                        <td style={local.td}><span style={{...local.typeBadge, color: typeConfig.color, background: typeConfig.bg}}>{typeConfig.label}</span></td>
-                        <td style={local.td}><strong>{item.targetName || item.attendantName}</strong><br/><span style={{fontSize: '10px', color: 'var(--text-muted)'}}>{item.storeName}</span></td>
+                        <td style={local.td}><span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', color: typeConfig.color, background: typeConfig.bg, border: `1px solid ${typeConfig.color}40` }}>{typeConfig.label}</span></td>
+                        <td style={local.td}>
+                           <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '14px', marginBottom: '2px' }}>{item.targetName || item.attendantName}</strong>
+                           <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold' }}>{item.storeName}</span>
+                        </td>
                         <td style={local.td}>{getStatusBadge(item.status)}</td>
                       </tr>
                     )
                   })}
-                  {historyList.length === 0 && <tr><td colSpan="4" style={local.emptyState}>Nenhum histórico encontrado.</td></tr>}
+                  {historyList.length === 0 && <tr><td colSpan="4" style={local.emptyState}>Nenhuma solicitação enviada no seu histórico.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -622,70 +646,84 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
       {/* MODAL DE AÇÃO (Aprovação / Rejeição) */}
       {actionModal.isOpen && (
         <div style={global.modalOverlay}>
-          <div style={global.modalBox}>
+          <div style={{ ...global.modalBox, borderRadius: '24px', maxWidth: '450px' }}>
             <div style={global.modalHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} color={colors.success} /> : <ShieldAlert size={24} color={colors.danger} />}
-                <h3 style={global.modalTitle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ padding: '10px', borderRadius: '12px', background: actionModal.type === 'aprovar' ? 'var(--bg-success-light)' : 'var(--bg-danger-light)', color: actionModal.type === 'aprovar' ? colors.success : colors.danger }}>
+                   {actionModal.type === 'aprovar' ? <CheckCircle2 size={24} /> : <ShieldAlert size={24} />}
+                </div>
+                <h3 style={{ ...global.modalTitle, margin: 0, fontWeight: '900' }}>
                   {actionModal.type === 'aprovar' ? 'Confirmar Aprovação' : 'Rejeitar Solicitação'}
                 </h3>
               </div>
+              <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} style={global.closeBtn}><X size={20}/></button>
             </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
-              Você está prestes a <strong>{actionModal.type}</strong> a solicitação referente a <strong>{actionModal.request.targetName || actionModal.request.attendantName}</strong>.
+
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '20px 0', lineHeight: '1.6' }}>
+              Você está prestes a <strong>{actionModal.type}</strong> a solicitação referente a <strong style={{ color: 'var(--text-main)' }}>{actionModal.request.targetName || actionModal.request.attendantName}</strong>.
             </p>
+            
             <div style={global.field}>
-              <label style={global.label}>{actionModal.type === 'aprovar' ? 'Observação Opcional' : 'Motivo da Rejeição (Obrigatório)'}</label>
-              <textarea value={actionModal.reason} onChange={(e) => setActionModal({...actionModal, reason: e.target.value})} placeholder="..." style={global.textarea} autoFocus />
+              <label style={local.label}>{actionModal.type === 'aprovar' ? 'Observação (Opcional)' : 'Motivo da Rejeição (Obrigatório)'}</label>
+              <textarea value={actionModal.reason} onChange={(e) => setActionModal({...actionModal, reason: e.target.value})} placeholder="Adicione os seus comentários finais aqui..." style={{ ...global.textarea, minHeight: '100px' }} autoFocus />
             </div>
-            <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
-              <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} disabled={isProcessing} style={{...global.btnSecondary, flex: 1}}>Cancelar</button>
-              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={{...global.btnPrimary, flex: 2, background: actionModal.type === 'aprovar' ? colors.success : colors.danger}}>
-                {isProcessing ? 'Processando...' : 'Confirmar'} <Send size={16}/>
+            
+            <div style={{ display: 'flex', gap: '15px', marginTop: '30px' }}>
+              <button onClick={() => setActionModal({ isOpen: false, type: '', request: null, reason: '' })} disabled={isProcessing} style={{...global.btnSecondary, flex: 1, borderRadius: '14px', fontWeight: '800'}}>Cancelar</button>
+              <button onClick={confirmAction} disabled={isProcessing || (actionModal.type === 'rejeitar' && !actionModal.reason.trim())} style={{...global.btnPrimary, flex: 2, borderRadius: '14px', background: actionModal.type === 'aprovar' ? colors.success : colors.danger, fontWeight: '900'}}>
+                {isProcessing ? 'Processando...' : 'Confirmar Decisão'} <Send size={16}/>
               </button>
             </div>
           </div>
         </div>
       )}
 
+      <style>{`
+        @keyframes fadeInView { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animated-view { animation: fadeInView 0.3s ease forwards; }
+        .hover-lift:hover { transform: translateY(-3px); border-color: var(--text-brand) !important; }
+      `}</style>
     </div>
   );
 }
 
-// --- ESTILOS LOCAIS ---
+// --- ESTILOS LOCAIS PADRONIZADOS ---
 const local = {
-  tabsContainer: { display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '1px', overflowX: 'auto', scrollbarWidth: 'none' },
-  tab: { padding: '12px 20px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid transparent' },
-  tabActive: { padding: '12px 20px', border: 'none', background: 'transparent', color: colors.rose, cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '3px solid #db2777' },
-  
-  rhNoticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', marginBottom: '30px' },
-  typeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '30px' },
-  typeCard: { padding: '15px 10px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: '0.2s', fontSize:'12px', textAlign:'center', gap: '8px' },
-  
-  radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--text-main)' },
+  headerWrapper: {
+    background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+    border: '1px solid var(--border)', borderRadius: '24px',
+    padding: '24px 32px', marginBottom: '25px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    flexWrap: 'wrap', gap: '20px', boxShadow: 'var(--shadow-sm)',
+  },
+  iconBox: { width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' },
+  headerSubtitle: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' },
 
+  navBar: { display: 'flex', gap: '8px', background: 'var(--bg-card)', padding: '8px', borderRadius: '18px', border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'nowrap' },
+  navBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '800', transition: '0.2s', background: 'transparent', color: 'var(--text-muted)' },
+  navBtnActive: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', transition: '0.2s', background: 'var(--bg-panel)', boxShadow: 'var(--shadow-sm)' },
+
+  label: { fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'block' },
+  radioLabel: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '800', color: 'var(--text-main)', fontSize: '14px' },
+  
+  rhNoticeBox: { background: 'var(--bg-primary-light)', border: '1px solid var(--border)', borderRadius: '16px', padding: '25px', marginBottom: '35px' },
+  typeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '15px', marginBottom: '10px' },
+  typeCard: { padding: '20px 10px', borderRadius: '16px', border: '2px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: '0.2s', textAlign: 'center' },
+  
   // APROVAÇÕES E HISTÓRICO
-  toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', marginBottom: '30px', flexWrap: 'wrap', background: 'var(--bg-panel)', padding: '15px', borderRadius: '16px', border: '1px solid var(--border)' },
-  filterGroup: { display: 'flex', gap: '10px', overflowX: 'auto', scrollbarWidth: 'none' },
-  filterBtn: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' },
-  filterBtnActive: { padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--text-brand)', background: 'var(--bg-primary-light)', color: 'var(--text-brand)', fontSize: '13px', fontWeight: '800', cursor: 'pointer' },
+  filterBtn: { padding: '10px 18px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-muted)', fontSize: '13px', fontWeight: '800', cursor: 'pointer', whiteSpace: 'nowrap' },
+  filterBtnActive: { padding: '10px 18px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-panel)', color: 'var(--text-brand)', fontSize: '13px', fontWeight: '900', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', whiteSpace: 'nowrap' },
   
-  requestCard: { background: 'var(--bg-card)', padding: '20px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' },
-  detailsPanel: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', position: 'sticky', top: '20px', alignSelf: 'start' },
-  detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' },
-  detailValue: { fontSize: '15px', fontWeight: '600', color: 'var(--text-main)', margin: 0 },
-  observationBox: { background: 'var(--bg-app)', border: '1px solid var(--border)', padding: '15px', borderRadius: '12px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', whiteSpace: 'pre-wrap' },
+  requestCard: { background: 'var(--bg-card)', padding: '25px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid var(--border)' },
+  detailsPanel: { background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', position: 'sticky', top: '30px', alignSelf: 'start' },
+  observationBox: { background: 'var(--bg-app)', border: '1px solid var(--border)', padding: '20px', borderRadius: '16px', fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.6', whiteSpace: 'pre-wrap' },
   
-  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#10b98115', color: colors.success, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #10b98130' },
-  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ef444415', color: colors.danger, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #ef444430' },
-  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#f59e0b15', color: colors.warning, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', border: '1px solid #f59e0b30' },
+  badgeSuccess: { display: 'flex', alignItems: 'center', gap: '4px', background: '#10b98115', color: colors.success, padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', border: '1px solid #10b98130' },
+  badgeError: { display: 'flex', alignItems: 'center', gap: '4px', background: '#ef444415', color: colors.danger, padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', border: '1px solid #ef444430' },
+  badgeWarning: { display: 'flex', alignItems: 'center', gap: '4px', background: '#f59e0b15', color: colors.warning, padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', border: '1px solid #f59e0b30' },
 
-  tableCard: { overflow: 'hidden', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-card)' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  tableHeaderRow: { background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)' },
-  th: { padding: '15px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  tableRow: { borderBottom: '1px solid var(--border)' },
-  td: { padding: '15px', fontSize: '14px', color: 'var(--text-main)' },
-  typeBadge: { padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' },
-  emptyState: { padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }
+  th: { padding: '20px', textAlign: 'left', fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  td: { padding: '20px', fontSize: '15px', color: 'var(--text-main)', verticalAlign: 'middle' },
+  emptyState: { padding: '80px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '15px', fontWeight: 'bold' }
 };

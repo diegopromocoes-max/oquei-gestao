@@ -94,12 +94,13 @@ export default function DashboardGrowth({ selectedCityId, selectedMonth, selecte
   const roi = metrics.totalCost > 0 ? ((metrics.totalReturn - metrics.totalCost) / metrics.totalCost) * 100 : 0;
   const cac = metrics.leadsGenerated > 0 ? metrics.totalCost / metrics.leadsGenerated : 0;
   
-  const score = useMemo(() => calculateGrowthScore({
-    novosClientes: metrics.realGrowth,
-    baseAnterior: metrics.baseStart,
-    base: metrics.baseStart,
-    mediaProgressosPlanos: metrics.progressAvg / 100,
-  }), [metrics]);
+const score = useMemo(() => calculateGrowthScore({
+    totalPlans: metrics.totalPlans,
+    leadsGenerated: metrics.leadsGenerated,
+    conversionRate: metrics.conversionRate,
+    roi: roi,
+    progressAvg: metrics.progressAvg,
+  }), [metrics, roi]);
 
   const insights = useMemo(() => generateInsights({
     custo: metrics.totalCost,

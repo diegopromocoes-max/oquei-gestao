@@ -1,36 +1,32 @@
-import { useState } from 'react';
-import { Target, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { Target, Calendar, BarChart2, MapPin, ShieldAlert, Sliders, Briefcase } from 'lucide-react';
 
-import {
-  Page, Card, Tabs,
-  styles, colors,
-} from '../components/ui';
+import { styles as global, colors } from '../styles/globalStyles';
 
+// IMPORTAÇÃO DAS ABAS (VIEWS)
 import TabMetasCanais    from './tabs_metas/TabMetasCanais';
 import TabMetasCidades   from './tabs_metas/TabMetasCidades';
 import TabMetasChurn     from './tabs_metas/TabMetasChurn';
 import TabSimuladorSOP   from './tabs_metas/TabSimuladorSOP';
-// ✅ NOVA ABA IMPORTADA
 import TabPlanoAcoes     from './tabs_metas/TabPlanoAcoes';
 
-// Mapa de aba → componente
+// MAPEAMENTO DE COMPONENTES
 const TAB_CONTENT = {
   canais:     TabMetasCanais,
   cidades:    TabMetasCidades,
   churn:      TabMetasChurn,
   simulador:  TabSimuladorSOP,
-  planos:     TabPlanoAcoes, // ✅ ADICIONADO AQUI
+  planos:     TabPlanoAcoes,
 };
 
-const TAB_LABELS = ['canais', 'cidades', 'churn', 'simulador', 'planos']; // ✅ ADICIONADO AQUI
-
-const TAB_DISPLAY = {
-  canais:    '1. Metas Canais',
-  cidades:   '2. Micro (Cidades)',
-  churn:     '3. Churn e Alvo',
-  simulador: '4. Simulador S&OP',
-  planos:    '5. Plano de Ações', // ✅ NOME DE EXIBIÇÃO
-};
+// MAPEAMENTO DE TÍTULOS E ÍCONES PARA AS ABAS
+const TABS_CONFIG = [
+  { id: 'canais', label: '1. Metas Canais', icon: BarChart2 },
+  { id: 'cidades', label: '2. Micro (Cidades)', icon: MapPin },
+  { id: 'churn', label: '3. Churn e Alvo', icon: ShieldAlert },
+  { id: 'simulador', label: '4. Simulador S&OP', icon: Sliders },
+  { id: 'planos', label: '5. Plano de Ações', icon: Briefcase }
+];
 
 export default function GestaoMetas({ userData }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -47,78 +43,83 @@ export default function GestaoMetas({ userData }) {
   const ActiveComponent = TAB_CONTENT[activeTab];
 
   return (
-    <Page
-      title="Planejamento e Metas"
-      subtitle="Planejamento 360º: Canais de Venda, Distribuição por Cidades, Churn, Simulação e Planos de Ação."
-      actions={
-        <div style={{ ...styles.row, gap: '8px' }}>
-
-      {/* ── Cabeçalho padrão Oquei Gestão ── */}
-      <div style={{
-        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
-        border: '1px solid var(--border)', borderRadius: '20px',
-        padding: '24px 32px', marginBottom: '24px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '14px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #10B981, #2563EB)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 6px 18px rgba(16,185,129,0.35)',
-          }}>
-            <Target size={26} color="#fff" />
+    <div style={{ ...global.container, maxWidth: '1400px' }}>
+      
+      {/* ── CABEÇALHO PADRÃO OQUEI STRATEGY ── */}
+      <div style={local.headerWrapper}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ ...local.iconBox, background: `linear-gradient(135deg, ${colors.success}, ${colors.primary})`, boxShadow: `0 8px 20px ${colors.success}40` }}>
+            <Target size={28} color="#fff" />
           </div>
           <div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
-              Planejamento e Metas
-            </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: '500' }}>
-              Canais, cidades, churn, simulação e planos de ação · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            <div style={local.headerTitle}>Planejamento e Metas</div>
+            <div style={local.headerSubtitle}>
+              Canais, cidades, churn, simulação e planos de ação · {new Date().toLocaleDateString('pt-BR')}
             </div>
           </div>
         </div>
-        
-      </div>
+
+        {/* Seletor de Mês Integrado */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-app)', padding: '10px 16px', borderRadius: '14px', border: '1px solid var(--border)' }}>
           <Calendar size={16} color="var(--text-muted)" />
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={e => setSelectedMonth(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '9px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-input, var(--bg-app))',
-              color: 'var(--text-main)',
-              fontSize: '14px',
-              fontFamily: 'inherit',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
+          <input 
+            type="month" 
+            value={selectedMonth} 
+            onChange={e => setSelectedMonth(e.target.value)} 
+            style={local.monthInputSmall}
           />
         </div>
-      }
-    >
+      </div>
 
-      <Tabs
-        tabs={TAB_LABELS.map(id => TAB_DISPLAY[id])}
-        active={TAB_DISPLAY[activeTab]}
-        onChange={label => {
-          const id = Object.keys(TAB_DISPLAY).find(k => TAB_DISPLAY[k] === label);
-          if (id) setActiveTab(id);
-        }}
-      />
+      {/* ── NAVEGAÇÃO POR ABAS (PILLS) ── */}
+      <div style={local.navBar}>
+        {TABS_CONFIG.map(tab => (
+          <button 
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)} 
+            style={activeTab === tab.id ? { ...local.navBtnActive, color: colors.primary, borderColor: colors.primary } : local.navBtn}
+          >
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <Card style={{ padding: '30px' }}>
+      {/* ── CONTEÚDO DINÂMICO ── */}
+      <div className="animated-view" style={{ background: 'var(--bg-card)', padding: '30px', borderRadius: '24px', minHeight: '500px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginTop: '25px' }}>
         <ActiveComponent
           selectedMonth={selectedMonth}
           isMaster={isMaster}
           userData={userData}
         />
-      </Card>
+      </div>
 
-    </Page>
+      <style>{`
+        @keyframes fadeInView { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animated-view { animation: fadeInView 0.3s ease forwards; }
+      `}</style>
+    </div>
   );
 }
+
+// --- ESTILOS LOCAIS PADRONIZADOS OQUEI STRATEGY ---
+const local = {
+  headerWrapper: {
+    background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-panel) 100%)',
+    border: '1px solid var(--border)', borderRadius: '24px',
+    padding: '24px 32px', marginBottom: '25px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    flexWrap: 'wrap', gap: '20px', boxShadow: 'var(--shadow-sm)',
+  },
+  iconBox: {
+    width: '56px', height: '56px', borderRadius: '16px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' },
+  headerSubtitle: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' },
+
+  monthInputSmall: { border: 'none', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '900', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' },
+
+  navBar: { display: 'flex', gap: '8px', background: 'var(--bg-card)', padding: '8px', borderRadius: '18px', border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'nowrap' },
+  navBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '800', transition: '0.2s', background: 'transparent', color: 'var(--text-muted)' },
+  navBtnActive: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', transition: '0.2s', background: 'var(--bg-panel)', boxShadow: 'var(--shadow-sm)' },
+};

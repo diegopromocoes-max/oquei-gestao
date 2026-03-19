@@ -77,7 +77,9 @@ service cloud.firestore {
     // ── 6. Marketing, Eventos e Estrutura ────────────────────────────────────
     match /sponsorships/{id}           { allow read, write: if isAuth() && isGrowthOrAbove(); }
     match /marketing_actions/{id}      { allow read, write: if isAuth() && isGrowthOrAbove(); }
-    match /events/{id}                 { allow read, write: if isAuth() && isGrowthOrAbove(); }
+    // events: agenda pessoal — qualquer autenticado pode criar/editar os próprios
+    // e ler eventos onde é participante (participants array-contains uid)
+    match /events/{id}                 { allow read, write: if isAuth(); }
     match /growth_events/{id}          { allow read, write: if isAuth() && isGrowthOrAbove(); }
 
     // ── 7. Churn e Análises ───────────────────────────────────────────────────
@@ -137,5 +139,10 @@ service cloud.firestore {
 
     // ── 12. E-mail transacional ───────────────────────────────────────────────
     match /mail/{id}                   { allow create: if isAuth(); allow read, delete: if isAuth() && isCoordinator(); }
+
+    // ── 13. Oquei Insights ────────────────────────────────────────────────────
+    // Qualquer usuario autenticado pode criar, editar e consultar pesquisas
+    match /surveys/{id}          { allow read, write: if isAuth(); }
+    match /survey_responses/{id} { allow read, write: if isAuth(); }
   }
 }
