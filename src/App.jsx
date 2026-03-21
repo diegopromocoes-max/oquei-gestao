@@ -142,6 +142,9 @@ function AuthApp() {
         </div>
       } />
 
+      {/* Rotas públicas dentro do AuthApp — não redirecionar */}
+      <Route path="/pesquisa/:surveyId/entrevistador/:entrevistadorId" element={<PublicSurveyEntrevistadorRoute />} />
+      <Route path="/pesquisa/:surveyId" element={<PublicSurveyRoute />} />
       <Route path="*" element={<Navigate to={user && userData ? getRoleRoute(userData.role) : '/login'} replace />} />
     </Routes>
   );

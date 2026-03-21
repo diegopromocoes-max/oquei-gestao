@@ -6,13 +6,14 @@
 //    coordinator/growth → InsightsDashboard + SurveyBuilder
 // ============================================================
 import React, { lazy, Suspense, useState } from 'react';
-import { ClipboardList, BarChart3, Telescope, Monitor } from 'lucide-react';
+import { ClipboardList, BarChart3, Telescope, Monitor, ShieldCheck } from 'lucide-react';
 import { Spinner, colors } from '../components/ui';
 import { styles as global } from '../styles/globalStyles';
 
 const ResearcherPanel  = lazy(() => import('./pages/ResearcherPanel'));
 const SurveyBuilder    = lazy(() => import('./pages/SurveyBuilder'));
-const InsightsDashboard = lazy(() => import('./pages/InsightsDashboard'));
+const InsightsDashboard  = lazy(() => import('./pages/InsightsDashboard'));
+const AuditoriaPesquisas = lazy(() => import('./pages/AuditoriaPesquisas'));
 
 const Loading = () => (
   <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh' }}>
@@ -22,12 +23,14 @@ const Loading = () => (
 
 // ── Tabs internas do módulo ───────────────────────────────────
 const TAB_SUPERVISOR = [
-  { id:'builder',   label:'Criador de Pesquisas',  icon: ClipboardList, color: colors.primary },
-  { id:'dashboard', label:'Dashboard',       icon: BarChart3,     color: colors.danger  },
+  { id:'builder',   label:'Criador de Pesquisas', icon: ClipboardList, color: colors.primary },
+  { id:'dashboard', label:'Dashboard',             icon: BarChart3,     color: colors.danger  },
+  { id:'auditoria', label:'Auditoria',             icon: ShieldCheck,   color: colors.purple  },
 ];
 const TAB_ANALYST = [
-  { id:'dashboard', label:'Dashboard',      icon: BarChart3,     color: colors.danger  },
-  { id:'builder',   label:'Criador de Pesquisas', icon: ClipboardList, color: colors.primary },
+  { id:'dashboard', label:'Dashboard',             icon: BarChart3,     color: colors.danger  },
+  { id:'builder',   label:'Criador de Pesquisas',  icon: ClipboardList, color: colors.primary },
+  { id:'auditoria', label:'Auditoria',             icon: ShieldCheck,   color: colors.purple  },
 ];
 
 function InsightsTabs({ tabs, active, onChange }) {
@@ -72,8 +75,9 @@ export default function OqueiInsights({ userData }) {
       <InsightsTabs tabs={tabs} active={active} onChange={setActive}/>
 
       <Suspense fallback={<Loading/>}>
-        {active === 'builder'   && <SurveyBuilder   userData={userData}/>}
-        {active === 'dashboard' && <InsightsDashboard userData={userData}/>}
+        {active === 'builder'   && <SurveyBuilder    userData={userData}/>}
+        {active === 'dashboard' && <InsightsDashboard  userData={userData}/>}
+        {active === 'auditoria' && <AuditoriaPesquisas userData={userData}/>}
       </Suspense>
     </div>
   );

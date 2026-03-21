@@ -18,17 +18,18 @@ import {
   Plus, Trash2, GripVertical, ToggleLeft, Type, List, Hash,
   ClipboardList, Edit2, X, Save, ChevronDown, ChevronUp,
   AlertTriangle, Lock, Unlock, Info, Copy, Check,
-  Link as LinkIcon, Eye, EyeOff, Users, Phone, Target, ExternalLink,
+  Link as LinkIcon, Eye, EyeOff, Users, Phone, Target, ExternalLink, FileText, PauseCircle,
 } from 'lucide-react';
 import { Card, Btn, Badge, Modal, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
 
 // ── Constantes ────────────────────────────────────────────────
 const QUESTION_TYPES = [
-  { value: 'boolean', label: 'Sim / Não',        icon: ToggleLeft, color: colors.success },
-  { value: 'select',  label: 'Múltipla Escolha', icon: List,       color: colors.primary },
-  { value: 'nps',     label: 'Escala NPS 0–10',  icon: Hash,       color: colors.purple  },
-  { value: 'text',    label: 'Texto Livre',       icon: Type,       color: colors.warning },
+  { value: 'boolean',     label: 'Sim / Não',          icon: ToggleLeft, color: colors.success },
+  { value: 'select',      label: 'Escolha Única',       icon: List,       color: colors.primary },
+  { value: 'multiselect', label: 'Múltipla Escolha',    icon: List,       color: colors.purple  },
+  { value: 'nps',         label: 'Escala NPS 0–10',     icon: Hash,       color: colors.warning },
+  { value: 'text',        label: 'Texto Livre',          icon: Type,       color: colors.neutral },
 ];
 
 const STATUS_COR   = { active: 'success', finished: 'neutral', draft: 'warning' };
@@ -119,7 +120,7 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
             const sel = q.type === t.value;
             return (
               <button key={t.value}
-                onClick={() => onChange({ ...q, type: t.value, options: t.value === 'select' ? [] : t.value === 'boolean' ? ['Sim', 'Não'] : null })}
+                onClick={() => onChange({ ...q, type: t.value, options: (t.value === 'select' || t.value === 'multiselect') ? [] : t.value === 'boolean' ? ['Sim', 'Não'] : null })}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: sel ? `${t.color}20` : 'var(--bg-panel)', outline: `1px solid ${sel ? t.color : 'var(--border)'}`, fontSize: '11px', fontWeight: '800', color: sel ? t.color : 'var(--text-muted)', transition: 'all 0.12s' }}>
                 <I2 size={11} /> {t.label}
               </button>
@@ -140,8 +141,8 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
             </div>
           )}
         </div>
-        {/* Opções select */}
-        {q.type === 'select' && (
+        {/* Opções select / multiselect */}
+        {(q.type === 'select' || q.type === 'multiselect') && (
           <div>
             <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Opções</div>
             {(q.options || []).length === 0 && (
@@ -190,6 +191,145 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
   );
 }
 
+
+
+// ── Exporta questionário como PDF ────────────────────────────
+function exportSurveyPDF(survey) {
+  const tipos = {
+    boolean:     '☑ Sim / Não',
+    select:      '○ Escolha Única',
+    multiselect: '☑ Múltipla Escolha',
+    nps:         '★ Escala NPS (0–10)',
+    text:        '✎ Texto Livre',
+  };
+
+  const questions = (survey.questions || []).map((q, i) => {
+    const tipoLabel = tipos[q.type] || q.type;
+    const hasOptions = q.type === 'select' || q.type === 'multiselect';
+    const isMulti = q.type === 'multiselect';
+    const optionsHtml = hasOptions && q.options?.length
+      ? q.options.map(opt => `
+          <div class="option">
+            <span class="opt-mark">${isMulti ? '☐' : '○'}</span>
+            <span>${opt}</span>
+          </div>`).join('') + `
+          <div class="option outro">
+            <span class="opt-mark">${isMulti ? '☐' : '○'}</span>
+            <span>Outro: ___________________________________</span>
+          </div>`
+      : q.type === 'boolean'
+        ? `<div style="display:flex;gap:24px;margin-top:8px">
+            <span>○ Sim</span><span>○ Não</span>
+          </div>`
+        : q.type === 'nps'
+          ? `<div class="nps-row">${Array.from({length:11},(_,n)=>`<span class="nps-box">${n}</span>`).join('')}</div>
+             <div class="nps-labels"><span>😞 Péssimo</span><span>😍 Excelente</span></div>`
+          : `<div class="text-line"></div><div class="text-line"></div><div class="text-line short"></div>`;
+
+    return `
+      <div class="question">
+        <div class="q-header">
+          <span class="q-num">${i + 1}</span>
+          <div class="q-body">
+            <div class="q-label">${q.label}</div>
+            <div class="q-tipo">${tipoLabel}</div>
+          </div>
+        </div>
+        <div class="q-options">${optionsHtml}</div>
+      </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${survey.title}</title>
+  <style>
+    @page { margin: 20mm 18mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Arial', sans-serif; font-size: 13px; color: #1a1a1a; line-height: 1.45; }
+    .header { border-bottom: 3px solid #2563eb; padding-bottom: 14px; margin-bottom: 24px; }
+    .header h1 { font-size: 20px; font-weight: 900; color: #1e293b; margin-bottom: 4px; }
+    .header .meta { font-size: 11px; color: #64748b; display: flex; gap: 18px; margin-top: 6px; }
+    .header .meta span { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
+    .identification { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; background: #f8fafc; }
+    .identification h3 { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 10px; }
+    .id-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .id-field label { font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px; }
+    .id-line { border-bottom: 1px solid #94a3b8; height: 24px; }
+    .question { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; page-break-inside: avoid; }
+    .q-header { display: flex; gap: 12px; margin-bottom: 10px; }
+    .q-num { min-width: 26px; height: 26px; background: #2563eb; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
+    .q-label { font-size: 14px; font-weight: 800; color: #1e293b; line-height: 1.35; }
+    .q-tipo { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+    .q-options { padding-left: 38px; }
+    .option { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+    .option:last-child { border-bottom: none; }
+    .opt-mark { color: #94a3b8; font-size: 15px; min-width: 16px; }
+    .option.outro { color: #94a3b8; font-style: italic; }
+    .nps-row { display: flex; gap: 5px; margin-top: 6px; }
+    .nps-box { width: 32px; height: 32px; border: 1px solid #cbd5e1; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+    .nps-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #64748b; }
+    .text-line { border-bottom: 1px solid #94a3b8; height: 22px; margin-bottom: 6px; }
+    .text-line.short { width: 60%; }
+    .footer { margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; }
+    .assinatura { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .assinatura-linha { border-top: 1px solid #475569; padding-top: 6px; font-size: 11px; color: #475569; text-align: center; }
+    @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${survey.title}</h1>
+    ${survey.description ? `<div style="font-size:13px;color:#475569;margin-top:4px">${survey.description}</div>` : ''}
+    <div class="meta">
+      <span>📋 ${(survey.questions||[]).length} perguntas</span>
+      ${survey.targetCities?.length ? `<span>📍 ${survey.targetCities.join(', ')}</span>` : ''}
+      <span>🗓 ${new Date().toLocaleDateString('pt-BR')}</span>
+    </div>
+  </div>
+
+  <div class="identification">
+    <h3>Identificação do Entrevistador</h3>
+    <div class="id-fields">
+      <div><label>Nome completo</label><div class="id-line"></div></div>
+      <div><label>Telefone</label><div class="id-line"></div></div>
+      <div><label>Cidade</label><div class="id-line"></div></div>
+      <div><label>Data</label><div class="id-line"></div></div>
+    </div>
+  </div>
+
+  ${questions}
+
+  <div class="assinatura">
+    <div class="assinatura-linha">Assinatura do Entrevistador</div>
+    <div class="assinatura-linha">Assinatura do Entrevistado</div>
+  </div>
+
+  <div class="footer">
+    <span>Oquei Gestão — ${survey.title}</span>
+    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+  </div>
+</body>
+</html>`;
+
+  // Cria um iframe oculto para imprimir sem popup blocker
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0';
+  document.body.appendChild(iframe);
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+  iframe.contentWindow.onload = () => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => document.body.removeChild(iframe), 2000);
+  };
+  // Fallback se onload não disparar
+  setTimeout(() => {
+    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch {}
+  }, 800);
+}
 
 // ── EntrevistadoresSection ──────────────────────────────────
 // Seção dentro do card de campanha ATIVA para gerenciar
@@ -312,7 +452,7 @@ function EntrevistadoresSection({ survey }) {
 }
 
 // ── SurveyCard ─────────────────────────────────────────────
-function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, onUpdateQuestion, onRemoveQuestion, onMoveQuestion, onEntrevistadores }) {
+function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onPause, onAddQuestion, onUpdateQuestion, onRemoveQuestion, onMoveQuestion, onEntrevistadores }) {
   const [expanded, setExpanded] = useState(false);
   const activation = canActivate(survey);
   const isDraft    = survey.status === 'draft';
@@ -394,6 +534,20 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
             style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontWeight: '800', fontSize: '12px', cursor: 'pointer' }}>
             <Edit2 size={12} /> Info
           </button>
+          <button onClick={() => exportSurveyPDF(survey)}
+            title="Exportar questionário em PDF"
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: `1px solid ${colors.primary}30`, background: `${colors.primary}08`, color: colors.primary, fontWeight: '800', fontSize: '12px', cursor: 'pointer' }}>
+            <FileText size={12} /> PDF
+          </button>
+          {/* Pausar (volta para draft sem encerrar) */}
+          {isActive && (
+            <button onClick={() => onPause(survey)}
+              title="Pausar campanha para edição — volta para Rascunho"
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: 'none', fontWeight: '900', fontSize: '12px', cursor: 'pointer', justifyContent: 'center', background: `${colors.warning}15`, color: colors.warning, outline: `1px solid ${colors.warning}40`, transition: 'all 0.12s' }}>
+              <PauseCircle size={12} /> Pausar
+            </button>
+          )}
+          {/* Ativar / Encerrar */}
           {!isFinished && (
             <button
               onClick={() => onToggleStatus(survey)}
@@ -543,6 +697,12 @@ export default function SurveyBuilder({ userData }) {
     setSaving(false);
   };
 
+  const handlePause = async (survey) => {
+    if (!window.confirm('Pausar esta campanha? Ela voltará para Rascunho e poderá ser editada e reativada depois.')) return;
+    await persistSurvey(survey.id, { status: 'draft' });
+    window.showToast?.('Campanha pausada. Edite as perguntas e reative quando estiver pronta.', 'warning');
+  };
+
   const handleToggleStatus = async (survey) => {
     if (survey.status === 'draft') {
       const check = canActivate(survey);
@@ -667,6 +827,7 @@ export default function SurveyBuilder({ userData }) {
                     <SurveyCard key={s.id} survey={s}
                       onEdit={openEdit} onDelete={handleDelete}
                       onToggleStatus={handleToggleStatus}
+                      onPause={handlePause}
                       onAddQuestion={handleAddQuestion}
                       onUpdateQuestion={handleUpdateQuestion}
                       onRemoveQuestion={handleRemoveQuestion}
