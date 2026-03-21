@@ -5,15 +5,16 @@
 //    supervisor  → SurveyBuilder + MonitorPanel
 //    coordinator/growth → InsightsDashboard + SurveyBuilder
 // ============================================================
-import React, { lazy, Suspense, useState } from 'react';
-import { ClipboardList, BarChart3, Telescope, Monitor, ShieldCheck } from 'lucide-react';
+import React, { lazy, Suspense, useState, useRef } from 'react';
+import { ClipboardList, BarChart3, Telescope, Monitor, ShieldCheck, Target, PieChart } from 'lucide-react';
 import { Spinner, colors } from '../components/ui';
 import { styles as global } from '../styles/globalStyles';
 
 const ResearcherPanel  = lazy(() => import('./pages/ResearcherPanel'));
 const SurveyBuilder    = lazy(() => import('./pages/SurveyBuilder'));
-const InsightsDashboard  = lazy(() => import('./pages/InsightsDashboard'));
+import InsightsDashboard from './pages/InsightsDashboard';
 const AuditoriaPesquisas = lazy(() => import('./pages/AuditoriaPesquisas'));
+const AnaliseResultados  = lazy(() => import('./pages/AnaliseResultados'));
 
 const Loading = () => (
   <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh' }}>
@@ -26,11 +27,15 @@ const TAB_SUPERVISOR = [
   { id:'builder',   label:'Criador de Pesquisas', icon: ClipboardList, color: colors.primary },
   { id:'dashboard', label:'Dashboard',             icon: BarChart3,     color: colors.danger  },
   { id:'auditoria', label:'Auditoria',             icon: ShieldCheck,   color: colors.purple  },
+  { id:'plano',     label:'Plano de Ação',         icon: Target,        color: colors.success },
+  { id:'analise',   label:'Análise dos Resultados', icon: PieChart,      color: colors.info    },
 ];
 const TAB_ANALYST = [
   { id:'dashboard', label:'Dashboard',             icon: BarChart3,     color: colors.danger  },
   { id:'builder',   label:'Criador de Pesquisas',  icon: ClipboardList, color: colors.primary },
   { id:'auditoria', label:'Auditoria',             icon: ShieldCheck,   color: colors.purple  },
+  { id:'plano',     label:'Plano de Ação',         icon: Target,        color: colors.success },
+  { id:'analise',   label:'Análise dos Resultados', icon: PieChart,      color: colors.info    },
 ];
 
 function InsightsTabs({ tabs, active, onChange }) {
@@ -60,6 +65,14 @@ export default function OqueiInsights({ userData }) {
   const tabs    = (isCoordinator || isGrowth) ? TAB_ANALYST : TAB_SUPERVISOR;
   const [active, setActive] = useState(tabs[0].id);
 
+  // Estado da IA persistido aqui — sobrevive à troca de abas
+  const [aiState, setAiState] = useState({
+    mapMode:      'normal',
+    aiScores:     {},
+    aiLog:        [],
+    aiSurveySnap: null,
+  });
+
   // Pesquisador: interface mobile direta, sem LayoutGlobal
   if (isResearcher) {
     return (
@@ -75,9 +88,21 @@ export default function OqueiInsights({ userData }) {
       <InsightsTabs tabs={tabs} active={active} onChange={setActive}/>
 
       <Suspense fallback={<Loading/>}>
+        {/* SurveyBuilder e Auditoria desmontam normalmente */}
         {active === 'builder'   && <SurveyBuilder    userData={userData}/>}
-        {active === 'dashboard' && <InsightsDashboard  userData={userData}/>}
         {active === 'auditoria' && <AuditoriaPesquisas userData={userData}/>}
+        {active === 'plano'     && <PlanoAcao          userData={userData}/>}
+        {active === 'analise'   && <AnaliseResultados  userData={userData}/>}
+
+        {/* Dashboard fica sempre montado para preservar estado da IA —
+            apenas oculto via CSS quando outra aba está ativa */}
+        <div style={{ display: active === 'dashboard' ? 'block' : 'none' }}>
+          <InsightsDashboard
+            userData={userData}
+            aiState={aiState}
+            setAiState={setAiState}
+          />
+        </div>
       </Suspense>
     </div>
   );

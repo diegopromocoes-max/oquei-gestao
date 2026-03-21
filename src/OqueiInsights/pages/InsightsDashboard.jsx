@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { BarChart3, MapPin, TrendingUp, Users, RefreshCw, Download, Filter, Eye, X, ChevronRight, Zap, Plus, Trash2, Thermometer, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, MapPin, TrendingUp, Users, RefreshCw, Download, Filter, Eye, X, ChevronRight, Zap, Plus, Trash2, Thermometer, SlidersHorizontal, FileText, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { Card, Btn, Badge, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
 
@@ -329,8 +329,169 @@ function ModalResposta({ resposta, grupo, surveys, onClose }) {
   );
 }
 
+
+// ── Modal Log da IA ───────────────────────────────────────────
+function ModalAiLog({ log, aiScores, responses, survey, onClose }) {
+  const [tab, setTab] = React.useState('log'); // log | leads
+
+  const quentes = Object.entries(aiScores)
+    .map(([id, s]) => ({ id, ...s, r: responses.find(r => r.id === id) }))
+    .filter(s => s.score >= 7)
+    .sort((a, b) => b.score - a.score);
+
+  const scoreColor = s => s >= 9 ? '#ef4444' : s >= 7 ? '#f59e0b' : s >= 4 ? '#3b82f6' : '#64748b';
+  const scoreLabel = s => s >= 9 ? '🔴 Muito Quente' : s >= 7 ? '🟡 Quente' : s >= 4 ? '🔵 Morno' : '⚫ Frio';
+
+  const logColor = type => ({
+    success: '#10b981', error: '#ef4444', warn: '#f59e0b',
+    info: 'var(--text-muted)', divider: 'var(--border)',
+  })[type] || 'var(--text-muted)';
+
+  const exportLeads = () => {
+    const rows = [['Score','Temperatura','Nome','Cidade','Nº','Motivo da IA']];
+    quentes.forEach(s => rows.push([
+      s.score, scoreLabel(s.score).replace(/[🔴🟡🔵⚫] /,''),
+      s.r?.researcherName||'', s.r?.city||'', s.r?.numero||'', s.motivo
+    ]));
+    const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='leads-quentes.csv'; a.click();
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}
+      onClick={e => e.target===e.currentTarget && onClose()}>
+      <div style={{ background:'var(--bg-card)', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 32px 80px rgba(0,0,0,0.6)', border:'1px solid rgba(139,92,246,0.2)' }}>
+
+        {/* Header */}
+        <div style={{ padding:'20px 24px 0', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+              <div style={{ width:'40px', height:'40px', borderRadius:'11px', background:'linear-gradient(135deg,#f59e0b,#ef4444)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px #f59e0b44' }}>
+                <Zap size={20} color="#fff"/>
+              </div>
+              <div>
+                <div style={{ fontWeight:'900', fontSize:'17px', color:'var(--text-main)' }}>Relatório — IA Leads Quentes</div>
+                <div style={{ fontSize:'12px', color:'var(--text-muted)', marginTop:'2px' }}>
+                  {survey?.title} · {Object.keys(aiScores).length} respondentes · {quentes.length} leads quentes
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', display:'flex', padding:'4px' }}>
+              <X size={20}/>
+            </button>
+          </div>
+
+          {/* KPIs rápidos */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'16px' }}>
+            {[
+              { label:'Muito Quentes', value: Object.values(aiScores).filter(s=>s.score>=9).length, c:'#ef4444' },
+              { label:'Quentes',       value: Object.values(aiScores).filter(s=>s.score>=7&&s.score<9).length, c:'#f59e0b' },
+              { label:'Mornos',        value: Object.values(aiScores).filter(s=>s.score>=4&&s.score<7).length, c:'#3b82f6' },
+              { label:'Frios',         value: Object.values(aiScores).filter(s=>s.score<4).length, c:'#64748b' },
+            ].map(k => (
+              <div key={k.label} style={{ background:'var(--bg-app)', border:`1px solid ${k.c}30`, borderRadius:'10px', padding:'10px 12px', textAlign:'center' }}>
+                <div style={{ fontSize:'22px', fontWeight:'900', color:k.c }}>{k.value}</div>
+                <div style={{ fontSize:'10px', fontWeight:'800', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginTop:'2px' }}>{k.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display:'flex', gap:'4px', background:'var(--bg-panel)', borderRadius:'10px', padding:'3px', marginBottom:'0' }}>
+            {[{id:'log',label:'📋 Log de Execução'},{id:'leads',label:`🔥 Leads Quentes (${quentes.length})`}].map(t => (
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{ flex:1, padding:'7px', borderRadius:'7px', border:'none', cursor:'pointer', fontWeight:'800', fontSize:'12px', background: tab===t.id ? 'var(--bg-card)' : 'transparent', color: tab===t.id ? 'var(--text-main)' : 'var(--text-muted)', boxShadow: tab===t.id ? 'var(--shadow-sm)' : 'none', transition:'all 0.15s' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Conteúdo */}
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px 24px' }}>
+
+          {/* Tab: Log */}
+          {tab === 'log' && (
+            <div style={{ fontFamily:'monospace', fontSize:'12px', display:'flex', flexDirection:'column', gap:'3px' }}>
+              {log.map((entry, i) => (
+                <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start', padding:'4px 0', borderBottom: entry.type==='divider' ? '1px solid var(--border)' : 'none' }}>
+                  {entry.type !== 'divider' && (
+                    <span style={{ color:'var(--text-muted)', opacity:0.6, flexShrink:0, fontSize:'10px', marginTop:'1px' }}>{entry.time}</span>
+                  )}
+                  <span style={{ color: logColor(entry.type), lineHeight:1.5 }}>{entry.msg}</span>
+                </div>
+              ))}
+              {log.length === 0 && <div style={{ color:'var(--text-muted)', textAlign:'center', padding:'20px' }}>Nenhum log disponível.</div>}
+            </div>
+          )}
+
+          {/* Tab: Leads Quentes */}
+          {tab === 'leads' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'4px' }}>
+                <button onClick={exportLeads}
+                  style={{ display:'flex', alignItems:'center', gap:'5px', padding:'6px 12px', borderRadius:'8px', border:'1px solid var(--border)', background:'var(--bg-app)', color:'var(--text-muted)', fontSize:'11px', fontWeight:'800', cursor:'pointer' }}>
+                  <Download size={11}/> Exportar CSV
+                </button>
+              </div>
+              {quentes.length === 0 && (
+                <div style={{ textAlign:'center', padding:'40px', color:'var(--text-muted)', fontSize:'13px' }}>Nenhum lead quente encontrado (score ≥ 7).</div>
+              )}
+              {quentes.map((s, i) => {
+                const r = s.r;
+                const questions = survey?.questions || [];
+                return (
+                  <div key={s.id} style={{ background:'var(--bg-app)', border:`1px solid ${scoreColor(s.score)}30`, borderLeft:`4px solid ${scoreColor(s.score)}`, borderRadius:'12px', padding:'14px 16px' }}>
+                    {/* Cabeçalho do lead */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                        <div style={{ width:'36px', height:'36px', borderRadius:'9px', background:`${scoreColor(s.score)}20`, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'900', fontSize:'16px', color:scoreColor(s.score) }}>
+                          {s.score}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight:'900', fontSize:'14px', color:'var(--text-main)' }}>{r?.researcherName || 'Pesquisador'}</div>
+                          <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:'2px', display:'flex', gap:'8px' }}>
+                            {r?.city && <span>📍 {r.city}</span>}
+                            {r?.numero && <span>#{r.numero}</span>}
+                            {r?.timestamp?.toDate && <span>🗓 {r.timestamp.toDate().toLocaleDateString('pt-BR')}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'4px' }}>
+                        <span style={{ background:`${scoreColor(s.score)}20`, color:scoreColor(s.score), borderRadius:'6px', padding:'3px 10px', fontSize:'11px', fontWeight:'900' }}>
+                          {scoreLabel(s.score)}
+                        </span>
+                        <span style={{ fontSize:'11px', color:'var(--text-muted)', fontStyle:'italic' }}>"{s.motivo}"</span>
+                      </div>
+                    </div>
+                    {/* Respostas relevantes */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:'5px' }}>
+                      {questions.map(q => {
+                        const val = r?.answers?.[q.id];
+                        if (!val && val !== 0) return null;
+                        const display = Array.isArray(val) ? val.join(', ') : String(val);
+                        return (
+                          <div key={q.id} style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
+                            <span style={{ color:'var(--text-muted)', flexShrink:0, minWidth:'120px', maxWidth:'180px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{q.label}:</span>
+                            <span style={{ fontWeight:'700', color:'var(--text-main)' }}>{display}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────
-export default function InsightsDashboard({ userData }) {
+export default function InsightsDashboard({ userData, aiState, setAiState }) {
   const [surveys,    setSurveys]    = useState([]);
   const [responses,  setResponses]  = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -338,12 +499,22 @@ export default function InsightsDashboard({ userData }) {
   const [selCity,    setSelCity]    = useState('all');
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [modalData,     setModalData]     = useState(null);
-  const [mapMode,       setMapMode]       = useState('normal');   // normal | filtro | ia
-  const [filtrosCruz,   setFiltrosCruz]   = useState([]);         // [{qId, valor}]
-  const [aiScores,      setAiScores]      = useState({});         // responseId -> {score, motivo}
+  // Estado da IA — elevado para OqueiInsights para sobreviver à troca de aba
+  const mapMode      = aiState.mapMode;
+  const setMapMode   = v => setAiState(s => ({ ...s, mapMode: typeof v === 'function' ? v(s.mapMode) : v }));
+  const aiScores     = aiState.aiScores;
+  const setAiScores  = v => setAiState(s => ({ ...s, aiScores: typeof v === 'function' ? v(s.aiScores) : v }));
+  const aiLog        = aiState.aiLog;
+  const setAiLog     = v => setAiState(s => ({ ...s, aiLog: typeof v === 'function' ? v(s.aiLog) : v }));
+  const aiSurveySnap = aiState.aiSurveySnap;
+  const setAiSurveySnap = v => setAiState(s => ({ ...s, aiSurveySnap: typeof v === 'function' ? v(s.aiSurveySnap) : v }));
+
+  // Estado local — pode resetar normalmente
+  const [filtrosCruz,   setFiltrosCruz]   = useState([]);
   const [aiLoading,     setAiLoading]     = useState(false);
   const [aiError,       setAiError]       = useState('');
   const [showFiltroPanel, setShowFiltroPanel] = useState(false);
+  const [showAiLog,      setShowAiLog]      = useState(false);
 
   useEffect(() => {
     const unsubSurveys = onSnapshot(collection(db, 'surveys'), snap => {
@@ -380,7 +551,9 @@ export default function InsightsDashboard({ userData }) {
       filtered.filter(r =>
         filtrosCruz.every(f => {
           const ans = r.answers?.[f.qId];
+          const q = surveys.flatMap(s => s.questions || []).find(q => q.id === f.qId);
           if (Array.isArray(ans)) return ans.includes(f.valor);
+          if (q?.type === 'nps') return Number(ans) >= Number(f.valor);
           return String(ans || '') === f.valor;
         })
       ).map(r => r.id)
@@ -419,55 +592,141 @@ export default function InsightsDashboard({ userData }) {
 
   const npsColor = n => n>=9?colors.success:n>=7?colors.primary:n>=5?colors.warning:colors.danger;
 
-  // ── Análise de IA — score de propensão de compra ────────────
+  // ── Análise de IA via Gemini ─────────────────────────────────
+  const addLog = (msg, type = 'info') => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    setAiLog(l => [...l, { time, msg, type }]);
+  };
+
   const runAiAnalysis = async () => {
     if (!selSurvey || selSurvey === 'all') {
-      setAiError('Selecione uma pesquisa específica para análise de IA.');
-      return;
+      setAiError('Selecione uma pesquisa específica para análise de IA.'); return;
     }
+    const geminiKey = import.meta.env?.VITE_GEMINI_API_KEY || '';
+    if (!geminiKey) { setAiError('Chave Gemini não encontrada. Adicione VITE_GEMINI_API_KEY no .env'); return; }
+
     const survey = surveys.find(s => s.id === selSurvey);
     if (!survey) return;
     const respostas = filtered.filter(r => r.location?.lat);
     if (!respostas.length) { setAiError('Nenhuma resposta com GPS para analisar.'); return; }
 
-    setAiLoading(true); setAiError(''); setMapMode('ia');
+    // Reset log e inicia
+    setAiLog([]);
+    setAiScores({});
+    setAiSurveySnap(survey);
+    setAiLoading(true);
+    setAiError('');
+    setMapMode('ia');
 
-    // Processa em lotes de 10 para não sobrecarregar
+    addLog(`🚀 Análise iniciada — pesquisa: "${survey.title}"`, 'info');
+    addLog(`📊 ${respostas.length} respondente(s) com GPS encontrados`, 'info');
+    addLog(`🔑 Modelo: Gemini 2.5 Flash`, 'info');
+
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
     const lotes = [];
     for (let i = 0; i < respostas.length; i += 10) lotes.push(respostas.slice(i, i + 10));
+    addLog(`📦 ${lotes.length} lote(s) de até 10 respondentes cada`, 'info');
 
     const novosScores = {};
+    let loteIdx = 0;
 
     for (const lote of lotes) {
+      loteIdx++;
+      addLog(`⏳ Processando lote ${loteIdx}/${lotes.length} (${lote.length} respondentes)...`, 'info');
+
       const payload = lote.map(r => ({
         id: r.id,
+        nome: r.researcherName || 'N/A',
+        cidade: r.city || '',
         respostas: (survey.questions || []).map(q => ({
           pergunta: q.label,
           resposta: (() => { const v = r.answers?.[q.id]; return Array.isArray(v) ? v.join(', ') : (v || ''); })()
         }))
       }));
 
+      const prompt = `Você é especialista em propensão de compra para Oquei Telecom (empresa de internet).
+Analise cada respondente e retorne JSON: {"scores":[{"id":"...","score":1-10,"motivo":"até 12 palavras"}]}
+Score: 1-3=frio, 4-6=morno, 7-8=quente, 9-10=muito quente. Foque em: insatisfação com provedor atual, fora da fidelidade, sem proposta recebida, interesse em trocar.
+Retorne APENAS o JSON.
+Dados: ${JSON.stringify(payload)}`;
+
       try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(GEMINI_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            system: `Você é um especialista em análise de dados de vendas para uma empresa de internet (Oquei Telecom).
-Analise cada respondente e retorne um JSON com a seguinte estrutura:
-{"scores": [{"id": "...", "score": 1-10, "motivo": "frase curta de até 12 palavras"}]}
-Score 1-3: cliente frio (sem propensão). Score 4-6: morno. Score 7-8: quente. Score 9-10: muito quente (alta chance de contratar).
-Considere principalmente: insatisfação com provedor atual, fora da fidelidade, sem proposta recebida, interesse demonstrado.
-Retorne APENAS o JSON, sem explicações adicionais.`,
-            messages: [{ role: 'user', content: JSON.stringify(payload) }]
-          })
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2048, responseMimeType: 'application/json' },
+          }),
         });
+
+        if (!res.ok) {
+          const e = await res.json().catch(()=>({}));
+          const msg = e?.error?.message || res.status;
+          addLog(`❌ Erro HTTP no lote ${loteIdx}: ${msg}`, 'error');
+          setAiError(`Gemini: ${msg}`);
+          break;
+        }
+
         const data = await res.json();
-        const text = data.content?.[0]?.text || '{}';
-        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        (parsed.scores || []).forEach(s => { novosScores[s.id] = { score: s.score, motivo: s.motivo }; });
-      } catch { /* lote falhou, continua */ }
+        let text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        text = text.replace(/```json|```/g, '').trim();
+
+        let parsed = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          const match = text.match(/\{[\s\S]*"scores"[\s\S]*\}/);
+          if (match) {
+            try { parsed = JSON.parse(match[0]); } catch {
+              const scoreMatches = text.matchAll(/\{"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+)\s*,\s*"motivo"\s*:\s*"([^"]+)"\}/g);
+              const scores = [];
+              for (const m of scoreMatches) scores.push({ id: m[1], score: Number(m[2]), motivo: m[3] });
+              if (scores.length) parsed = { scores };
+            }
+          }
+          if (!parsed) addLog(`⚠ Lote ${loteIdx}: JSON malformado, tentativa de recuperação`, 'warn');
+        }
+
+        if (parsed?.scores) {
+          let quentes = 0, mornos = 0, frios = 0;
+          parsed.scores.forEach(s => {
+            if (s.id && s.score) {
+              novosScores[s.id] = { score: Number(s.score), motivo: s.motivo || '' };
+              if (s.score >= 7) quentes++;
+              else if (s.score >= 4) mornos++;
+              else frios++;
+            }
+          });
+          addLog(`✅ Lote ${loteIdx} processado — 🔥 ${quentes} quente(s), 🔵 ${mornos} morno(s), ⚫ ${frios} frio(s)`, 'success');
+        } else {
+          addLog(`⚠ Lote ${loteIdx}: nenhum score extraído`, 'warn');
+        }
+
+      } catch(e) {
+        addLog(`❌ Lote ${loteIdx} falhou: ${e.message}`, 'error');
+        console.error('Lote falhou:', e);
+      }
+    }
+
+    // Resumo final
+    const total = Object.keys(novosScores).length;
+    const muitoQuentes = Object.values(novosScores).filter(s => s.score >= 9).length;
+    const quentes      = Object.values(novosScores).filter(s => s.score >= 7 && s.score < 9).length;
+    const mornos       = Object.values(novosScores).filter(s => s.score >= 4 && s.score < 7).length;
+    const frios        = Object.values(novosScores).filter(s => s.score < 4).length;
+
+    if (!total) {
+      setAiError('Gemini não retornou resultados. Tente novamente.');
+      addLog('❌ Análise encerrada sem resultados', 'error');
+    } else {
+      addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'divider');
+      addLog(`📋 RESUMO FINAL — ${total} respondentes analisados`, 'info');
+      addLog(`🔴 Muito quentes (9-10): ${muitoQuentes}`, 'success');
+      addLog(`🟡 Quentes (7-8): ${quentes}`, 'success');
+      addLog(`🔵 Mornos (4-6): ${mornos}`, 'info');
+      addLog(`⚫ Frios (1-3): ${frios}`, 'info');
+      addLog(`🎯 Taxa de leads quentes: ${Math.round(((muitoQuentes+quentes)/total)*100)}%`, 'success');
     }
 
     setAiScores(novosScores);
@@ -576,6 +835,13 @@ Retorne APENAS o JSON, sem explicações adicionais.`,
               {aiLoading ? <><Zap size={13} style={{ animation:'spin 0.8s linear infinite' }}/> Analisando...</>
                          : <><Zap size={13}/> IA · Leads Quentes</>}
             </button>
+            {/* Botão Ver Log — aparece após análise */}
+            {aiLog.length > 0 && (
+              <button onClick={() => setShowAiLog(true)}
+                style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 14px', borderRadius:'10px', border:'1px solid rgba(139,92,246,0.4)', background:'rgba(139,92,246,0.08)', color:'#8b5cf6', fontWeight:'800', fontSize:'12px', cursor:'pointer', transition:'all 0.15s' }}>
+                <FileText size={13}/> Ver Log da IA
+              </button>
+            )}
             {mapMode !== 'normal' && (
               <button onClick={() => { setMapMode('normal'); setShowFiltroPanel(false); }}
                 style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 12px', borderRadius:'10px', border:'1px solid var(--border)', background:'var(--bg-app)', color:'var(--text-muted)', fontWeight:'800', fontSize:'12px', cursor:'pointer' }}>
@@ -588,7 +854,15 @@ Retorne APENAS o JSON, sem explicações adicionais.`,
         {/* Painel de filtros cruzados */}
         {showFiltroPanel && selSurvey !== 'all' && (() => {
           const survey = surveys.find(s => s.id === selSurvey);
-          const questions = survey?.questions?.filter(q => q.type !== 'text' && q.type !== 'nps') || [];
+          const questions = survey?.questions || [];
+          // Gera opções de resposta conforme tipo da pergunta
+          const getOpcoes = (q) => {
+            if (!q) return [];
+            if (q.type === 'boolean') return ['Sim', 'Não'];
+            if (q.type === 'nps') return ['0','1','2','3','4','5','6','7','8','9','10'];
+            if (q.type === 'select' || q.type === 'multiselect') return q.options || [];
+            return []; // text: campo livre abaixo
+          };
           return (
             <div style={{ background:'var(--bg-app)', border:`1px solid ${colors.primary}30`, borderRadius:'12px', padding:'14px', marginBottom:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
               <div style={{ fontSize:'12px', fontWeight:'900', color:colors.primary, textTransform:'uppercase', letterSpacing:'0.05em' }}>
@@ -596,7 +870,9 @@ Retorne APENAS o JSON, sem explicações adicionais.`,
               </div>
               {filtrosCruz.map((f, i) => {
                 const q = questions.find(q => q.id === f.qId);
-                const opcoes = q?.type === 'boolean' ? ['Sim', 'Não'] : (q?.options || []);
+                const opcoes = getOpcoes(q);
+                const isText = q?.type === 'text';
+                const isNps  = q?.type === 'nps';
                 return (
                   <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
                     <span style={{ fontSize:'11px', fontWeight:'800', color:'var(--text-muted)', minWidth:'16px', textAlign:'center' }}>{i+1}</span>
@@ -605,12 +881,20 @@ Retorne APENAS o JSON, sem explicações adicionais.`,
                       <option value="">Pergunta...</option>
                       {questions.map(q => <option key={q.id} value={q.id}>{q.label.substring(0,50)}</option>)}
                     </select>
-                    <span style={{ color:'var(--text-muted)', fontSize:'12px' }}>é</span>
-                    <select value={f.valor} onChange={e => setFiltrosCruz(fc => fc.map((x,j) => j===i ? {...x, valor: e.target.value} : x))}
-                      style={{ flex:2, padding:'7px 10px', borderRadius:'8px', border:'1px solid var(--border)', background:'var(--bg-panel)', color:'var(--text-main)', fontSize:'12px', outline:'none' }}>
-                      <option value="">Resposta...</option>
-                      {(questions.find(q=>q.id===f.qId)?.type === 'boolean' ? ['Sim','Não'] : (questions.find(q=>q.id===f.qId)?.options||[])).map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
+                    <span style={{ color:'var(--text-muted)', fontSize:'12px' }}>{isNps ? '≥' : 'é'}</span>
+                    {isText ? (
+                      <input value={f.valor}
+                        onChange={e => setFiltrosCruz(fc => fc.map((x,j) => j===i ? {...x, valor: e.target.value} : x))}
+                        placeholder="Digite o valor..."
+                        style={{ flex:2, padding:'7px 10px', borderRadius:'8px', border:'1px solid var(--border)', background:'var(--bg-panel)', color:'var(--text-main)', fontSize:'12px', outline:'none', fontFamily:'inherit' }}
+                      />
+                    ) : (
+                      <select value={f.valor} onChange={e => setFiltrosCruz(fc => fc.map((x,j) => j===i ? {...x, valor: e.target.value} : x))}
+                        style={{ flex:2, padding:'7px 10px', borderRadius:'8px', border:'1px solid var(--border)', background:'var(--bg-panel)', color:'var(--text-main)', fontSize:'12px', outline:'none' }}>
+                        <option value="">Resposta...</option>
+                        {opcoes.map(o => <option key={o} value={o}>{isNps ? `${o} ou mais` : o}</option>)}
+                      </select>
+                    )}
                     <button onClick={() => setFiltrosCruz(fc => fc.filter((_,j) => j!==i))}
                       style={{ padding:'7px', borderRadius:'7px', border:`1px solid ${colors.danger}30`, background:`${colors.danger}10`, color:colors.danger, cursor:'pointer', display:'flex' }}>
                       <Trash2 size={12}/>
@@ -734,6 +1018,17 @@ Retorne APENAS o JSON, sem explicações adicionais.`,
           grupo={modalData.grupo}
           surveys={surveys}
           onClose={() => setModalData(null)}
+        />
+      )}
+
+      {/* Modal Log da IA */}
+      {showAiLog && (
+        <ModalAiLog
+          log={aiLog}
+          aiScores={aiScores}
+          responses={filtered}
+          survey={aiSurveySnap}
+          onClose={() => setShowAiLog(false)}
         />
       )}
     </div>
