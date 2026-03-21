@@ -168,6 +168,60 @@ export function injectGlobalCSS() {
   document.head.appendChild(style);
 }
 
+// ─── injectPublicCSS ─────────────────────────────────────────────────────────
+// Versão reduzida para páginas públicas (links de pesquisa sem login).
+// Injeta APENAS as CSS variables — sem overflow:hidden que trava o scroll mobile.
+export function injectPublicCSS() {
+  const id = 'oquei-public-styles';
+  if (document.getElementById(id)) return;
+
+  const style = document.createElement('style');
+  style.id = id;
+  style.textContent = `
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: auto; width: 100%; }
+    body { font-family: 'Manrope', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    button { font-family: inherit; }
+    input, select, textarea { font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; }
+
+    :root {
+      --bg-app:     #0f172a;
+      --bg-panel:   #1e293b;
+      --bg-card:    #1e293b;
+      --bg-hover:   #2d3f55;
+      --bg-input:   #0f172a;
+      --bg-primary-light: rgba(37, 99, 235, 0.15);
+      --border:     rgba(255, 255, 255, 0.08);
+      --border-md:  rgba(255, 255, 255, 0.12);
+      --text-main:  #f1f5f9;
+      --text-muted: #64748b;
+      --text-brand: #3b82f6;
+      --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.4);
+      --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.4);
+      --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    [data-theme="light"] {
+      --bg-app:     #f1f5f9;
+      --bg-panel:   #ffffff;
+      --bg-card:    #ffffff;
+      --bg-hover:   #f8fafc;
+      --bg-input:   #f8fafc;
+      --border:     rgba(0, 0, 0, 0.08);
+      --border-md:  rgba(0, 0, 0, 0.12);
+      --text-main:  #0f172a;
+      --text-muted: #94a3b8;
+      --text-brand: #2563eb;
+      --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.08);
+      --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.10);
+      --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  `;
+  document.head.appendChild(style);
+}
+
 // ─── 3. ESTILOS INLINE REUTILIZÁVEIS ─────────────────────────────────────────
 // Todos os styles usam var(--*) para respeitar o tema automaticamente.
 

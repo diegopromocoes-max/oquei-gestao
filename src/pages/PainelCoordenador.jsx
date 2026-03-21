@@ -113,7 +113,7 @@ export default function PainelCoordenador({ userData }) {
       case 'vendas':              return <PainelVendas userData={userData} />;
       case 'war_room':            return <SalaDeGuerra userData={userData} />;
       case 'banco_horas':         return <BancoHorasSupervisor userData={userData} />;
-      case 'desencaixe':          return <DesencaixeSupervisor userData={userData} />;
+      case 'desencaixe':          return <DesencaixeSupervisor userData={userData} modoGestao />;
       case 'japa':                return <JapaSupervisor userData={userData} />;
       case 'patrocinio':          return <PatrocinioSupervisor userData={userData} />;
       case 'solicitar_campanha':  return <SolicitarCampanha userData={userData} />;

@@ -100,30 +100,42 @@ export default function InsightsDashboard({ userData }) {
   const [selCity,    setSelCity]    = useState('all');
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
-  // Carrega surveys e escuta respostas em tempo real
+  // Escuta surveys e respostas em tempo real — ambos reativos
   useEffect(() => {
-    const loadSurveys = async () => {
-      const snap = await getDocs(collection(db,'surveys'));
-      setSurveys(snap.docs.map(d => ({ id:d.id, ...d.data() })));
-    };
-    loadSurveys();
+    // Surveys: onSnapshot para refletir exclusões imediatamente
+    const unsubSurveys = onSnapshot(collection(db, 'surveys'), snap => {
+      // Só mostra surveys com dados relevantes (active ou finished)
+      const list = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(s => s.status === 'active' || s.status === 'finished');
+      setSurveys(list);
+      // Se o survey selecionado foi excluído, volta para 'all'
+      setSelSurvey(prev => {
+        if (prev !== 'all' && !list.find(s => s.id === prev)) return 'all';
+        return prev;
+      });
+    }, () => {});
 
-    const q = collection(db,'survey_responses');
-    const unsub = onSnapshot(q, snap => {
-      setResponses(snap.docs.map(d => ({ id:d.id, ...d.data() })));
+    // Respostas: onSnapshot em tempo real
+    const unsubResponses = onSnapshot(collection(db, 'survey_responses'), snap => {
+      // surveyIds conhecidos são atualizados via closure — usamos ref para acessar valor atual
+      setResponses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLastUpdate(new Date());
       setLoading(false);
     }, () => setLoading(false));
-    return () => unsub();
+
+    return () => { unsubSurveys(); unsubResponses(); };
   }, []);
 
-  // Filtra respostas
+  // Filtra respostas — ignora órfãs de surveys deletados/inválidos
+  const surveyIds = useMemo(() => new Set(surveys.map(s => s.id)), [surveys]);
+
   const filtered = useMemo(() => {
-    let list = responses;
+    let list = responses.filter(r => surveyIds.has(r.surveyId));
     if (selSurvey !== 'all') list = list.filter(r => r.surveyId===selSurvey);
     if (selCity   !== 'all') list = list.filter(r => r.city===selCity);
     return list;
-  }, [responses, selSurvey, selCity]);
+  }, [responses, surveyIds, selSurvey, selCity]);
 
   // Cidades únicas nas respostas
   const cities = useMemo(() => [...new Set(responses.map(r => r.city).filter(Boolean))].sort(), [responses]);

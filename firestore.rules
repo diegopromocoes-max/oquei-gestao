@@ -141,8 +141,30 @@ service cloud.firestore {
     match /mail/{id}                   { allow create: if isAuth(); allow read, delete: if isAuth() && isCoordinator(); }
 
     // ── 13. Oquei Insights ────────────────────────────────────────────────────
-    // Qualquer usuario autenticado pode criar, editar e consultar pesquisas
-    match /surveys/{id}          { allow read, write: if isAuth(); }
-    match /survey_responses/{id} { allow read, write: if isAuth(); }
+    // Surveys: leitura pública (links de aplicação sem login); escrita autenticada
+    match /surveys/{id} {
+      allow read:   if true;        // link público lê a campanha sem login
+      allow write:  if isAuth();
+    }
+
+    // Respostas: leitura autenticada; criação pública (link sem login)
+    match /survey_responses/{id} {
+      allow read:   if isAuth();
+      allow create: if true;   // link público — pesquisador sem login pode enviar
+      allow update, delete: if isAuth();
+    }
+
+    // Entrevistadores: gerenciados por autenticados; leitura pública (link pessoal)
+    match /survey_entrevistadores/{id} {
+      allow read:   if true;   // link pessoal lê os dados do entrevistador sem login
+      allow write:  if isAuth() && isGrowthOrAbove();
+    }
+
+    // Designações de responsável financeiro (Desencaixe)
+    match /petty_cash_designacoes/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }
+
+    // Bancos de fornecedores e categorias do Desencaixe
+    match /petty_cash_fornecedores/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }
+    match /petty_cash_categorias/{id}   { allow read, write: if isAuth() && isSuperOrAbove(); }
   }
 }

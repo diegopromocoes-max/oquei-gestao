@@ -1,68 +1,90 @@
 // ============================================================
 //  PublicSurveyAccess.jsx — Oquei Pesquisas
 //
-//  Página pública de acesso às campanhas via link + senha.
-//  Rota: /pesquisa/:surveyId
+//  Rotas:
+//    /pesquisa/:surveyId                       → link geral (pede nome/tel)
+//    /pesquisa/:surveyId/entrevistador/:eid     → link pessoal (nome já fixo)
 //
-//  Dois modos derivados do status da campanha:
-//    draft   → tela de EDIÇÃO de perguntas (supervisor distribui
-//               este link para quem vai montar a pesquisa)
-//    active  → tela de RESPOSTA (pesquisador de campo)
-//    finished→ mensagem de encerramento
-//
-//  Autenticação: apenas a senha da campanha (accessCode).
-//  O respondente digita seu nome antes de responder.
+//  Funcionalidades:
+//  · Rolagem corrigida (override do overflow:hidden do LayoutGlobal)
+//  · GPS tratado silenciosamente (sem tentar novamente após bloqueio)
+//  · Numeração sequencial de questionários por entrevistador
+//  · Tela inicial: nome, telefone, progresso vs meta (link pessoal)
+//  · Pós-envio: "Próxima Pesquisa" e "Voltar ao Início"
 // ============================================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import {
-  doc, getDoc, updateDoc, addDoc,
-  collection, serverTimestamp,
+  doc, getDoc, addDoc, collection,
+  serverTimestamp, query, where, getDocs,
 } from 'firebase/firestore';
 import {
-  Lock, ClipboardList, CheckCircle, ChevronRight,
-  Loader2, AlertCircle, MapPin, User, ToggleLeft,
-  Hash, Type, List, Eye, EyeOff,
+  ClipboardList, CheckCircle, ChevronRight, RefreshCw,
+  Loader2, AlertCircle, MapPin, User, Phone, Hash,
+  ToggleLeft, Type, List, Home, Target,
 } from 'lucide-react';
 import { colors } from '../../components/ui';
 
-// ── helpers ─────────────────────────────────────────────────
+// ── GPS — tenta uma vez, falha silenciosamente ────────────────
+let gpsBlocked = false;
 const getGPS = () =>
-  new Promise((res) => {
-    if (!navigator.geolocation) return res(null);
+  new Promise(res => {
+    if (gpsBlocked || !navigator.geolocation) return res(null);
     navigator.geolocation.getCurrentPosition(
-      p => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => res(null),
-      { timeout: 8000, maximumAge: 0 }
+      p  => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => { gpsBlocked = true; res(null); },
+      { timeout: 6000, maximumAge: 60000 }
     );
   });
 
-const QUESTION_TYPES = {
-  boolean:  { label: 'Sim / Não',        icon: ToggleLeft, color: colors.success },
-  select:   { label: 'Múltipla Escolha', icon: List,       color: colors.primary },
-  nps:      { label: 'Escala NPS 0–10',  icon: Hash,       color: colors.purple  },
-  text:     { label: 'Texto Livre',      icon: Type,       color: colors.warning },
-};
+// ── Scroll fix (igual ao PublicSurveyEdit) ────────────────────
+// scroll nativo — sem hack necessário (globalCSS não é injetado em rotas públicas)
+
+// ── Gera número sequencial: e-NNN (ex: e-001) ────────────────
+async function gerarNumeroQuestionario(surveyId, entrevistadorId) {
+  try {
+    // Query composta — requer índice em firestore.indexes.json
+    const q = query(
+      collection(db, 'survey_responses'),
+      where('surveyId', '==', surveyId),
+      where('entrevistadorId', '==', entrevistadorId)
+    );
+    // Timeout de 5s para não travar o fluxo se o índice ainda estiver construindo
+    const snap = await Promise.race([
+      getDocs(q),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+    ]);
+    return `e-${String(snap.size + 1).padStart(3, '0')}`;
+  } catch {
+    // Fallback silencioso — número baseado em timestamp
+    return `e-${Date.now().toString().slice(-4)}`;
+  }
+}
 
 const npsColor = n =>
   n <= 3 ? colors.danger : n <= 6 ? colors.warning : n <= 8 ? colors.primary : colors.success;
 
-// ── Estilos mobile-first ─────────────────────────────────────
+// ── Estilos ───────────────────────────────────────────────────
 const S = {
   root: {
-    minHeight: '100dvh', background: 'var(--bg-app)',
+    minHeight: '100vh',
+    background: 'var(--bg-app)',
     display: 'flex', flexDirection: 'column',
     fontFamily: "'Manrope', system-ui, sans-serif",
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
   },
   header: {
     background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.purple} 100%)`,
-    padding: '22px 20px 18px', color: '#fff', flexShrink: 0,
+    padding: '20px 20px 16px', color: '#fff', flexShrink: 0,
+    position: 'sticky', top: 0, zIndex: 10,
   },
   body: {
-    flex: 1, padding: '18px 16px',
+    flex: 1, padding: '18px 16px 48px',
     display: 'flex', flexDirection: 'column', gap: '14px',
     maxWidth: '560px', width: '100%', margin: '0 auto',
-    overflowY: 'auto',
+    boxSizing: 'border-box',
+    // Sem overflowY aqui — o scroll é feito pelo S.root
   },
   card: {
     background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -72,12 +94,11 @@ const S = {
     width: '100%', padding: '14px 16px', borderRadius: '12px',
     border: '1px solid var(--border)', outline: 'none',
     fontSize: '16px', color: 'var(--text-main)',
-    background: 'var(--bg-app)', fontFamily: 'inherit',
-    boxSizing: 'border-box',
+    background: 'var(--bg-app)', fontFamily: 'inherit', boxSizing: 'border-box',
   },
   bigBtn: (color = colors.primary, disabled = false) => ({
-    width: '100%', padding: '18px', borderRadius: '14px', border: 'none',
-    background: disabled ? 'var(--border)' : color,
+    width: '100%', padding: '17px', borderRadius: '14px', border: 'none',
+    background: disabled ? 'var(--bg-panel)' : color,
     color: disabled ? 'var(--text-muted)' : '#fff',
     fontSize: '16px', fontWeight: '900',
     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -85,136 +106,75 @@ const S = {
     boxShadow: disabled ? 'none' : `0 4px 16px ${color}44`,
     transition: 'all 0.15s',
   }),
-  optBtn: (sel, color = colors.primary) => ({
-    width: '100%', padding: '16px 18px', borderRadius: '12px',
-    textAlign: 'left', fontWeight: '800', fontSize: '15px', cursor: 'pointer',
-    border: `2px solid ${sel ? color : 'var(--border)'}`,
-    background: sel ? `${color}15` : 'var(--bg-app)',
-    color: sel ? color : 'var(--text-main)',
+  optBtn: (sel, c = colors.primary) => ({
+    width: '100%', padding: '16px 18px', borderRadius: '12px', textAlign: 'left',
+    fontWeight: '800', fontSize: '15px', cursor: 'pointer',
+    border: `2px solid ${sel ? c : 'var(--border)'}`,
+    background: sel ? `${c}15` : 'var(--bg-app)', color: sel ? c : 'var(--text-main)',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     transition: 'all 0.12s', marginBottom: '8px',
   }),
   npsBtn: (sel, n) => {
     const c = npsColor(n);
     return {
-      flex: 1, padding: '14px 0', borderRadius: '10px',
+      flex: 1, padding: '13px 0', borderRadius: '10px',
       border: `2px solid ${sel ? c : 'var(--border)'}`,
       background: sel ? `${c}20` : 'var(--bg-app)',
       color: sel ? c : 'var(--text-muted)',
-      fontWeight: '900', fontSize: '16px', cursor: 'pointer',
-      transition: 'all 0.12s',
+      fontWeight: '900', fontSize: '16px', cursor: 'pointer', transition: 'all 0.12s',
     };
   },
 };
 
-// ── Tela de senha ─────────────────────────────────────────────
-function PasswordScreen({ survey, onUnlock }) {
-  const [code, setCode]     = useState('');
-  const [show, setShow]     = useState(false);
-  const [error, setError]   = useState('');
-  const [loading, setLoading] = useState(false);
+// ── Tela de aplicação de questionário ────────────────────────
+function ResponseScreen({ survey, surveyId, entrevistador }) {
+  // entrevistador: { id, nome, telefone, meta } ou null (link geral)
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      if (code === survey.accessCode) {
-        onUnlock();
-      } else {
-        setError('Senha incorreta. Tente novamente.');
-        setCode('');
-      }
-      setLoading(false);
-    }, 400);
-  };
+  const isPersonal = !!entrevistador;
 
-  return (
-    <div style={S.root}>
-      <div style={S.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ClipboardList size={22} color="#fff" />
-          </div>
-          <div>
-            <div style={{ fontSize: '18px', fontWeight: '900' }}>Oquei Pesquisas</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '2px' }}>Acesso à campanha</div>
-          </div>
-        </div>
-      </div>
+  const [step,      setStep]      = useState('inicio');   // inicio | questions | done
+  const [nome,      setNome]      = useState(entrevistador?.nome || '');
+  const [telefone,  setTelefone]  = useState(entrevistador?.telefone || '');
+  const [city,      setCity]      = useState(survey.targetCities?.[0] || '');
+  const [answers,   setAnswers]   = useState({});
+  const [sending,   setSending]   = useState(false);
+  const [error,     setError]     = useState('');
+  const [gpsPos,    setGpsPos]    = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('idle');
+  const [totalFeitas, setTotalFeitas] = useState(0);
+  const [numQuestionario, setNumQuestionario] = useState('');
+  const meta = entrevistador?.meta || 0;
 
-      <div style={S.body}>
-        <div style={{ ...S.card, textAlign: 'center' }}>
-          <div style={{ width: '60px', height: '60px', borderRadius: '16px', background: `${colors.primary}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-            <Lock size={28} color={colors.primary} />
-          </div>
-          <div style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '6px' }}>{survey.title}</div>
-          {survey.description && (
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>{survey.description}</div>
-          )}
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            {survey.questions?.length || 0} pergunta{survey.questions?.length !== 1 ? 's' : ''}
-            {survey.targetCities?.length > 0 && ` · ${survey.targetCities.join(', ')}`}
-          </div>
-
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ position: 'relative' }}>
-              <input
-                style={{ ...S.inp, paddingRight: '48px', textAlign: 'center', letterSpacing: show ? '0' : '0.3em', fontSize: '18px' }}
-                type={show ? 'text' : 'password'}
-                placeholder="Senha da campanha"
-                value={code}
-                onChange={e => { setCode(e.target.value); setError(''); }}
-                autoFocus
-              />
-              <button type="button" onClick={() => setShow(s => !s)}
-                style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-                {show ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-
-            {error && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.danger}12`, border: `1px solid ${colors.danger}30`, borderRadius: '10px', padding: '10px 13px', fontSize: '13px', fontWeight: '700', color: colors.danger }}>
-                <AlertCircle size={15} /> {error}
-              </div>
-            )}
-
-            <button type="submit" disabled={!code.trim() || loading} style={S.bigBtn(colors.primary, !code.trim() || loading)}>
-              {loading
-                ? <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} />
-                : <><Lock size={18} /> Acessar</>
-              }
-            </button>
-          </form>
-        </div>
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-// ── Tela de resposta (pesquisador de campo) ───────────────────
-function ResponseScreen({ survey, surveyId }) {
-  const [name,     setName]     = useState('');
-  const [city,     setCity]     = useState(survey.targetCities?.[0] || '');
-  const [step,     setStep]     = useState('identify'); // identify | questions | done
-  const [answers,  setAnswers]  = useState({});
-  const [sending,  setSending]  = useState(false);
-  const [gpsStatus,setGpsStatus]= useState('idle');
-  const [gpsPos,   setGpsPos]   = useState(null);
-  const [error,    setError]    = useState('');
+  // Carrega total de pesquisas feitas por este entrevistador
+  useEffect(() => {
+    if (!isPersonal) return;
+    getDocs(query(
+      collection(db, 'survey_responses'),
+      where('surveyId', '==', surveyId),
+      where('entrevistadorId', '==', entrevistador.id)
+    )).then(snap => setTotalFeitas(snap.size)).catch(() => {});
+  }, [step]); // recarrega ao voltar ao inicio
 
   const captureGPS = async () => {
+    if (gpsBlocked) return;
     setGpsStatus('loading');
     const pos = await getGPS();
     setGpsPos(pos);
-    setGpsStatus(pos ? 'ok' : 'error');
+    setGpsStatus(pos ? 'ok' : 'blocked');
   };
 
-  const handleStartQuestions = () => {
-    if (!name.trim()) { setError('Informe seu nome para continuar.'); return; }
+  const handleIniciar = async () => {
+    if (!nome.trim()) { setError('Informe seu nome.'); return; }
+    if (isPersonal && !telefone.trim()) { setError('Informe seu telefone.'); return; }
     setError('');
-    setStep('questions');
+    // Gera número do questionário
+    const eid = entrevistador?.id || 'geral';
+    const num = await gerarNumeroQuestionario(surveyId, eid);
+    setNumQuestionario(num);
+    setAnswers({});
     captureGPS();
+    setStep('questions');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAnswer = (qId, val) => setAnswers(a => ({ ...a, [qId]: val }));
@@ -224,34 +184,54 @@ function ResponseScreen({ survey, surveyId }) {
 
   const handleSubmit = async () => {
     if (!allAnswered()) { setError('Responda todas as perguntas antes de enviar.'); return; }
-    setSending(true);
-    setError('');
+    setSending(true); setError('');
     try {
       let loc = gpsPos;
-      if (!loc) loc = await getGPS();
+      if (!loc && !gpsBlocked) loc = await getGPS();
       await addDoc(collection(db, 'survey_responses'), {
         surveyId,
-        surveyTitle:    survey.title,
-        researcherName: name.trim(),
-        researcherUid:  null, // acesso público, sem login
-        city:           city || '',
-        location:       loc || null,
+        surveyTitle:      survey.title,
+        researcherName:   nome.trim(),
+        researcherUid:    null,
+        entrevistadorId:  entrevistador?.id || null,
+        telefone:         telefone.trim() || null,
+        city:             city || '',
+        location:         loc || null,
         answers,
-        timestamp: serverTimestamp(),
+        numero:           numQuestionario,
+        timestamp:        serverTimestamp(),
       });
+      setTotalFeitas(t => t + 1);
       setStep('done');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) { setError('Erro ao enviar: ' + e.message); }
     setSending(false);
   };
 
+  const handleProxima = () => {
+    setAnswers({}); setError('');
+    setStep('inicio');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ── Render pergunta ─────────────────────────────────────────
   const renderQuestion = (q, idx) => {
-    const cfg = QUESTION_TYPES[q.type] || QUESTION_TYPES.boolean;
+    const cfg = { boolean: { color: colors.success }, select: { color: colors.primary }, nps: { color: colors.purple }, text: { color: colors.warning } }[q.type] || { color: colors.primary };
     const ans = answers[q.id];
+    const respondida = ans !== undefined && String(ans).trim() !== '';
     return (
-      <div key={q.id} style={S.card}>
-        <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-          Pergunta {idx + 1} de {survey.questions.length}
+      <div key={q.id} style={{
+        ...S.card,
+        borderTop: `3px solid ${respondida ? cfg.color : 'var(--border)'}`,
+      }}>
+        {/* Numeração */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Pergunta {idx + 1} de {survey.questions.length}
+          </div>
+          {respondida && <CheckCircle size={14} color={cfg.color} />}
         </div>
+
         <div style={{ fontSize: '17px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '18px', lineHeight: 1.35 }}>
           {q.label}
         </div>
@@ -275,9 +255,10 @@ function ResponseScreen({ survey, surveyId }) {
 
         {q.type === 'nps' && (
           <div>
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
               {Array.from({ length: 11 }, (_, i) => i).map(n => (
-                <button key={n} onClick={() => handleAnswer(q.id, String(n))} style={{ ...S.npsBtn(ans === String(n), n), minWidth: '38px' }}>{n}</button>
+                <button key={n} onClick={() => handleAnswer(q.id, String(n))}
+                  style={{ ...S.npsBtn(ans === String(n), n), minWidth: '36px' }}>{n}</button>
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700' }}>
@@ -287,78 +268,120 @@ function ResponseScreen({ survey, surveyId }) {
         )}
 
         {q.type === 'text' && (
-          <textarea
-            style={{ ...S.inp, minHeight: '100px', resize: 'vertical', fontSize: '15px' }}
-            placeholder="Escreva sua resposta aqui..."
-            value={ans || ''}
-            onChange={e => handleAnswer(q.id, e.target.value)}
-          />
+          <textarea style={{ ...S.inp, minHeight: '100px', resize: 'vertical', fontSize: '15px' }}
+            placeholder="Escreva sua resposta aqui..." value={ans || ''}
+            onChange={e => handleAnswer(q.id, e.target.value)} />
         )}
       </div>
     );
   };
 
-  return (
-    <div style={S.root}>
-      <div style={S.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ClipboardList size={22} color="#fff" />
-          </div>
-          <div>
-            <div style={{ fontSize: '18px', fontWeight: '900' }}>{survey.title}</div>
-            <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '2px' }}>
-              {step === 'identify' ? 'Identificação' : step === 'questions' ? `${Object.keys(answers).length}/${survey.questions?.length || 0} respondidas` : 'Concluído'}
-            </div>
-          </div>
+  // ── Header dinâmico ─────────────────────────────────────────
+  const HeaderBar = ({ sub }) => (
+    <div style={step === 'inicio' ? { ...S.header, position: 'static' } : S.header}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ClipboardList size={22} color="#fff" />
         </div>
-        {step === 'questions' && gpsStatus === 'ok' && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(16,185,129,0.25)', borderRadius: '8px', padding: '5px 10px', fontSize: '11px', fontWeight: '700', color: '#a7f3d0', marginTop: '10px' }}>
-            <MapPin size={11} /> GPS capturado
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '17px', fontWeight: '900', lineHeight: 1.2 }}>{survey.title}</div>
+          {sub && <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '2px' }}>{sub}</div>}
+        </div>
+        {/* Número do questionário durante aplicação */}
+        {step === 'questions' && numQuestionario && (
+          <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: '900', letterSpacing: '0.05em' }}>
+            #{numQuestionario}
           </div>
         )}
       </div>
+      {/* GPS badge */}
+      {step === 'questions' && gpsStatus === 'ok' && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(16,185,129,0.25)', borderRadius: '8px', padding: '4px 10px', fontSize: '11px', fontWeight: '700', color: '#a7f3d0', marginTop: '8px' }}>
+          <MapPin size={11} /> GPS capturado
+        </div>
+      )}
+    </div>
+  );
 
-      <div style={S.body}>
-        {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.danger}15`, border: `1px solid ${colors.danger}40`, borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: '700', color: colors.danger }}>
-            <AlertCircle size={15} /> {error}
-          </div>
-        )}
+  return (
+    <div style={S.root}>
 
-        {/* Identificação */}
-        {step === 'identify' && (
-          <>
+      {/* ── TELA INICIAL ── */}
+      {step === 'inicio' && (
+        <>
+          <HeaderBar sub={isPersonal ? `Olá, ${nome.split(' ')[0]}!` : 'Identificação'} />
+          <div style={S.body}>
+            {error && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.danger}15`, border: `1px solid ${colors.danger}40`, borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: '700', color: colors.danger }}><AlertCircle size={15} /> {error}</div>}
+
+            {/* Progresso vs meta (link pessoal) */}
+            {isPersonal && meta > 0 && (
+              <div style={{ ...S.card, background: `linear-gradient(135deg, ${colors.primary}15, ${colors.purple}10)`, borderTop: `3px solid ${colors.primary}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                  <Target size={18} color={colors.primary} />
+                  <span style={{ fontWeight: '900', fontSize: '14px', color: 'var(--text-main)' }}>Seu Progresso</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '700' }}>Realizadas</span>
+                  <span style={{ fontSize: '13px', fontWeight: '900', color: totalFeitas >= meta ? colors.success : colors.primary }}>
+                    {totalFeitas} / {meta}
+                  </span>
+                </div>
+                <div style={{ height: '10px', borderRadius: '50px', background: 'var(--border)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, (totalFeitas / meta) * 100)}%`, borderRadius: '50px', background: totalFeitas >= meta ? colors.success : colors.primary, transition: 'width 0.6s ease' }} />
+                </div>
+                {totalFeitas >= meta && (
+                  <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '13px', fontWeight: '800', color: colors.success }}>
+                    🎉 Meta atingida!
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Formulário de identificação */}
             <div style={S.card}>
-              <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '4px' }}>Sua identificação</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Seus dados ficam registrados junto com as respostas.</div>
+              <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '4px' }}>
+                {isPersonal ? 'Confirme seus dados' : 'Sua identificação'}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                {isPersonal ? 'Seus dados estão vinculados ao seu link pessoal.' : 'Seus dados ficam registrados junto com as respostas.'}
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Nome */}
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
-                    Seu nome *
-                  </label>
+                  <label style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Nome *</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '12px', padding: '0 14px' }}>
                     <User size={16} color="var(--text-muted)" />
-                    <input
-                      style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', padding: '14px 0', fontSize: '16px', color: 'var(--text-main)', fontFamily: 'inherit' }}
-                      placeholder="Digite seu nome completo"
-                      value={name}
-                      onChange={e => { setName(e.target.value); setError(''); }}
-                      autoFocus
+                    <input style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', padding: '14px 0', fontSize: '16px', color: 'var(--text-main)', fontFamily: 'inherit' }}
+                      placeholder="Nome completo" value={nome}
+                      onChange={e => { setNome(e.target.value); setError(''); }}
+                      readOnly={isPersonal}
+                      autoFocus={!isPersonal}
                     />
                   </div>
                 </div>
 
-                {(survey.targetCities?.length > 0) && (
+                {/* Telefone */}
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
+                    Telefone {isPersonal ? '*' : '(opcional)'}
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '12px', padding: '0 14px' }}>
+                    <Phone size={16} color="var(--text-muted)" />
+                    <input style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', padding: '14px 0', fontSize: '16px', color: 'var(--text-main)', fontFamily: 'inherit' }}
+                      placeholder="(00) 00000-0000" value={telefone}
+                      onChange={e => { setTelefone(e.target.value); setError(''); }}
+                      readOnly={isPersonal}
+                      type="tel"
+                    />
+                  </div>
+                </div>
+
+                {/* Cidade */}
+                {survey.targetCities?.length > 0 && (
                   <div>
-                    <label style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
-                      Cidade
-                    </label>
-                    <select
-                      style={{ ...S.inp, fontSize: '15px' }}
-                      value={city}
-                      onChange={e => setCity(e.target.value)}
-                    >
+                    <label style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Cidade</label>
+                    <select style={{ ...S.inp, fontSize: '15px' }} value={city} onChange={e => setCity(e.target.value)}>
                       <option value="">Selecionar...</option>
                       {survey.targetCities.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -367,66 +390,110 @@ function ResponseScreen({ survey, surveyId }) {
               </div>
             </div>
 
-            <button onClick={handleStartQuestions} disabled={!name.trim()} style={S.bigBtn(colors.primary, !name.trim())}>
-              Iniciar Pesquisa <ChevronRight size={20} />
+            <button onClick={handleIniciar} disabled={!nome.trim()} style={S.bigBtn(colors.primary, !nome.trim())}>
+              Iniciar Questionário <ChevronRight size={20} />
             </button>
-          </>
-        )}
-
-        {/* Perguntas */}
-        {step === 'questions' && (
-          <>
-            {survey.questions?.map((q, i) => renderQuestion(q, i))}
-            <button onClick={handleSubmit} disabled={sending || !allAnswered()} style={S.bigBtn(colors.success, sending || !allAnswered())}>
-              {sending
-                ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Enviando...</>
-                : <><CheckCircle size={20} /> Enviar Respostas</>
-              }
-            </button>
-          </>
-        )}
-
-        {/* Sucesso */}
-        {step === 'done' && (
-          <div style={{ ...S.card, textAlign: 'center', padding: '40px 24px' }}>
-            <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: `${colors.success}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
-              <CheckCircle size={40} color={colors.success} />
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>Obrigado, {name.split(' ')[0]}!</div>
-            <div style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Suas respostas foram registradas com sucesso{gpsPos ? ' com localização GPS' : ''}.
-            </div>
           </div>
-        )}
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </>
+      )}
+
+      {/* ── PERGUNTAS ── */}
+      {step === 'questions' && (
+        <>
+          <HeaderBar sub={`${Object.keys(answers).length} de ${survey.questions?.length || 0} respondidas`} />
+          <div style={S.body}>
+            {error && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.danger}15`, border: `1px solid ${colors.danger}40`, borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: '700', color: colors.danger }}><AlertCircle size={15} /> {error}</div>}
+
+            {survey.questions?.map((q, i) => renderQuestion(q, i))}
+
+            <button onClick={handleSubmit} disabled={sending || !allAnswered()} style={S.bigBtn(colors.success, sending || !allAnswered())}>
+              {sending ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Enviando...</> : <><CheckCircle size={20} /> Enviar Respostas</>}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── CONCLUÍDO ── */}
+      {step === 'done' && (
+        <>
+          <HeaderBar sub="Questionário concluído" />
+          <div style={S.body}>
+            <div style={{ ...S.card, textAlign: 'center', padding: '36px 24px' }}>
+              <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: `${colors.success}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+                <CheckCircle size={40} color={colors.success} />
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '6px' }}>
+                Enviado com sucesso!
+              </div>
+              {numQuestionario && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: `${colors.primary}12`, border: `1px solid ${colors.primary}30`, borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: '800', color: colors.primary, marginBottom: '10px' }}>
+                  <Hash size={13} /> Questionário {numQuestionario}
+                </div>
+              )}
+              <div style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Respostas registradas com sucesso{gpsPos ? ' com localização GPS' : ''}.
+              </div>
+
+              {/* Progresso atualizado */}
+              {isPersonal && meta > 0 && (
+                <div style={{ margin: '18px 0', padding: '14px', background: 'var(--bg-app)', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: '700' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Progresso</span>
+                    <span style={{ color: totalFeitas >= meta ? colors.success : colors.primary }}>{totalFeitas} / {meta}</span>
+                  </div>
+                  <div style={{ height: '8px', borderRadius: '50px', background: 'var(--border)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, (totalFeitas / meta) * 100)}%`, borderRadius: '50px', background: totalFeitas >= meta ? colors.success : colors.primary, transition: 'width 0.6s ease' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Botões de ação pós-envio */}
+            <button onClick={handleProxima} style={S.bigBtn(colors.primary)}>
+              <RefreshCw size={18} /> Próxima Pesquisa
+            </button>
+            <button onClick={() => setStep('inicio')} style={{ ...S.bigBtn('transparent', false), color: 'var(--text-muted)', boxShadow: 'none', border: '1px solid var(--border)' }}>
+              <Home size={18} /> Voltar ao Início
+            </button>
+          </div>
+        </>
+      )}
+
+<style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
     </div>
   );
 }
 
-// ── Componente raiz — carrega a campanha e decide o modo ──────
-export default function PublicSurveyAccess({ surveyId }) {
-  const [survey,   setSurvey]   = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [unlocked, setUnlocked] = useState(false);
-  const [error,    setError]    = useState('');
+// ── Componente raiz ───────────────────────────────────────────
+export default function PublicSurveyAccess({ surveyId, entrevistadorId }) {
+  const [survey,        setSurvey]        = useState(null);
+  const [entrevistador, setEntrevistador] = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState('');
 
   useEffect(() => {
     const load = async () => {
       try {
+        // Carrega a campanha
         const snap = await getDoc(doc(db, 'surveys', surveyId));
         if (!snap.exists()) { setError('Campanha não encontrada.'); setLoading(false); return; }
         setSurvey({ id: snap.id, ...snap.data() });
+
+        // Se há entrevistadorId, carrega os dados do entrevistador
+        if (entrevistadorId) {
+          const eSnap = await getDoc(doc(db, 'survey_entrevistadores', entrevistadorId));
+          if (eSnap.exists()) setEntrevistador({ id: eSnap.id, ...eSnap.data() });
+        }
       } catch { setError('Erro ao carregar a campanha.'); }
       setLoading(false);
     };
     load();
-  }, [surveyId]);
+  }, [surveyId, entrevistadorId]);
 
   if (loading) return (
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-app)' }}>
       <Loader2 size={32} color={colors.primary} style={{ animation: 'spin 0.8s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+<style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
     </div>
   );
 
@@ -440,19 +507,25 @@ export default function PublicSurveyAccess({ surveyId }) {
     </div>
   );
 
+  if (survey.status === 'draft' || survey.status === 'ready') return (
+    <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-app)', padding: '20px' }}>
+      <div style={{ textAlign: 'center', maxWidth: '340px' }}>
+        <div style={{ fontSize: '40px', marginBottom: '14px' }}>⏳</div>
+        <div style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>{survey.title}</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>Esta pesquisa ainda não foi ativada.</div>
+      </div>
+    </div>
+  );
+
   if (survey.status === 'finished') return (
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-app)', padding: '20px' }}>
       <div style={{ textAlign: 'center', maxWidth: '320px' }}>
         <div style={{ fontSize: '40px', marginBottom: '14px' }}>⛔</div>
         <div style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '6px' }}>{survey.title}</div>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Esta campanha foi encerrada e não aceita mais respostas.</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Esta campanha foi encerrada.</div>
       </div>
     </div>
   );
 
-  // Tela de senha
-  if (!unlocked) return <PasswordScreen survey={survey} onUnlock={() => setUnlocked(true)} />;
-
-  // Campanha ativa → tela de resposta
-  return <ResponseScreen survey={survey} surveyId={surveyId} />;
+  return <ResponseScreen survey={survey} surveyId={surveyId} entrevistador={entrevistador} />;
 }

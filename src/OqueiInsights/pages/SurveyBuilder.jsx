@@ -2,7 +2,7 @@
 //  SurveyBuilder.jsx — Oquei Pesquisas  (v3)
 //
 //  Novidades v3:
-//  · Campo "Senha de Acesso" (accessCode) na criação
+
 //  · Links gerados no card:
 //      - Link de Edição (draft):  /pesquisa/:id  (senha desbloqueia editor)
 //      - Link de Resposta (active): /pesquisa/:id  (senha desbloqueia formulário)
@@ -12,13 +12,13 @@ import React, { useState, useEffect } from 'react';
 import { db, auth } from '../../firebase';
 import {
   collection, getDocs, addDoc, updateDoc,
-  deleteDoc, doc, serverTimestamp,
+  deleteDoc, doc, serverTimestamp, query, where, writeBatch,
 } from 'firebase/firestore';
 import {
   Plus, Trash2, GripVertical, ToggleLeft, Type, List, Hash,
   ClipboardList, Edit2, X, Save, ChevronDown, ChevronUp,
   AlertTriangle, Lock, Unlock, Info, Copy, Check,
-  Link as LinkIcon, Eye, EyeOff,
+  Link as LinkIcon, Eye, EyeOff, Users, Phone, Target, ExternalLink,
 } from 'lucide-react';
 import { Card, Btn, Badge, Modal, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
@@ -32,8 +32,8 @@ const QUESTION_TYPES = [
 ];
 
 const STATUS_COR   = { active: 'success', finished: 'neutral', draft: 'warning' };
-const STATUS_LABEL = { active: 'Ativa',   finished: 'Encerrada', draft: 'Rascunho' };
-const STATUS_ICON  = { active: '🟢',      finished: '⛔',         draft: '✏️' };
+const STATUS_LABEL = { active: 'Ativa', finished: 'Encerrada', draft: 'Rascunho' };
+const STATUS_ICON  = { active: '🟢', finished: '⛔', draft: '✏️' };
 
 const emptyQuestion = () => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
@@ -46,14 +46,16 @@ const canActivate = (survey) => {
   const empty = survey.questions.filter(q => !q.label?.trim());
   if (empty.length)
     return { ok: false, reason: 'Todas as perguntas precisam ter texto.' };
-  if (!survey.accessCode?.trim())
-    return { ok: false, reason: 'Defina uma senha de acesso para ativar.' };
   return { ok: true, reason: '' };
 };
 
-// Gera URL pública da campanha
+// URL do link de aplicação da pesquisa (só quando ativa)
 const surveyURL = (id) =>
   `${window.location.origin}/pesquisa/${id}`;
+
+// URL do link personalizado de entrevistador
+const entrevistadorURL = (surveyId, entrevistadorId) =>
+  `${window.location.origin}/pesquisa/${surveyId}/entrevistador/${entrevistadorId}`;
 
 // ── CopyButton ─────────────────────────────────────────────
 function CopyButton({ text, label }) {
@@ -117,7 +119,7 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
             const sel = q.type === t.value;
             return (
               <button key={t.value}
-                onClick={() => onChange({ ...q, type: t.value, options: t.value === 'select' ? ['Opção 1', 'Opção 2'] : t.value === 'boolean' ? ['Sim', 'Não'] : undefined })}
+                onClick={() => onChange({ ...q, type: t.value, options: t.value === 'select' ? [] : t.value === 'boolean' ? ['Sim', 'Não'] : null })}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: sel ? `${t.color}20` : 'var(--bg-panel)', outline: `1px solid ${sel ? t.color : 'var(--border)'}`, fontSize: '11px', fontWeight: '800', color: sel ? t.color : 'var(--text-muted)', transition: 'all 0.12s' }}>
                 <I2 size={11} /> {t.label}
               </button>
@@ -142,10 +144,24 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
         {q.type === 'select' && (
           <div>
             <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Opções</div>
+            {(q.options || []).length === 0 && (
+              <div style={{ fontSize: '12px', color: colors.warning, fontWeight: '700', padding: '6px 0', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <AlertTriangle size={12} /> Adicione pelo menos uma opção.
+              </div>
+            )}
             {(q.options || []).map((opt, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
                 <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-                <div style={{ flex: 1, ...inp, padding: '7px 11px', fontSize: '12px' }}>{opt}</div>
+                <input
+                  style={{ flex: 1, ...inp, padding: '7px 11px', fontSize: '12px' }}
+                  value={opt}
+                  placeholder={`Opção ${i + 1}...`}
+                  onChange={e => {
+                    const opts = [...(q.options || [])];
+                    opts[i] = e.target.value;
+                    onChange({ ...q, options: opts });
+                  }}
+                />
                 <button onClick={() => removeOpt(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.danger, display: 'flex' }}><X size={13} /></button>
               </div>
             ))}
@@ -174,15 +190,137 @@ function QuestionEditor({ q, idx, total, onChange, onRemove, onMoveUp, onMoveDow
   );
 }
 
+
+// ── EntrevistadoresSection ──────────────────────────────────
+// Seção dentro do card de campanha ATIVA para gerenciar
+// entrevistadores e seus links personalizados.
+function EntrevistadoresSection({ survey }) {
+  const [lista,    setLista]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [form,     setForm]     = useState({ nome: '', telefone: '', meta: '' });
+  const [saving,   setSaving]   = useState(false);
+
+  const inp = { padding: '9px 12px', borderRadius: '9px', border: '1px solid var(--border)', outline: 'none', fontSize: '13px', color: 'var(--text-main)', background: 'var(--bg-app)', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
+
+  useEffect(() => {
+    if (!expanded) return;
+    loadEntrevistadores();
+  }, [expanded]);
+
+  const loadEntrevistadores = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'survey_entrevistadores'), where('surveyId', '==', survey.id)));
+      setLista(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleAdd = async () => {
+    if (!form.nome.trim()) { window.showToast?.('Informe o nome.', 'error'); return; }
+    setSaving(true);
+    try {
+      const ref = await addDoc(collection(db, 'survey_entrevistadores'), {
+        surveyId:  survey.id,
+        nome:      form.nome.trim(),
+        telefone:  form.telefone.trim() || null,
+        meta:      parseInt(form.meta) || 0,
+        createdAt: serverTimestamp(),
+      });
+      setLista(l => [...l, { id: ref.id, surveyId: survey.id, nome: form.nome.trim(), telefone: form.telefone.trim() || null, meta: parseInt(form.meta) || 0 }]);
+      setForm({ nome: '', telefone: '', meta: '' });
+      window.showToast?.('Entrevistador adicionado!');
+    } catch (e) { window.showToast?.(e.message, 'error'); }
+    setSaving(false);
+  };
+
+  const handleRemove = async (id) => {
+    if (!window.confirm('Remover este entrevistador?')) return;
+    try {
+      await deleteDoc(doc(db, 'survey_entrevistadores', id));
+      setLista(l => l.filter(x => x.id !== id));
+      window.showToast?.('Removido.', 'success');
+    } catch {}
+  };
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border)' }}>
+      <button onClick={() => setExpanded(e => !e)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 20px', background: `${colors.success}08`, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', fontWeight: '900', color: colors.success }}>
+          <Users size={14} /> Entrevistadores & Links Pessoais
+          {lista.length > 0 && !loading && <span style={{ background: `${colors.success}20`, borderRadius: '20px', padding: '1px 8px' }}>{lista.length}</span>}
+        </div>
+        {expanded ? <ChevronUp size={14} color={colors.success} /> : <ChevronDown size={14} color={colors.success} />}
+      </button>
+
+      {expanded && (
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', background: `${colors.success}04` }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Cada entrevistador recebe um link único que identifica automaticamente quem está aplicando as pesquisas.
+          </div>
+
+          {/* Formulário de adição */}
+          <div style={{ background: 'var(--bg-card)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Novo Entrevistador</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '8px' }}>
+              <input style={inp} placeholder="Nome completo *" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
+              <input style={inp} placeholder="Telefone" value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} type="tel" />
+              <input style={inp} placeholder="Meta (nº)" value={form.meta} onChange={e => setForm({...form, meta: e.target.value})} type="number" min="0" />
+            </div>
+            <button onClick={handleAdd} disabled={saving || !form.nome.trim()}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '9px 16px', borderRadius: '8px', background: saving || !form.nome.trim() ? 'var(--bg-app)' : `${colors.success}20`, border: `1px solid ${colors.success}40`, color: colors.success, fontWeight: '800', fontSize: '12px', cursor: saving || !form.nome.trim() ? 'not-allowed' : 'pointer', opacity: saving || !form.nome.trim() ? 0.5 : 1 }}>
+              <Plus size={13} /> Adicionar
+            </button>
+          </div>
+
+          {/* Lista */}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>Carregando...</div>
+          ) : lista.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>Nenhum entrevistador cadastrado.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {lista.map(e => {
+                const url = entrevistadorURL(survey.id, e.id);
+                return (
+                  <div key={e.id} style={{ background: 'var(--bg-card)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                      <div>
+                        <div style={{ fontWeight: '800', fontSize: '13px', color: 'var(--text-main)' }}>{e.nome}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', gap: '10px' }}>
+                          {e.telefone && <span>📱 {e.telefone}</span>}
+                          {e.meta > 0 && <span><Target size={10} style={{ display: 'inline', marginRight: '3px' }} />Meta: {e.meta}</span>}
+                        </div>
+                      </div>
+                      <button onClick={() => handleRemove(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.danger, display: 'flex', padding: '4px' }}><Trash2 size={13} /></button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-app)', borderRadius: '7px', padding: '6px 10px' }}>
+                      <div style={{ flex: 1, fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</div>
+                      <CopyButton text={url} label="Copiar" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SurveyCard ─────────────────────────────────────────────
-function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, onUpdateQuestion, onRemoveQuestion, onMoveQuestion }) {
+function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, onUpdateQuestion, onRemoveQuestion, onMoveQuestion, onEntrevistadores }) {
   const [expanded, setExpanded] = useState(false);
   const activation = canActivate(survey);
   const isDraft    = survey.status === 'draft';
   const isActive   = survey.status === 'active';
   const isFinished = survey.status === 'finished';
 
-  const url = surveyURL(survey.id);
+  const urlApp    = surveyURL(survey.id);
+  const canApply  = isActive;
 
   return (
     <div style={{
@@ -210,36 +348,34 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
             📋 {survey.questions?.length || 0} pergunta{survey.questions?.length !== 1 ? 's' : ''}
           </span>
           {survey.targetCities?.length > 0 && <span>📍 {survey.targetCities.length} cidade{survey.targetCities.length !== 1 ? 's' : ''}</span>}
-          <span style={{ color: survey.accessCode ? colors.success : colors.warning }}>
-            {survey.accessCode ? '🔐 Senha definida' : '⚠ Sem senha'}
-          </span>
+
         </div>
 
-        {/* Links da campanha */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <LinkIcon size={11} /> Links da Campanha
-          </div>
-
-          {/* Link de resposta (sempre visível) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'var(--bg-panel)', borderRadius: '6px', padding: '5px 8px', fontFamily: 'monospace' }}>
-              {url}
+        {/* Link de aplicação da pesquisa */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: canApply ? `${colors.success}08` : 'var(--bg-panel)', border: `1px solid ${canApply ? colors.success + '30' : 'var(--border)'}`, borderRadius: '10px', padding: '10px 14px', opacity: canApply ? 1 : 0.7 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '900', color: canApply ? colors.success : 'var(--text-muted)' }}>
+              <LinkIcon size={11} /> Link de Aplicação da Pesquisa
             </div>
-            <CopyButton text={url} label={isActive ? 'Copiar Link Pesquisa' : 'Copiar Link'} />
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {isActive
-              ? '✅ Pesquisadores acessam este link + senha para responder'
-              : isDraft
-                ? '✏️ Compartilhe este link + senha para edição colaborativa das perguntas'
-                : '⛔ Campanha encerrada — link desativado'
+            {canApply
+              ? <CopyButton text={urlApp} label="Copiar Link" />
+              : <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', background: 'var(--bg-panel)', padding: '3px 8px', borderRadius: '6px' }}>
+                  {isFinished ? 'Encerrado' : 'Disponível ao ativar'}
+                </span>
             }
+          </div>
+          {canApply && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'var(--bg-panel)', borderRadius: '5px', padding: '4px 8px' }}>
+              {urlApp}
+            </div>
+          )}
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {canApply ? '✅ Entrevistadores acessam este link para responder' : isFinished ? '⛔ Campanha encerrada' : '⏳ Disponível após ativar a campanha'}
           </div>
         </div>
 
         {/* Alerta de bloqueio de ativação */}
-        {isDraft && !activation.ok && (survey.questions?.length > 0 || survey.accessCode) && (
+        {isDraft && !activation.ok && survey.questions?.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.warning}12`, border: `1px solid ${colors.warning}30`, borderRadius: '9px', padding: '8px 12px', fontSize: '12px', fontWeight: '700', color: colors.warning }}>
             <AlertTriangle size={13} /> {activation.reason}
           </div>
@@ -251,7 +387,7 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
             <button onClick={() => setExpanded(e => !e)}
               style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: '1px solid var(--border)', background: expanded ? 'var(--bg-panel)' : 'transparent', color: 'var(--text-muted)', fontWeight: '800', fontSize: '12px', cursor: 'pointer', flex: 1, justifyContent: 'center' }}>
               {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              {expanded ? 'Fechar Editor' : 'Editar Perguntas'}
+              {expanded ? 'Fechar' : 'Editar Perguntas'}
             </button>
           )}
           <button onClick={() => onEdit(survey)}
@@ -268,14 +404,16 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
                 borderRadius: '9px', border: 'none', fontWeight: '900', fontSize: '12px',
                 cursor: isDraft && !activation.ok ? 'not-allowed' : 'pointer',
                 flex: 1, justifyContent: 'center',
-                background: isDraft ? (activation.ok ? `${colors.success}20` : 'var(--bg-app)') : `${colors.danger}15`,
-                color: isDraft ? (activation.ok ? colors.success : 'var(--text-muted)') : colors.danger,
-                outline: `1px solid ${isDraft ? (activation.ok ? colors.success + '60' : 'var(--border)') : colors.danger + '40'}`,
+                background: isActive ? `${colors.danger}15` : activation.ok ? `${colors.success}20` : 'var(--bg-app)',
+                color:      isActive ? colors.danger : activation.ok ? colors.success : 'var(--text-muted)',
+                outline: `1px solid ${isActive ? colors.danger + '40' : activation.ok ? colors.success + '60' : 'var(--border)'}`,
                 opacity: isDraft && !activation.ok ? 0.5 : 1, transition: 'all 0.12s',
               }}>
-              {isDraft
-                ? (activation.ok ? <><Unlock size={12} /> Ativar Campanha</> : <><Lock size={12} /> Ativar</>)
-                : <><span>⛔</span> Encerrar</>
+              {isActive
+                ? <><span>⛔</span> Encerrar</>
+                : activation.ok
+                  ? <><Unlock size={12} /> Ativar Campanha</>
+                  : <><Lock size={12} /> Ativar</>
               }
             </button>
           )}
@@ -286,23 +424,22 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
         </div>
       </div>
 
+      {/* Seção de Entrevistadores — só quando ativa */}
+      {isActive && <EntrevistadoresSection survey={survey} onEntrevistadores={onEntrevistadores} />}
+
       {/* Editor de perguntas expandível */}
       {expanded && !isFinished && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-app)', borderRadius: '0 0 13px 13px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Perguntas ({survey.questions?.length || 0})
-            </div>
-            <button onClick={() => onAddQuestion(survey)}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '8px', background: `${colors.primary}15`, border: `1px solid ${colors.primary}40`, color: colors.primary, fontWeight: '800', fontSize: '11px', cursor: 'pointer' }}>
-              <Plus size={12} /> Adicionar Pergunta
-            </button>
+          {/* Cabeçalho só com contador */}
+          <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Perguntas ({survey.questions?.length || 0})
           </div>
+
           {(!survey.questions || !survey.questions.length) ? (
             <div style={{ textAlign: 'center', padding: '28px', color: 'var(--text-muted)', border: `2px dashed ${colors.warning}40`, borderRadius: '12px', background: `${colors.warning}06` }}>
               <ClipboardList size={28} style={{ opacity: 0.3, marginBottom: '8px' }} />
               <div style={{ fontWeight: '800', fontSize: '13px', marginBottom: '4px', color: colors.warning }}>Nenhuma pergunta ainda</div>
-              <div style={{ fontSize: '12px' }}>Adicione perguntas para poder ativar esta campanha.</div>
+              <div style={{ fontSize: '12px' }}>Clique em "Adicionar Pergunta" abaixo para começar.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -316,6 +453,12 @@ function SurveyCard({ survey, onEdit, onDelete, onToggleStatus, onAddQuestion, o
               ))}
             </div>
           )}
+
+          {/* Botão sempre abaixo da última pergunta */}
+          <button onClick={() => onAddQuestion(survey)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '11px', borderRadius: '10px', border: `2px dashed ${colors.primary}40`, background: `${colors.primary}08`, color: colors.primary, fontWeight: '800', fontSize: '12px', cursor: 'pointer', transition: 'all 0.15s' }}>
+            <Plus size={14} /> Adicionar Pergunta
+          </button>
         </div>
       )}
     </div>
@@ -330,9 +473,8 @@ export default function SurveyBuilder({ userData }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId,    setEditId]    = useState(null);
   const [saving,    setSaving]    = useState(false);
-  const [showPass,  setShowPass]  = useState(false);
 
-  const [form, setForm] = useState({ title: '', description: '', targetCities: [], accessCode: '' });
+  const [form, setForm] = useState({ title: '', description: '', targetCities: [] });
 
   useEffect(() => {
     const load = async () => {
@@ -352,22 +494,29 @@ export default function SurveyBuilder({ userData }) {
     load();
   }, []);
 
+  const sanitizeQuestions = (qs) =>
+    (qs || []).map(({ id, type, label, options }) => ({
+      id, type, label: label ?? '',
+      ...(options !== undefined ? { options: options ?? null } : {}),
+    }));
+
   const persistSurvey = async (id, data) => {
-    await updateDoc(doc(db, 'surveys', id), { ...data, updatedAt: serverTimestamp() });
+    const clean = data.questions !== undefined
+      ? { ...data, questions: sanitizeQuestions(data.questions) }
+      : data;
+    await updateDoc(doc(db, 'surveys', id), { ...clean, updatedAt: serverTimestamp() });
     setSurveys(s => s.map(x => x.id === id ? { ...x, ...data } : x));
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ title: '', description: '', targetCities: [], accessCode: '' });
-    setShowPass(false);
+    setForm({ title: '', description: '', targetCities: [] });
     setModalOpen(true);
   };
 
   const openEdit = (s) => {
     setEditId(s.id);
-    setForm({ title: s.title, description: s.description || '', targetCities: s.targetCities || [], accessCode: s.accessCode || '' });
-    setShowPass(false);
+    setForm({ title: s.title, description: s.description || '', targetCities: s.targetCities || [] });
     setModalOpen(true);
   };
 
@@ -376,12 +525,12 @@ export default function SurveyBuilder({ userData }) {
     setSaving(true);
     try {
       if (editId) {
-        await persistSurvey(editId, { title: form.title, description: form.description, targetCities: form.targetCities, accessCode: form.accessCode });
+        await persistSurvey(editId, { title: form.title, description: form.description, targetCities: form.targetCities });
         window.showToast?.('Campanha atualizada!', 'success');
       } else {
         const payload = {
           title: form.title, description: form.description,
-          targetCities: form.targetCities, accessCode: form.accessCode,
+          targetCities: form.targetCities,
           status: 'draft', questions: [],
           createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid,
         };
@@ -422,9 +571,23 @@ export default function SurveyBuilder({ userData }) {
     const qs = [...s.questions]; const [item] = qs.splice(from, 1); qs.splice(to, 0, item);
     await persistSurvey(s.id, { questions: qs });
   };
-  const handleDelete         = async (id) => {
-    if (!window.confirm('Excluir esta campanha permanentemente?')) return;
-    try { await deleteDoc(doc(db, 'surveys', id)); setSurveys(s => s.filter(x => x.id !== id)); window.showToast?.('Excluída.', 'success'); } catch {}
+  const handleDelete = async (id) => {
+    if (!window.confirm('Excluir esta campanha permanentemente? As respostas vinculadas também serão removidas.')) return;
+    try {
+      const batch = writeBatch(db);
+
+      // Exclui respostas vinculadas
+      const qResp = query(collection(db, 'survey_responses'), where('surveyId', '==', id));
+      const snapResp = await getDocs(qResp);
+      snapResp.docs.forEach(d => batch.delete(d.ref));
+
+      // Exclui a campanha
+      batch.delete(doc(db, 'surveys', id));
+
+      await batch.commit();
+      setSurveys(s => s.filter(x => x.id !== id));
+      window.showToast?.('Campanha e respostas excluídas.', 'success');
+    } catch (e) { window.showToast?.(e.message, 'error'); }
   };
 
   const toggleCity = (id) => setForm(f => ({ ...f, targetCities: f.targetCities.includes(id) ? f.targetCities.filter(c => c !== id) : [...f.targetCities, id] }));
@@ -472,9 +635,7 @@ export default function SurveyBuilder({ userData }) {
         <Info size={14} color={colors.info} style={{ flexShrink: 0, marginTop: '1px' }} />
         <span>
           <strong style={{ color: 'var(--text-main)' }}>Fluxo:</strong>
-          {' '}Crie a campanha com senha → Adicione perguntas → Ative → Compartilhe o link com os pesquisadores.
-          O link de <strong>Rascunho</strong> permite edição colaborativa de perguntas.
-          O link <strong>Ativo</strong> permite que pesquisadores respondam (sem login, apenas nome + senha).
+          {' '}Crie a campanha → Adicione perguntas pelo painel interno → Ative → Compartilhe o link com os entrevistadores.
         </span>
       </div>
 
@@ -486,35 +647,72 @@ export default function SurveyBuilder({ userData }) {
           <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
             <ClipboardList size={44} style={{ opacity: 0.2, marginBottom: '14px' }} />
             <div style={{ fontWeight: '800', fontSize: '15px', marginBottom: '6px', color: 'var(--text-main)' }}>Nenhuma campanha criada</div>
-            <div style={{ fontSize: '13px', marginBottom: '18px' }}>Crie a primeira pesquisa. Você define a senha na criação.</div>
+            <div style={{ fontSize: '13px', marginBottom: '18px' }}>Crie a primeira campanha, adicione as perguntas e ative.</div>
             <Btn onClick={openNew}><Plus size={14} /> Criar Primeira Campanha</Btn>
           </div>
         </Card>
       ) : (
-        ['active', 'draft', 'finished'].map(status => {
-          const group = surveys.filter(s => s.status === status);
-          if (!group.length) return null;
-          return (
-            <div key={status}>
-              <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: status === 'active' ? colors.success : status === 'draft' ? colors.warning : colors.neutral }} />
-                {STATUS_LABEL[status]} ({group.length})
+        <>
+          {['active', 'draft', 'finished'].map(status => {
+            const group = surveys.filter(s => s.status === status);
+            if (!group.length) return null;
+            return (
+              <div key={status}>
+                <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: status === 'active' ? colors.success : status === 'draft' ? colors.warning : colors.neutral }} />
+                  {STATUS_LABEL[status]} ({group.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {group.map(s => (
+                    <SurveyCard key={s.id} survey={s}
+                      onEdit={openEdit} onDelete={handleDelete}
+                      onToggleStatus={handleToggleStatus}
+                      onAddQuestion={handleAddQuestion}
+                      onUpdateQuestion={handleUpdateQuestion}
+                      onRemoveQuestion={handleRemoveQuestion}
+                      onMoveQuestion={handleMoveQuestion}
+                      onEntrevistadores={() => {}}
+                    />
+                  ))}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {group.map(s => (
-                  <SurveyCard key={s.id} survey={s}
-                    onEdit={openEdit} onDelete={handleDelete}
-                    onToggleStatus={handleToggleStatus}
-                    onAddQuestion={handleAddQuestion}
-                    onUpdateQuestion={handleUpdateQuestion}
-                    onRemoveQuestion={handleRemoveQuestion}
-                    onMoveQuestion={handleMoveQuestion}
-                  />
-                ))}
+            );
+          })}
+
+          {/* Campanhas com status desconhecido — órfãs de versões anteriores */}
+          {(() => {
+            const conhecidos = new Set(['active', 'draft', 'finished']);
+            const orfas = surveys.filter(s => !conhecidos.has(s.status));
+            if (!orfas.length) return null;
+            return (
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: colors.neutral }} />
+                  Outros ({orfas.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {orfas.map(s => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px 18px', boxShadow: 'var(--shadow-sm)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || '(sem título)'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px', display: 'flex', gap: '10px' }}>
+                          <span>Status: <code style={{ background: 'var(--bg-app)', padding: '1px 6px', borderRadius: '4px', fontSize: '11px' }}>{s.status || 'indefinido'}</code></span>
+                          <span>{s.questions?.length || 0} pergunta{s.questions?.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(s.id)}
+                        title="Excluir campanha"
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', border: `1px solid ${colors.danger}30`, background: `${colors.danger}10`, color: colors.danger, fontWeight: '800', fontSize: '12px', cursor: 'pointer', flexShrink: 0 }}>
+                        <Trash2 size={13} /> Excluir
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })
+            );
+          })()}
+        </>
       )}
 
       {/* Modal criação/edição */}
@@ -541,26 +739,6 @@ export default function SurveyBuilder({ userData }) {
             <input style={inp} placeholder="Objetivo ou instruções da pesquisa..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
 
-          {/* Senha de acesso */}
-          <div>
-            <label style={lbl}>Senha de Acesso *</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                style={{ ...inp, paddingRight: '44px' }}
-                type={showPass ? 'text' : 'password'}
-                placeholder="Defina uma senha para o link da campanha"
-                value={form.accessCode}
-                onChange={e => setForm({ ...form, accessCode: e.target.value })}
-              />
-              <button type="button" onClick={() => setShowPass(s => !s)}
-                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', fontWeight: '600' }}>
-              Quem acessar o link da campanha precisará digitar esta senha. Obrigatório para ativar.
-            </div>
-          </div>
 
           {/* Cidades alvo */}
           {cities.length > 0 && (

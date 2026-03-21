@@ -307,9 +307,17 @@ const toggleTheme = () => {
           display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0,
           justifyContent: collapsed ? 'center' : 'flex-start',
         }}>
-          <div style={avatar}>{userData?.name?.[0]?.toUpperCase() || 'U'}</div>
-          {!collapsed && (
+          {collapsed ? (
+            /* Sidebar colapsada: só o botão de logout com tooltip */
+            <button onClick={onLogout} title="Sair"
+              style={{ ...iconBtn({ color: colors.danger }), width: '100%', justifyContent: 'center' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <LogOut size={18} />
+            </button>
+          ) : (
             <>
+              <div style={avatar}>{userData?.name?.[0]?.toUpperCase() || 'U'}</div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {userData?.name || 'Usuário'}
@@ -441,7 +449,7 @@ const toggleTheme = () => {
 
             <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border)', margin: '0 6px', flexShrink: 0 }} />
 
-            {/* Usuário */}
+            {/* Usuário + Logout */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'default' }}>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
@@ -452,6 +460,12 @@ const toggleTheme = () => {
                 </div>
               </div>
               <div style={avatar}>{userData?.name?.[0]?.toUpperCase() || 'U'}</div>
+              <button onClick={onLogout} title="Sair"
+                style={iconBtn({ color: colors.danger })}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
         </header>
