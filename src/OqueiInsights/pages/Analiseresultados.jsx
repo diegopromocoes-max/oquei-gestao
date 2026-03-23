@@ -13,6 +13,17 @@ import {
 } from 'lucide-react';
 import { Card, Btn, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
+import ActionPlansSummary from '../components/ActionPlansSummary';
+import InsightsContextCard from '../components/InsightsContextCard';
+import ThemeQuestionInsights from '../components/ThemeQuestionInsights';
+import {
+  buildVersionCounts,
+  filterInsightActionPlans,
+  filterInsightResponses,
+  getSelectedThemeLabel,
+  getSurveyThemeLabels,
+  getVersionOptions,
+} from '../lib/strategicInsights';
 
 // ── Constantes do questionário de Mirassolândia ──────────────
 // Mapeia intenção → label de resposta na pesquisa
@@ -141,12 +152,16 @@ export default function AnaliseResultados({ userData }) {
   const [surveys,       setSurveys]       = useState([]);
   const [responses,     setResponses]     = useState([]);
   const [cities,        setCities]        = useState([]);
+  const [themes,        setThemes]        = useState([]);
   const [cityResults,   setCityResults]   = useState([]);
   const [monthlyBases,  setMonthlyBases]  = useState([]);
+  const [actionPlans,   setActionPlans]   = useState([]);
   const [loading,       setLoading]       = useState(true);
 
   const [selSurvey,  setSelSurvey]  = useState('all');
   const [selCity,    setSelCity]    = useState('all');
+  const [selTheme,   setSelTheme]   = useState('all');
+  const [selVersion, setSelVersion] = useState('all');
   const [selMonth,   setSelMonth]   = useState(() => {
     const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   });
@@ -166,23 +181,72 @@ export default function AnaliseResultados({ userData }) {
         setLoading(false);
       }),
       onSnapshot(collection(db,'cities'), snap => setCities(snap.docs.map(d=>({id:d.id,...d.data()})))),
+      onSnapshot(collection(db,'survey_themes'), snap => setThemes(snap.docs.map(d=>({id:d.id,...d.data()})))),
       onSnapshot(collection(db,'city_results'), snap => setCityResults(snap.docs.map(d=>({id:d.id,...d.data()})))),
       onSnapshot(query(collection(db,'monthly_bases'),where('month','==',selMonth)), snap => {
         setMonthlyBases(snap.docs.map(d=>d.data()));
       }),
+      onSnapshot(collection(db,'insights_action_plans'), snap => setActionPlans(snap.docs.map(d=>({id:d.id,...d.data()})))),
     ];
     return () => unsubs.forEach(u=>u());
   }, [selMonth]);
 
   // ── Filtros ───────────────────────────────────────────────────
-  const respostas = useMemo(() => {
-    let list = responses.filter(r => r.auditStatus==='aceita' || !r.auditStatus);
-    if (selSurvey !== 'all') list = list.filter(r => r.surveyId === selSurvey);
-    return list;
-  }, [responses, selSurvey]);
-
   const survey = useMemo(() => surveys.find(s=>s.id===selSurvey), [surveys, selSurvey]);
+  const selectedCityRecord = useMemo(() => cities.find(city => city.id === selCity), [cities, selCity]);
+  const selectedCityLabel = useMemo(() => (selCity === 'all' ? 'Todas as cidades' : (selectedCityRecord?.name || selCity)), [selCity, selectedCityRecord]);
+  const cityFilterValue = useMemo(() => (selCity === 'all' ? 'all' : [selCity, selectedCityRecord?.name].filter(Boolean)), [selCity, selectedCityRecord]);
+  const themeMap = useMemo(() => Object.fromEntries(themes.map(theme => [theme.id, theme])), [themes]);
+  const surveyThemeLabels = useMemo(() => getSurveyThemeLabels(survey, themeMap), [survey, themeMap]);
+  const selectedThemeLabel = useMemo(() => getSelectedThemeLabel(selTheme, themeMap), [selTheme, themeMap]);
+  const themeOptions = useMemo(() => {
+    if (survey?.themeIds?.length) return survey.themeIds.map(themeId => themeMap[themeId]).filter(Boolean);
+    return themes.filter(theme => theme.status !== 'inactive');
+  }, [survey, themes, themeMap]);
+
+  const respostasBase = useMemo(() => (
+    filterInsightResponses(responses, {
+      surveyId: selSurvey,
+      city: cityFilterValue,
+      themeId: selTheme,
+      version: 'all',
+      acceptedOnly: true,
+    })
+  ), [responses, selSurvey, cityFilterValue, selTheme]);
+
+  const versionOptions = useMemo(() => getVersionOptions(respostasBase), [respostasBase]);
+
+  const respostas = useMemo(() => (
+    filterInsightResponses(respostasBase, {
+      city: 'all',
+      version: selVersion,
+      acceptedOnly: false,
+    })
+  ), [respostasBase, selVersion]);
+
+  const relatedPlans = useMemo(() => (
+    filterInsightActionPlans(actionPlans, {
+      cityRef: selCity,
+      surveyId: selSurvey,
+      themeId: selTheme,
+    })
+  ), [actionPlans, selCity, selSurvey, selTheme]);
+
+  const versionCounts = useMemo(() => buildVersionCounts(respostasBase), [respostasBase]);
   const questions = survey?.questions || [];
+
+  useEffect(() => {
+    if (selVersion !== 'all' && !versionOptions.includes(String(selVersion))) {
+      setSelVersion('all');
+    }
+  }, [selVersion, versionOptions]);
+
+  useEffect(() => {
+    if (selTheme === 'all' || !survey) return;
+    if (!survey.themeIds?.includes(selTheme)) {
+      setSelTheme('all');
+    }
+  }, [selTheme, survey]);
 
   // ── IDs das perguntas relevantes ─────────────────────────────
   const qIds = useMemo(() => ({
@@ -332,8 +396,20 @@ export default function AnaliseResultados({ userData }) {
     const resumoProvedores = market.provedores.map(p =>
       `${p.nome}: ${p.n} clientes | Vulnerabilidade ${p.scoreVulnerabilidade}/10 | NPS ${p.npsScore??'N/A'} | Sem velocidade ${p.pctSemVelocidade}% | Problemas: ${p.problemasTop.join(', ')} | Gatilhos: ${p.gatilhosTop.map(([k,v])=>k).join(', ')}`
     ).join('\n');
+    const resumoPlanos = relatedPlans.length
+      ? relatedPlans.slice(0, 5).map(plan => `- ${plan.title} | ${plan.status} | ${plan.themeName || 'Sem tema'} | ${plan.expectedImpact || 'Sem impacto descrito'}`).join('\n')
+      : '- Nenhum plano de acao cadastrado para este recorte';
+    const contextoCampanha = [
+      `Objetivo: ${survey?.objective || 'Nao informado'}`,
+      `Gatilho: ${survey?.triggerLabel || survey?.trigger || 'Nao informado'}`,
+      `Tema em foco: ${selectedThemeLabel}`,
+      `Versao filtrada: ${selVersion === 'all' ? 'Todas' : `Versao ${selVersion}`}`,
+    ].join('\n');
 
     const prompt = `Você é consultor especialista em expansão de provedores de internet no interior do Brasil.
+
+CONTEXTO DA CAMPANHA:
+${contextoCampanha}
 
 DADOS OPERACIONAIS — ${selMonth}:
 - Base ativa: ${opData.baseEnd} clientes
@@ -353,6 +429,9 @@ PESQUISA DE CAMPO (${market.total} entrevistados):
 VULNERABILIDADE POR CONCORRENTE:
 ${resumoProvedores}
 
+PLANOS DE ACAO JA CADASTRADOS:
+${resumoPlanos}
+
 Com base nesses dados, forneça:
 
 **1. DIAGNÓSTICO DE CRESCIMENTO**
@@ -366,6 +445,9 @@ Para cada provedor no top 2, dê 2-3 argumentos específicos baseados nos dados.
 
 **4. AÇÕES PARA OS PRÓXIMOS 7 DIAS**
 Máximo 5 ações concretas e executáveis.
+
+**5. AJUSTES NO PLANO DE ACAO**
+Considere os planos já cadastrados e diga o que reforçar, corrigir, acelerar ou adicionar.
 
 Seja direto e use os números. Escreva em português.`;
 
@@ -429,6 +511,14 @@ Seja direto e use os números. Escreva em português.`;
             <option value="all">Todas as cidades</option>
             {cities.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <select style={inp} value={selTheme} onChange={e=>setSelTheme(e.target.value)}>
+            <option value="all">Todos os temas</option>
+            {themeOptions.map(theme => <option key={theme.id} value={theme.id}>{theme.name}</option>)}
+          </select>
+          <select style={inp} value={selVersion} onChange={e=>setSelVersion(e.target.value)}>
+            <option value="all">Todas as versoes</option>
+            {versionOptions.map(version => <option key={version} value={version}>{`Versao ${version}`}</option>)}
+          </select>
           <input type="month" style={inp} value={selMonth} onChange={e=>setSelMonth(e.target.value)}/>
         </div>
       </div>
@@ -472,6 +562,23 @@ Seja direto e use os números. Escreva em português.`;
         </Card>
       ) : (
         <>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:'16px' }}>
+            <InsightsContextCard
+              survey={survey}
+              responseCount={respostas.length}
+              themeLabels={surveyThemeLabels}
+              versionCounts={versionCounts}
+              selectedThemeLabel={selectedThemeLabel}
+              selectedVersion={selVersion}
+              cityLabel={selectedCityLabel}
+              planCount={relatedPlans.length}
+            />
+            <ActionPlansSummary
+              plans={relatedPlans}
+              subtitle="Leitura rapida das acoes ja conectadas a esta campanha, cidade e tema"
+            />
+          </div>
+
           {/* ── MARKET SHARE ── */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
             <Card title="Market Share na Amostra" subtitle={`${market.total} entrevistados`}>
@@ -503,6 +610,13 @@ Seja direto e use os números. Escreva em português.`;
               </div>
             </Card>
           </div>
+
+          <ThemeQuestionInsights
+            survey={survey}
+            responses={respostas}
+            themeId={selTheme}
+            themeLabel={selectedThemeLabel}
+          />
 
           {/* ── VULNERABILIDADE POR CONCORRENTE ── */}
           <div>

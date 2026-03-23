@@ -1,0 +1,52 @@
+export function buildSurveyResponsePayload({
+  survey,
+  answers,
+  location,
+  researcherName,
+  researcherUid,
+  city,
+  cityId,
+  cityName,
+  phone,
+  interviewerId,
+  collectionSource,
+  number,
+  backupId,
+  backupCreatedAtClient,
+}) {
+  const normalizedCityName = cityName || city || cityId || '';
+  const normalizedCityId = cityId || city || '';
+  const submittedAtClient = backupCreatedAtClient || new Date().toISOString();
+  return {
+    surveyId: survey.id,
+    surveyTitle: survey.title,
+    surveyVersion: survey.questionnaireVersion || 1,
+    campaignTrigger: survey.trigger || '',
+    campaignTriggerLabel: survey.triggerLabel || '',
+    campaignObjective: survey.objective || '',
+    themeIds: survey.themeIds || [],
+    themeNames: survey.themeNames || [],
+    collectionSource,
+    researcherName: researcherName || 'Pesquisador',
+    researcherUid: researcherUid || null,
+    entrevistadorId: interviewerId || null,
+    telefone: phone || null,
+    city: normalizedCityName,
+    cityId: normalizedCityId,
+    cityName: normalizedCityName,
+    location: location || null,
+    answers,
+    numero: number || null,
+    backupId: backupId || null,
+    backupCreatedAtClient: backupCreatedAtClient || null,
+    auditStatus: 'pendente',
+    auditFlags: [],
+    submittedAtClient,
+    evidenceSummary: {
+      hasGps: Boolean(location?.lat && location?.lng),
+      hasPhone: Boolean(phone),
+      hasCity: Boolean(city),
+      isAuthenticatedResearcher: Boolean(researcherUid),
+    },
+  };
+}

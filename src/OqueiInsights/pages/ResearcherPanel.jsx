@@ -8,6 +8,8 @@ import { db, auth } from '../../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { MapPin, ClipboardList, CheckCircle, ChevronRight, Loader2, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { colors } from '../../components/ui';
+import { useSurveyLiveTracking } from '../hooks/useSurveyLiveTracking';
+import { buildSurveyResponsePayload } from '../lib/responsePayloads';
 
 // ── Helpers ──────────────────────────────────────────────────
 const getGPS = () => new Promise((res, rej) => {
@@ -66,6 +68,7 @@ export default function ResearcherPanel({ userData }) {
   const [loadingSurveys, setLoadingSurveys] = useState(true);
   const [error,       setError]       = useState('');
   const [online,      setOnline]      = useState(navigator.onLine);
+  const [submittedCount, setSubmittedCount] = useState(0);
 
   // Monitora conexão
   useEffect(() => {
@@ -103,9 +106,31 @@ export default function ResearcherPanel({ userData }) {
   const handleSelectSurvey = (survey) => {
     setSelected(survey);
     setAnswers({});
+    setSubmittedCount(0);
     setStep('questions');
     captureGPS();
   };
+
+  const liveTracking = useSurveyLiveTracking({
+    enabled: Boolean(selected && step !== 'select'),
+    survey: selected,
+    surveyId: selected?.id,
+    interviewer: null,
+    researcherName: userData?.name || 'Pesquisador',
+    researcherUid: auth.currentUser?.uid || null,
+    city: userData?.cityName || userData?.cityId || '',
+    cityId: userData?.cityId || '',
+    cityName: userData?.cityName || userData?.cityId || '',
+    collectionSource: 'researcher_panel',
+    currentStep: step,
+    location: gpsPos,
+    gpsAccuracy: null,
+    totalCollected: submittedCount,
+    onLocationUpdate: (nextLocation) => {
+      setGpsPos(nextLocation);
+      setGpsStatus('ok');
+    },
+  });
 
   const handleAnswer = (qId, value) => setAnswers(a => ({ ...a, [qId]:value }));
 
@@ -120,16 +145,30 @@ export default function ResearcherPanel({ userData }) {
       if (!loc) {
         try { loc = await getGPS(); } catch {}
       }
-      await addDoc(collection(db,'survey_responses'), {
-        surveyId:       selected.id,
-        surveyTitle:    selected.title,
-        researcherUid:  auth.currentUser?.uid,
-        researcherName: userData?.name || 'Pesquisador',
-        city:           userData?.cityId || '',
-        location:       loc || null,
-        answers,
+      const responseRef = await addDoc(collection(db,'survey_responses'), {
+        ...buildSurveyResponsePayload({
+          survey: selected,
+          answers,
+          location: loc || null,
+          researcherName: userData?.name || 'Pesquisador',
+          researcherUid: auth.currentUser?.uid,
+          city: userData?.cityName || userData?.cityId || '',
+          cityId: userData?.cityId || '',
+          cityName: userData?.cityName || userData?.cityId || '',
+          phone: null,
+          interviewerId: null,
+          collectionSource: 'researcher_panel',
+          number: null,
+        }),
         timestamp: serverTimestamp(),
       });
+      const nextCount = submittedCount + 1;
+      setSubmittedCount(nextCount);
+      void liveTracking.markResponseCollected({
+        responseId: responseRef.id,
+        responseNumber: null,
+        totalCollected: nextCount,
+      }).catch(() => {});
       setStep('done');
     } catch(e) { setError('Erro ao enviar: ' + e.message); }
     setSending(false);

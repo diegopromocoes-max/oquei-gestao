@@ -1,101 +1,104 @@
-// ============================================================
-//  AuditoriaPesquisas.jsx — Auditoria de Entrevistas
-//  Status: pendente | aceita | recusada
-//  Ações: aceitar, recusar, excluir permanentemente
-// ============================================================
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { AlertCircle, CheckCircle, Clock, Download, Eye, FileUp, Filter, MapPin, Search, ShieldCheck, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, writeBatch, query, where, getDocs } from 'firebase/firestore';
-import {
-  Search, Filter, Download, MapPin, ChevronUp, ChevronDown,
-  X, Eye, Hash, CheckCircle, AlertCircle, Trash2, ThumbsUp, ThumbsDown, Clock,
-} from 'lucide-react';
-import { Card, Btn, Badge, colors } from '../../components/ui';
+import { Card, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
+import {
+  buildBackupImportSignature,
+  buildImportedResponseDoc,
+  parseSurveyBackupFileContent,
+} from '../lib/surveyBackups';
 
-const STATUS_CONFIG = {
-  pendente:  { label: 'Pendente',  color: colors.warning, icon: Clock,      bg: `${colors.warning}15`  },
-  aceita:    { label: 'Aceita',    color: colors.success, icon: CheckCircle, bg: `${colors.success}15` },
-  recusada:  { label: 'Recusada',  color: colors.danger,  icon: AlertCircle, bg: `${colors.danger}15`  },
+const STATUS = {
+  pendente: { label: 'Pendente', color: colors.warning, icon: Clock, bg: `${colors.warning}15` },
+  aceita: { label: 'Aceita', color: colors.success, icon: CheckCircle, bg: `${colors.success}15` },
+  recusada: { label: 'Recusada', color: colors.danger, icon: AlertCircle, bg: `${colors.danger}15` },
 };
 
-// ── Modal de respostas ────────────────────────────────────────
-function ModalRespostas({ r, survey, onClose, onAceitar, onRecusar, onExcluir }) {
-  const questions = survey?.questions || [];
-  const st = STATUS_CONFIG[r.auditStatus || 'pendente'];
+const TRUST = ['alta', 'media', 'baixa'];
+const FLAGS = ['gps_ausente', 'telefone_ausente', 'cidade_ausente', 'padrao_suspeito', 'entrevista_incompleta'];
 
-  const renderVal = (q, val) => {
-    if (val === undefined || val === null || val === '') return <span style={{ color:'var(--text-muted)', fontStyle:'italic' }}>—</span>;
-    if (q.type === 'nps') { const n=Number(val); const c=n<=3?colors.danger:n<=6?colors.warning:n<=8?colors.primary:colors.success; return <span style={{ fontWeight:'900', fontSize:'18px', color:c }}>{val}/10</span>; }
-    if (q.type === 'boolean') return <span style={{ fontWeight:'800', color: val==='Sim'?colors.success:colors.danger }}>{val}</span>;
-    if (Array.isArray(val)) return <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>{val.map((v,i)=><span key={i} style={{ background:`${colors.primary}15`, borderRadius:'5px', padding:'2px 8px', fontSize:'12px', fontWeight:'700', color:colors.primary }}>{v}</span>)}</div>;
-    return <span>{String(val)}</span>;
+const prettyFlag = (flag) => flag.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
+function BadgeStatus({ status }) {
+  const cfg = STATUS[status || 'pendente'];
+  const Icon = cfg.icon;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: cfg.bg, color: cfg.color, borderRadius: '6px', padding: '3px 8px', fontSize: '11px', fontWeight: '800' }}>
+      <Icon size={11} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function DecisionModal({ data, userData, onClose }) {
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [trust, setTrust] = useState(data.decision === 'aceita' ? 'media' : 'baixa');
+  const [flags, setFlags] = useState(() => {
+    const selected = [];
+    if (!data.response.location?.lat) selected.push('gps_ausente');
+    if (!data.response.telefone) selected.push('telefone_ausente');
+    if (!data.response.city) selected.push('cidade_ausente');
+    return selected;
+  });
+  const accent = data.decision === 'aceita' ? colors.success : colors.danger;
+
+  const toggleFlag = (flag) => {
+    setFlags((current) => current.includes(flag) ? current.filter((item) => item !== flag) : [...current, flag]);
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}
-      onClick={e => e.target===e.currentTarget && onClose()}>
-      <div style={{ background:'var(--bg-card)', borderRadius:'18px', width:'100%', maxWidth:'580px', maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
-
-        {/* Header */}
-        <div style={{ padding:'20px 24px 14px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div>
-              <div style={{ fontWeight:'900', fontSize:'16px', color:'var(--text-main)' }}>{r.researcherName || 'Pesquisador'}</div>
-              <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:'3px', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                {r.numero && <span style={{ background:`${colors.primary}15`, padding:'1px 7px', borderRadius:'5px', color:colors.primary, fontWeight:'800' }}>#{r.numero}</span>}
-                <span>{r.surveyTitle}</span>
-                {r.city && <span>📍 {r.city}</span>}
-                {r.timestamp?.toDate && <span>🗓 {r.timestamp.toDate().toLocaleString('pt-BR')}</span>}
-              </div>
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <span style={{ background: st.bg, color: st.color, borderRadius:'8px', padding:'4px 10px', fontSize:'11px', fontWeight:'900' }}>{st.label}</span>
-              <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', display:'flex' }}><X size={20}/></button>
-            </div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.8)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <div style={{ width: '100%', maxWidth: '560px', background: 'var(--bg-card)', borderRadius: '18px', border: '1px solid var(--border)' }}>
+        <div style={{ padding: '18px 22px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>{data.decision === 'aceita' ? 'Aceitar entrevista' : 'Recusar entrevista'}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{data.response.researcherName || 'Pesquisador'} · {data.response.surveyTitle || 'Pesquisa'}</div>
           </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
-        {/* Respostas */}
-        <div style={{ overflowY:'auto', padding:'14px 24px', display:'flex', flexDirection:'column', gap:'10px', flex:1 }}>
-          {questions.length === 0
-            ? <div style={{ textAlign:'center', padding:'20px', color:'var(--text-muted)', fontSize:'13px' }}>Perguntas não disponíveis.</div>
-            : questions.map((q, i) => (
-              <div key={q.id} style={{ background:'var(--bg-app)', border:'1px solid var(--border)', borderRadius:'10px', padding:'11px 13px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'900', color:'var(--text-muted)', textTransform:'uppercase', marginBottom:'4px' }}>P{i+1} · {q.label}</div>
-                <div style={{ fontSize:'14px' }}>{renderVal(q, r.answers?.[q.id])}</div>
-              </div>
-            ))
-          }
-          {r.location?.lat && (
-            <div style={{ background:`${colors.success}10`, border:`1px solid ${colors.success}30`, borderRadius:'10px', padding:'9px 13px', fontSize:'12px', color:'var(--text-muted)', display:'flex', alignItems:'center', gap:'6px' }}>
-              <MapPin size={13} color={colors.success}/> GPS: {r.location.lat.toFixed(6)}, {r.location.lng.toFixed(6)}
-            </div>
-          )}
-          {!r.location?.lat && (
-            <div style={{ background:`${colors.warning}10`, border:`1px solid ${colors.warning}30`, borderRadius:'10px', padding:'9px 13px', fontSize:'12px', color:colors.warning, display:'flex', alignItems:'center', gap:'6px', fontWeight:'700' }}>
-              <MapPin size={13}/> Sem localização GPS registrada
-            </div>
-          )}
+        <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <textarea style={{ width: '100%', minHeight: '92px', resize: 'vertical', padding: '11px 13px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', fontFamily: 'inherit', outline: 'none' }} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo da decisao *" />
+          <textarea style={{ width: '100%', minHeight: '72px', resize: 'vertical', padding: '11px 13px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-app)', color: 'var(--text-main)', fontFamily: 'inherit', outline: 'none' }} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota adicional" />
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {TRUST.map((item) => (
+              <button key={item} onClick={() => setTrust(item)} style={{ padding: '7px 12px', borderRadius: '999px', border: 'none', cursor: 'pointer', fontWeight: '800', fontSize: '11px', background: trust === item ? `${accent}15` : 'var(--bg-app)', color: trust === item ? accent : 'var(--text-muted)', outline: `1px solid ${trust === item ? accent : 'var(--border)'}` }}>
+                {item.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {FLAGS.map((flag) => {
+              const selected = flags.includes(flag);
+              return (
+                <button key={flag} onClick={() => toggleFlag(flag)} style={{ padding: '7px 12px', borderRadius: '999px', border: 'none', cursor: 'pointer', fontWeight: '800', fontSize: '11px', background: selected ? `${colors.warning}16` : 'var(--bg-app)', color: selected ? colors.warning : 'var(--text-muted)', outline: `1px solid ${selected ? colors.warning : 'var(--border)'}` }}>
+                  {selected ? '✓ ' : ''}{prettyFlag(flag)}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Auditor: <strong style={{ color: 'var(--text-main)' }}>{userData?.name || userData?.nome || 'Nao identificado'}</strong></div>
         </div>
 
-        {/* Ações */}
-        <div style={{ padding:'14px 24px 20px', borderTop:'1px solid var(--border)', display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-          {r.auditStatus !== 'aceita' && (
-            <button onClick={() => { onAceitar(r.id); onClose(); }}
-              style={{ flex:1, padding:'11px', borderRadius:'10px', border:'none', background:`${colors.success}20`, color:colors.success, fontWeight:'900', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', outline:`1px solid ${colors.success}40` }}>
-              <ThumbsUp size={15}/> Aceitar
-            </button>
-          )}
-          {r.auditStatus !== 'recusada' && (
-            <button onClick={() => { onRecusar(r.id); onClose(); }}
-              style={{ flex:1, padding:'11px', borderRadius:'10px', border:'none', background:`${colors.warning}15`, color:colors.warning, fontWeight:'900', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', outline:`1px solid ${colors.warning}40` }}>
-              <ThumbsDown size={15}/> Recusar
-            </button>
-          )}
-          <button onClick={() => { if (window.confirm('Excluir permanentemente esta entrevista?')) { onExcluir(r.id); onClose(); } }}
-            style={{ padding:'11px 16px', borderRadius:'10px', border:`1px solid ${colors.danger}30`, background:`${colors.danger}10`, color:colors.danger, fontWeight:'900', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px' }}>
-            <Trash2 size={14}/> Excluir
+        <div style={{ padding: '14px 22px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button onClick={onClose} style={{ padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontWeight: '800', cursor: 'pointer' }}>Cancelar</button>
+          <button
+            onClick={() => {
+              if (!reason.trim()) {
+                window.showToast?.('Informe o motivo da decisao.', 'error');
+                return;
+              }
+              data.onConfirm({ reason: reason.trim(), note: note.trim(), trust, flags });
+            }}
+            style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${accent}40`, background: `${accent}15`, color: accent, fontWeight: '900', cursor: 'pointer' }}
+          >
+            Confirmar
           </button>
         </div>
       </div>
@@ -103,283 +106,353 @@ function ModalRespostas({ r, survey, onClose, onAceitar, onRecusar, onExcluir })
   );
 }
 
-// ── Componente principal ──────────────────────────────────────
-export default function AuditoriaPesquisas({ userData }) {
-  const [surveys,   setSurveys]   = useState([]);
-  const [responses, setResponses] = useState([]);
-  const [loading,   setLoading]   = useState(true);
+function DetailsModal({ response, survey, onClose, onAudit, onDelete }) {
+  const questions = survey?.questions || [];
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.8)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <div style={{ width: '100%', maxWidth: '760px', maxHeight: '90vh', overflow: 'hidden', background: 'var(--bg-card)', borderRadius: '18px', border: '1px solid var(--border)' }}>
+        <div style={{ padding: '18px 22px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>{response.researcherName || 'Pesquisador'}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {response.numero && <span>#{response.numero}</span>}
+              <span>{response.surveyTitle || 'Pesquisa'}</span>
+              {response.city && <span>📍 {response.city}</span>}
+              {response.timestamp?.toDate && <span>{response.timestamp.toDate().toLocaleString('pt-BR')}</span>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BadgeStatus status={response.auditStatus} />
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+          </div>
+        </div>
 
-  const [busca,      setBusca]      = useState('');
-  const [selSurvey,  setSelSurvey]  = useState('all');
-  const [selCity,    setSelCity]    = useState('all');
-  const [selPesq,    setSelPesq]    = useState('all');
-  const [selStatus,  setSelStatus]  = useState('all');
-  const [sortField,  setSortField]  = useState('timestamp');
-  const [sortDir,    setSortDir]    = useState('desc');
-  const [modalResp,  setModalResp]  = useState(null);
+        <div style={{ maxHeight: 'calc(90vh - 158px)', overflowY: 'auto', padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+            <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--bg-app)', border: '1px solid var(--border)' }}><div style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Origem</div><div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>{response.collectionSource || '—'}</div></div>
+            <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--bg-app)', border: '1px solid var(--border)' }}><div style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Confianca</div><div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>{response.auditTrustLevel || 'Nao auditado'}</div></div>
+            <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--bg-app)', border: '1px solid var(--border)' }}><div style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Telefone</div><div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>{response.telefone || 'Nao informado'}</div></div>
+            <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--bg-app)', border: '1px solid var(--border)' }}><div style={{ fontSize: '10px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Versao</div><div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>{response.surveyVersion || '—'}</div></div>
+          </div>
+
+          {(response.auditReason || response.auditNote || response.auditFlags?.length) && (
+            <div style={{ padding: '12px 14px', borderRadius: '12px', background: `${colors.info}08`, border: `1px solid ${colors.info}22` }}>
+              {response.auditReason && <div style={{ fontSize: '13px', color: 'var(--text-main)', marginBottom: '6px' }}><strong>Motivo:</strong> {response.auditReason}</div>}
+              {response.auditNote && <div style={{ fontSize: '13px', color: 'var(--text-main)', marginBottom: '6px' }}><strong>Nota:</strong> {response.auditNote}</div>}
+              {response.auditFlags?.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {response.auditFlags.map((flag) => (
+                    <span key={flag} style={{ fontSize: '11px', fontWeight: '800', color: colors.warning, background: `${colors.warning}15`, padding: '4px 8px', borderRadius: '999px' }}>{prettyFlag(flag)}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {questions.map((question, index) => {
+            const value = response.answers?.[question.id];
+            const display = Array.isArray(value) ? value.join(', ') : value || '—';
+            return (
+              <div key={question.id || index} style={{ padding: '12px 14px', borderRadius: '12px', background: 'var(--bg-app)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '5px' }}>P{index + 1} · {question.label}</div>
+                <div style={{ fontSize: '14px', color: 'var(--text-main)' }}>{display}</div>
+              </div>
+            );
+          })}
+
+          <div style={{ padding: '12px 14px', borderRadius: '12px', background: response.location?.lat ? `${colors.success}08` : `${colors.warning}08`, border: `1px solid ${response.location?.lat ? `${colors.success}22` : `${colors.warning}22`}` }}>
+            {response.location?.lat ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-main)' }}>
+                <MapPin size={13} color={colors.success} />
+                GPS: {response.location.lat.toFixed(6)}, {response.location.lng.toFixed(6)}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: colors.warning, fontWeight: '700' }}>
+                <MapPin size={13} />
+                Sem localizacao GPS registrada
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ padding: '14px 22px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {response.auditStatus !== 'aceita' && <button onClick={() => onAudit(response, 'aceita')} style={{ flex: 1, padding: '11px', borderRadius: '10px', border: `1px solid ${colors.success}40`, background: `${colors.success}15`, color: colors.success, fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><ThumbsUp size={15} />Aceitar</button>}
+          {response.auditStatus !== 'recusada' && <button onClick={() => onAudit(response, 'recusada')} style={{ flex: 1, padding: '11px', borderRadius: '10px', border: `1px solid ${colors.warning}40`, background: `${colors.warning}15`, color: colors.warning, fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><ThumbsDown size={15} />Recusar</button>}
+          <button onClick={() => onDelete(response.id)} style={{ padding: '11px 16px', borderRadius: '10px', border: `1px solid ${colors.danger}30`, background: `${colors.danger}10`, color: colors.danger, fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={14} />Excluir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AuditoriaPesquisas({ userData }) {
+  const [surveys, setSurveys] = useState([]);
+  const [responses, setResponses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedSurvey, setSelectedSurvey] = useState('all');
+  const [selectedCity, setSelectedCity] = useState('all');
+  const [selectedResearcher, setSelectedResearcher] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [detailsModal, setDetailsModal] = useState(null);
+  const [decisionState, setDecisionState] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef(null);
 
   useEffect(() => {
-    const unsubS = onSnapshot(collection(db, 'surveys'), snap => setSurveys(snap.docs.map(d=>({id:d.id,...d.data()}))), ()=>{});
-    const unsubR = onSnapshot(collection(db, 'survey_responses'), snap => {
-      setResponses(snap.docs.map(d=>({id:d.id,...d.data()})));
+    const unsubSurvey = onSnapshot(collection(db, 'surveys'), (snapshot) => setSurveys(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))));
+    const unsubResponses = onSnapshot(collection(db, 'survey_responses'), (snapshot) => {
+      setResponses(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
       setLoading(false);
-    }, ()=>setLoading(false));
-    return () => { unsubS(); unsubR(); };
+    }, () => setLoading(false));
+    return () => { unsubSurvey(); unsubResponses(); };
   }, []);
 
-  // Ações de auditoria
-  const handleAceitar = async (id) => {
-    try { await updateDoc(doc(db, 'survey_responses', id), { auditStatus: 'aceita' }); }
-    catch (e) { window.showToast?.(e.message, 'error'); }
-  };
-  const handleRecusar = async (id) => {
-    try { await updateDoc(doc(db, 'survey_responses', id), { auditStatus: 'recusada' }); }
-    catch (e) { window.showToast?.(e.message, 'error'); }
-  };
-  const handleExcluir = async (id) => {
-    try { await deleteDoc(doc(db, 'survey_responses', id)); }
-    catch (e) { window.showToast?.(e.message, 'error'); }
-  };
+  const surveyMap = useMemo(() => Object.fromEntries(surveys.map((survey) => [survey.id, survey])), [surveys]);
+  const cityOptions = useMemo(() => [...new Set(responses.map((response) => response.city).filter(Boolean))].sort(), [responses]);
+  const researcherOptions = useMemo(() => [...new Set(responses.map((response) => response.researcherName).filter(Boolean))].sort(), [responses]);
+  const surveyOptions = useMemo(() => [...new Set(responses.map((response) => response.surveyId))].map((surveyId) => surveys.find((survey) => survey.id === surveyId)).filter(Boolean), [responses, surveys]);
 
-  const surveyMap = useMemo(() => Object.fromEntries(surveys.map(s=>[s.id,s])), [surveys]);
-  const cities    = useMemo(() => [...new Set(responses.map(r=>r.city).filter(Boolean))].sort(), [responses]);
-  const pesquisa  = useMemo(() => [...new Set(responses.map(r=>r.researcherName).filter(Boolean))].sort(), [responses]);
-  const surveysComResp = useMemo(() => [...new Set(responses.map(r=>r.surveyId))].map(id=>surveys.find(s=>s.id===id)).filter(Boolean), [responses, surveys]);
+  const filteredResponses = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return [...responses]
+      .filter((response) => selectedSurvey === 'all' || response.surveyId === selectedSurvey)
+      .filter((response) => selectedCity === 'all' || response.city === selectedCity)
+      .filter((response) => selectedResearcher === 'all' || response.researcherName === selectedResearcher)
+      .filter((response) => selectedStatus === 'all' || (response.auditStatus || 'pendente') === selectedStatus)
+      .filter((response) => {
+        if (!query) return true;
+        return [response.researcherName, response.surveyTitle, response.city, response.numero, response.telefone]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+  }, [responses, search, selectedSurvey, selectedCity, selectedResearcher, selectedStatus]);
 
-  const lista = useMemo(() => {
-    let list = [...responses];
-    if (selSurvey !== 'all') list = list.filter(r => r.surveyId === selSurvey);
-    if (selCity   !== 'all') list = list.filter(r => r.city === selCity);
-    if (selPesq   !== 'all') list = list.filter(r => r.researcherName === selPesq);
-    if (selStatus !== 'all') list = list.filter(r => (r.auditStatus || 'pendente') === selStatus);
-    if (busca.trim()) {
-      const q = busca.toLowerCase();
-      list = list.filter(r =>
-        (r.researcherName||'').toLowerCase().includes(q) ||
-        (r.surveyTitle||'').toLowerCase().includes(q) ||
-        (r.city||'').toLowerCase().includes(q) ||
-        (r.numero||'').toLowerCase().includes(q)
-      );
-    }
-    list.sort((a,b) => {
-      let va, vb;
-      if (sortField==='timestamp') { va=a.timestamp?.seconds||0; vb=b.timestamp?.seconds||0; }
-      else if (sortField==='name') { va=a.researcherName||''; vb=b.researcherName||''; }
-      else if (sortField==='survey') { va=a.surveyTitle||''; vb=b.surveyTitle||''; }
-      else if (sortField==='city') { va=a.city||''; vb=b.city||''; }
-      else if (sortField==='status') { va=a.auditStatus||'pendente'; vb=b.auditStatus||'pendente'; }
-      else { va=a[sortField]||''; vb=b[sortField]||''; }
-      if (va<vb) return sortDir==='asc'?-1:1;
-      if (va>vb) return sortDir==='asc'?1:-1;
-      return 0;
-    });
-    return list;
-  }, [responses, selSurvey, selCity, selPesq, selStatus, busca, sortField, sortDir]);
-
-  const toggleSort = (field) => {
-    if (sortField===field) setSortDir(d=>d==='asc'?'desc':'asc');
-    else { setSortField(field); setSortDir('desc'); }
-  };
-
-  // Contadores de status
   const counts = useMemo(() => ({
-    total:    responses.length,
-    pendente: responses.filter(r=>(r.auditStatus||'pendente')==='pendente').length,
-    aceita:   responses.filter(r=>r.auditStatus==='aceita').length,
-    recusada: responses.filter(r=>r.auditStatus==='recusada').length,
+    total: responses.length,
+    pendente: responses.filter((response) => (response.auditStatus || 'pendente') === 'pendente').length,
+    aceita: responses.filter((response) => response.auditStatus === 'aceita').length,
+    recusada: responses.filter((response) => response.auditStatus === 'recusada').length,
   }), [responses]);
 
+  const existingBackupIds = useMemo(
+    () => new Set(responses.map((response) => response.backupId).filter(Boolean)),
+    [responses],
+  );
+
+  const existingImportSignatures = useMemo(
+    () => new Set(responses.map((response) => buildBackupImportSignature(response)).filter(Boolean)),
+    [responses],
+  );
+
   const exportCSV = () => {
-    const allSurveyQs = surveys.flatMap(s=>(s.questions||[]).map(q=>({surveyId:s.id,q})));
-    const headers = ['#','Nº','Status','Pesquisador','Telefone','Pesquisa','Cidade','GPS','Data',...allSurveyQs.map(({q})=>q.label)];
-    const rows = lista.map((r,i) => {
-      const qs = allSurveyQs.map(({surveyId,q}) => {
-        if (r.surveyId!==surveyId) return '';
-        const v=r.answers?.[q.id]; return Array.isArray(v)?v.join(' | '):(v||'');
-      });
-      return [i+1,r.numero||'',r.auditStatus||'pendente',r.researcherName||'',r.telefone||'',r.surveyTitle||'',r.city||'',
-        r.location?.lat?`${r.location.lat.toFixed(5)},${r.location.lng.toFixed(5)}`:'',
-        r.timestamp?.toDate?.()?.toLocaleString('pt-BR')||'',...qs];
+    const headers = ['Numero', 'Status', 'Confianca', 'Pesquisador', 'Pesquisa', 'Cidade', 'Telefone', 'Origem', 'Motivo'];
+    const rows = filteredResponses.map((response) => [
+      response.numero || '',
+      response.auditStatus || 'pendente',
+      response.auditTrustLevel || '',
+      response.researcherName || '',
+      response.surveyTitle || '',
+      response.city || '',
+      response.telefone || '',
+      response.collectionSource || '',
+      response.auditReason || '',
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'auditoria-oquei-insights.csv';
+    link.click();
+  };
+
+  const handleImportBackupClick = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportBackupFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const content = await file.text();
+      const records = parseSurveyBackupFileContent(content);
+
+      if (!records.length) {
+        window.showToast?.('Nenhum questionario valido foi encontrado no arquivo.', 'warning');
+        return;
+      }
+
+      const seenBackupIds = new Set(existingBackupIds);
+      const seenSignatures = new Set(existingImportSignatures);
+      let imported = 0;
+      let skipped = 0;
+
+      for (const record of records) {
+        const payload = buildImportedResponseDoc(record, { fileName: file.name, userData });
+        const backupId = payload.backupId || record.backupId || null;
+        const signature = buildBackupImportSignature(payload);
+
+        if ((backupId && seenBackupIds.has(backupId)) || (signature && seenSignatures.has(signature))) {
+          skipped += 1;
+          continue;
+        }
+
+        await addDoc(collection(db, 'survey_responses'), {
+          ...payload,
+          timestamp: serverTimestamp(),
+          importedAt: serverTimestamp(),
+        });
+
+        if (backupId) seenBackupIds.add(backupId);
+        if (signature) seenSignatures.add(signature);
+        imported += 1;
+      }
+
+      if (!imported) {
+        window.showToast?.(`Importacao concluida sem novos registros. ${skipped} backup(s) ja existiam.`, 'info');
+        return;
+      }
+
+      window.showToast?.(`Importacao concluida: ${imported} registro(s) novo(s) e ${skipped} ignorado(s).`, 'success');
+    } catch (error) {
+      window.showToast?.(`Erro ao importar backup: ${error.message}`, 'error');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const openDecision = (response, decision) => {
+    setDecisionState({
+      response,
+      decision,
+      onConfirm: async ({ reason, note, trust, flags }) => {
+        await updateDoc(doc(db, 'survey_responses', response.id), {
+          auditStatus: decision,
+          auditReason: reason,
+          auditNote: note,
+          auditTrustLevel: trust,
+          auditFlags: flags,
+          auditedAt: serverTimestamp(),
+          auditedByUid: userData?.uid || null,
+          auditedByName: userData?.name || userData?.nome || 'Auditoria',
+        });
+        setDecisionState(null);
+        window.showToast?.('Auditoria registrada.', 'success');
+      },
     });
-    const csv=[headers,...rows].map(row=>row.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='auditoria.csv';a.click();
   };
 
-  const SortIcon = ({field}) => sortField!==field?<ChevronUp size={11} style={{opacity:0.2}}/>:sortDir==='asc'?<ChevronUp size={11}/>:<ChevronDown size={11}/>;
-  const inp = { padding:'7px 11px', borderRadius:'8px', border:'1px solid var(--border)', outline:'none', fontSize:'12px', color:'var(--text-main)', background:'var(--bg-app)', fontFamily:'inherit', cursor:'pointer' };
-  const thS = { padding:'10px 12px', textAlign:'left', fontSize:'11px', fontWeight:'900', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', userSelect:'none', whiteSpace:'nowrap', background:'var(--bg-panel)', borderBottom:'1px solid var(--border)', cursor:'pointer' };
-
-  const StatusBadge = ({ status }) => {
-    const s = STATUS_CONFIG[status || 'pendente'];
-    const Icon = s.icon;
-    return (
-      <span style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:s.bg, color:s.color, borderRadius:'6px', padding:'3px 8px', fontSize:'11px', fontWeight:'800' }}>
-        <Icon size={11}/> {s.label}
-      </span>
-    );
+  const handleDelete = async (id) => {
+    if (!window.confirm('Excluir permanentemente esta entrevista?')) return;
+    try {
+      await deleteDoc(doc(db, 'survey_responses', id));
+      if (detailsModal?.id === id) setDetailsModal(null);
+      window.showToast?.('Entrevista excluida.', 'success');
+    } catch (error) {
+      window.showToast?.(error.message, 'error');
+    }
   };
+
+  const inputStyle = { padding: '7px 11px', borderRadius: '8px', border: '1px solid var(--border)', outline: 'none', fontSize: '12px', color: 'var(--text-main)', background: 'var(--bg-app)', fontFamily: 'inherit' };
 
   return (
     <div style={{ ...global.container }}>
-      {/* Cabeçalho */}
-      <div style={{ background:'linear-gradient(135deg, var(--bg-card), var(--bg-panel))', border:'1px solid var(--border)', borderRadius:'20px', padding:'24px 32px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'16px', boxShadow:'var(--shadow-sm)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-          <div style={{ width:'50px', height:'50px', borderRadius:'14px', background:`linear-gradient(135deg, ${colors.purple}, ${colors.primary})`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 6px 18px ${colors.purple}44` }}>
-            <Hash size={24} color="#fff"/>
-          </div>
+      <div style={{ background: 'linear-gradient(135deg, var(--bg-card), var(--bg-panel))', border: '1px solid var(--border)', borderRadius: '20px', padding: '24px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: `linear-gradient(135deg, ${colors.purple}, ${colors.primary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 18px ${colors.purple}44` }}><ShieldCheck size={24} color="#fff" /></div>
           <div>
-            <div style={{ fontSize:'21px', fontWeight:'900', color:'var(--text-main)' }}>Auditoria de Entrevistas</div>
-            <div style={{ fontSize:'13px', color:'var(--text-muted)', marginTop:'2px' }}>{loading?'Carregando...':`${counts.total} total · ${counts.aceita} aceitas · ${counts.pendente} pendentes · ${counts.recusada} recusadas`}</div>
+            <div style={{ fontSize: '21px', fontWeight: '900', color: 'var(--text-main)' }}>Auditoria de Entrevistas</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{loading ? 'Carregando...' : `${counts.total} total · ${counts.aceita} aceitas · ${counts.pendente} pendentes · ${counts.recusada} recusadas`}</div>
           </div>
         </div>
-        <Btn variant="secondary" size="sm" onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
-          <Download size={13}/> Exportar CSV
-        </Btn>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportBackupFile} style={{ display: 'none' }} />
+          <button onClick={handleImportBackupClick} disabled={importing} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${colors.primary}35`, background: `${colors.primary}10`, color: colors.primary, fontWeight: '800', cursor: importing ? 'wait' : 'pointer', opacity: importing ? 0.7 : 1 }}><FileUp size={13} />{importing ? 'Importando...' : 'Importar Backup'}</button>
+          <button onClick={exportCSV} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-main)', fontWeight: '800', cursor: 'pointer' }}><Download size={13} />Exportar CSV</button>
+        </div>
       </div>
 
-      {/* KPIs de status */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px,1fr))', gap:'12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
         {[
-          { key:'all',      label:'Total',     value:counts.total,    color:colors.primary },
-          { key:'pendente', label:'Pendentes', value:counts.pendente, color:colors.warning },
-          { key:'aceita',   label:'Aceitas',   value:counts.aceita,   color:colors.success },
-          { key:'recusada', label:'Recusadas', value:counts.recusada, color:colors.danger  },
-        ].map(k => (
-          <div key={k.key} onClick={() => setSelStatus(k.key === selStatus ? 'all' : k.key)}
-            style={{ background:'var(--bg-card)', border:`1px solid ${selStatus===k.key ? k.color : 'var(--border)'}`, borderLeft:`4px solid ${k.color}`, borderRadius:'12px', padding:'14px 16px', cursor:'pointer', boxShadow: selStatus===k.key ? `0 0 0 2px ${k.color}30` : 'var(--shadow-sm)', transition:'all 0.15s' }}>
-            <div style={{ fontSize:'11px', fontWeight:'900', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em' }}>{k.label}</div>
-            <div style={{ fontSize:'26px', fontWeight:'900', color:k.color, lineHeight:1.1, marginTop:'4px' }}>{loading?'...':k.value}</div>
+          { key: 'all', label: 'Total', value: counts.total, color: colors.primary },
+          { key: 'pendente', label: 'Pendentes', value: counts.pendente, color: colors.warning },
+          { key: 'aceita', label: 'Aceitas', value: counts.aceita, color: colors.success },
+          { key: 'recusada', label: 'Recusadas', value: counts.recusada, color: colors.danger },
+        ].map((item) => (
+          <div key={item.key} onClick={() => setSelectedStatus(item.key === 'all' ? 'all' : selectedStatus === item.key ? 'all' : item.key)} style={{ background: 'var(--bg-card)', border: `1px solid ${selectedStatus === item.key ? item.color : 'var(--border)'}`, borderLeft: `4px solid ${item.color}`, borderRadius: '12px', padding: '14px 16px', cursor: 'pointer', boxShadow: selectedStatus === item.key ? `0 0 0 2px ${item.color}24` : 'var(--shadow-sm)' }}>
+            <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.label}</div>
+            <div style={{ fontSize: '26px', fontWeight: '900', color: item.color, marginTop: '4px' }}>{loading ? '...' : item.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Filtros */}
       <Card>
-        <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-          <Filter size={14} color="var(--text-muted)"/>
-          <div style={{ display:'flex', alignItems:'center', gap:'6px', background:'var(--bg-app)', border:'1px solid var(--border)', borderRadius:'8px', padding:'0 10px', flex:'1', minWidth:'160px' }}>
-            <Search size={12} color="var(--text-muted)"/>
-            <input style={{ flex:1, background:'transparent', border:'none', outline:'none', fontSize:'12px', color:'var(--text-main)', padding:'7px 0', fontFamily:'inherit' }}
-              placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)}/>
-            {busca && <button onClick={()=>setBusca('')} style={{ background:'none', border:'none', cursor:'pointer', display:'flex', padding:0 }}><X size={11} color="var(--text-muted)"/></button>}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Filter size={14} color="var(--text-muted)" />
+          <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
+            <Search size={13} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input style={{ ...inputStyle, width: '100%', paddingLeft: '32px' }} placeholder="Buscar por pesquisador, numero, cidade..." value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
-          <select style={inp} value={selSurvey} onChange={e=>setSelSurvey(e.target.value)}>
+          <select style={inputStyle} value={selectedSurvey} onChange={(event) => setSelectedSurvey(event.target.value)}>
             <option value="all">Todas as pesquisas</option>
-            {surveysComResp.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+            {surveyOptions.map((survey) => <option key={survey.id} value={survey.id}>{survey.title}</option>)}
           </select>
-          <select style={inp} value={selCity} onChange={e=>setSelCity(e.target.value)}>
+          <select style={inputStyle} value={selectedCity} onChange={(event) => setSelectedCity(event.target.value)}>
             <option value="all">Todas as cidades</option>
-            {cities.map(c=><option key={c} value={c}>{c}</option>)}
+            {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
           </select>
-          <select style={inp} value={selPesq} onChange={e=>setSelPesq(e.target.value)}>
+          <select style={inputStyle} value={selectedResearcher} onChange={(event) => setSelectedResearcher(event.target.value)}>
             <option value="all">Todos os pesquisadores</option>
-            {pesquisa.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <select style={inp} value={selStatus} onChange={e=>setSelStatus(e.target.value)}>
-            <option value="all">Todos os status</option>
-            <option value="pendente">Pendente</option>
-            <option value="aceita">Aceita</option>
-            <option value="recusada">Recusada</option>
+            {researcherOptions.map((researcher) => <option key={researcher} value={researcher}>{researcher}</option>)}
           </select>
         </div>
       </Card>
 
-      {/* Tabela */}
       <Card>
-        {loading ? (
-          <div style={{ textAlign:'center', padding:'60px', color:'var(--text-muted)' }}>Carregando...</div>
-        ) : lista.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'60px', color:'var(--text-muted)' }}>
-            <AlertCircle size={36} style={{ opacity:0.2, marginBottom:'12px' }}/>
-            <div style={{ fontWeight:'800' }}>Nenhuma entrevista encontrada</div>
-          </div>
+        {filteredResponses.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Nenhuma entrevista encontrada.</div>
         ) : (
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {[{f:'numero',label:'Nº'},{f:'status',label:'Status'},{f:'name',label:'Pesquisador'},{f:'survey',label:'Pesquisa'},{f:'city',label:'Cidade'},{f:'timestamp',label:'Data'}].map(col=>(
-                    <th key={col.f} style={thS} onClick={()=>toggleSort(col.f)}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>{col.label}<SortIcon field={col.f}/></div>
-                    </th>
+                  {['Nº', 'Status', 'Pesquisador', 'Pesquisa', 'Cidade', 'Origem', 'Confianca', 'Data', 'Acoes'].map((header) => (
+                    <th key={header} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)', whiteSpace: 'nowrap' }}>{header}</th>
                   ))}
-                  <th style={{ ...thS, cursor:'default' }}>GPS</th>
-                  <th style={{ ...thS, cursor:'default', minWidth:'180px' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => {
-                  const auditSt = r.auditStatus || 'pendente';
-                  return (
-                    <tr key={r.id} style={{ borderBottom:'1px solid var(--border)', opacity: auditSt==='recusada' ? 0.6 : 1 }}
-                      onMouseEnter={e=>e.currentTarget.style.background='var(--bg-app)'}
-                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <td style={{ padding:'9px 12px', fontWeight:'800', color:colors.primary }}>
-                        {r.numero?<span style={{ background:`${colors.primary}15`, padding:'2px 7px', borderRadius:'5px' }}>{r.numero}</span>:'—'}
-                      </td>
-                      <td style={{ padding:'9px 12px' }}><StatusBadge status={auditSt}/></td>
-                      <td style={{ padding:'9px 12px' }}>
-                        <div style={{ fontWeight:'800', color:'var(--text-main)' }}>{r.researcherName||'—'}</div>
-                        {r.telefone && <div style={{ fontSize:'10px', color:'var(--text-muted)' }}>{r.telefone}</div>}
-                      </td>
-                      <td style={{ padding:'9px 12px', color:'var(--text-muted)', maxWidth:'160px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.surveyTitle||r.surveyId}</td>
-                      <td style={{ padding:'9px 12px', color:'var(--text-muted)' }}>{r.city||'—'}</td>
-                      <td style={{ padding:'9px 12px', color:'var(--text-muted)', whiteSpace:'nowrap' }}>{r.timestamp?.toDate?r.timestamp.toDate().toLocaleString('pt-BR'):'—'}</td>
-                      <td style={{ padding:'9px 12px', textAlign:'center' }}>
-                        {r.location?.lat
-                          ? <CheckCircle size={14} color={colors.success} title={`${r.location.lat.toFixed(4)}, ${r.location.lng.toFixed(4)}`}/>
-                          : <span style={{ color:colors.warning, fontSize:'11px', fontWeight:'700' }}>⚠ Sem GPS</span>
-                        }
-                      </td>
-                      <td style={{ padding:'9px 12px' }}>
-                        <div style={{ display:'flex', gap:'5px', flexWrap:'wrap' }}>
-                          <button onClick={()=>setModalResp(r)}
-                            style={{ padding:'4px 9px', borderRadius:'6px', border:`1px solid ${colors.primary}30`, background:`${colors.primary}10`, color:colors.primary, fontSize:'11px', fontWeight:'800', cursor:'pointer', display:'flex', alignItems:'center', gap:'3px' }}>
-                            <Eye size={11}/> Ver
-                          </button>
-                          {auditSt !== 'aceita' && (
-                            <button onClick={()=>handleAceitar(r.id)}
-                              style={{ padding:'4px 9px', borderRadius:'6px', border:`1px solid ${colors.success}30`, background:`${colors.success}10`, color:colors.success, fontSize:'11px', fontWeight:'800', cursor:'pointer', display:'flex', alignItems:'center', gap:'3px' }}>
-                              <ThumbsUp size={11}/>
-                            </button>
-                          )}
-                          {auditSt !== 'recusada' && (
-                            <button onClick={()=>handleRecusar(r.id)}
-                              style={{ padding:'4px 9px', borderRadius:'6px', border:`1px solid ${colors.warning}30`, background:`${colors.warning}10`, color:colors.warning, fontSize:'11px', fontWeight:'800', cursor:'pointer', display:'flex', alignItems:'center', gap:'3px' }}>
-                              <ThumbsDown size={11}/>
-                            </button>
-                          )}
-                          <button onClick={()=>{ if(window.confirm('Excluir permanentemente?')) handleExcluir(r.id); }}
-                            style={{ padding:'4px 9px', borderRadius:'6px', border:`1px solid ${colors.danger}30`, background:`${colors.danger}10`, color:colors.danger, fontSize:'11px', fontWeight:'800', cursor:'pointer', display:'flex', alignItems:'center', gap:'3px' }}>
-                            <Trash2 size={11}/>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredResponses.map((response) => (
+                  <tr key={response.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: '800', color: colors.primary }}>{response.numero || '—'}</td>
+                    <td style={{ padding: '10px 12px' }}><BadgeStatus status={response.auditStatus} /></td>
+                    <td style={{ padding: '10px 12px' }}><div style={{ fontWeight: '800', color: 'var(--text-main)' }}>{response.researcherName || '—'}</div><div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>{response.telefone || 'Sem telefone'}</div></td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-main)' }}>{response.surveyTitle || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.city || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.collectionSource || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.auditTrustLevel || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{response.timestamp?.toDate ? response.timestamp.toDate().toLocaleString('pt-BR') : '—'}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button onClick={() => setDetailsModal(response)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Eye size={14} /></button>
+                        {response.auditStatus !== 'aceita' && <button onClick={() => openDecision(response, 'aceita')} style={{ width: '32px', height: '32px', borderRadius: '8px', border: `1px solid ${colors.success}30`, background: `${colors.success}12`, color: colors.success, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ThumbsUp size={13} /></button>}
+                        {response.auditStatus !== 'recusada' && <button onClick={() => openDecision(response, 'recusada')} style={{ width: '32px', height: '32px', borderRadius: '8px', border: `1px solid ${colors.warning}30`, background: `${colors.warning}12`, color: colors.warning, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ThumbsDown size={13} /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-        {!loading && lista.length > 0 && (
-          <div style={{ padding:'10px 0 0', fontSize:'11px', color:'var(--text-muted)', fontWeight:'700' }}>
-            Mostrando {lista.length} de {responses.length} registros
-          </div>
-        )}
       </Card>
 
-      {modalResp && (
-        <ModalRespostas
-          r={modalResp}
-          survey={surveyMap[modalResp.surveyId]}
-          onClose={()=>setModalResp(null)}
-          onAceitar={handleAceitar}
-          onRecusar={handleRecusar}
-          onExcluir={handleExcluir}
-        />
-      )}
+      {detailsModal && <DetailsModal response={detailsModal} survey={surveyMap[detailsModal.surveyId]} onClose={() => setDetailsModal(null)} onAudit={openDecision} onDelete={handleDelete} />}
+      {decisionState && <DecisionModal data={decisionState} userData={userData} onClose={() => setDecisionState(null)} />}
     </div>
   );
 }

@@ -24,6 +24,16 @@ import {
   ToggleLeft, Type, List, Home, Target, Navigation, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { colors } from '../../components/ui';
+import SurveyBackupCard from '../components/SurveyBackupCard';
+import { useSurveyLiveTracking } from '../hooks/useSurveyLiveTracking';
+import { buildSurveyResponsePayload } from '../lib/responsePayloads';
+import {
+  createSurveyBackupPayload,
+  exportSurveyBackups,
+  getSurveyBackupSummary,
+  saveSurveyBackup,
+  updateSurveyBackupSync,
+} from '../lib/surveyBackups';
 
 // ── GPS ──────────────────────────────────────────────────────
 let gpsBlocked = false;
@@ -302,6 +312,17 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
   const [totalFeitas, setTotalFeitas] = useState(0);
   const [numQuestionario, setNumQuestionario] = useState('');
   const meta = entrevistador?.meta || 0;
+  const backupScope = React.useMemo(() => ({
+    surveyId,
+    surveyTitle: survey?.title || '',
+    interviewerId: entrevistador?.id || null,
+    collectionSource: entrevistador?.id ? 'personal_link' : 'public_link',
+  }), [entrevistador?.id, survey?.title, surveyId]);
+  const [backupSummary, setBackupSummary] = useState(() => getSurveyBackupSummary(backupScope));
+
+  const refreshBackupSummary = React.useCallback(() => {
+    setBackupSummary(getSurveyBackupSummary(backupScope));
+  }, [backupScope]);
 
   // Carrega total apenas na montagem — depois usa incremento local
   useEffect(() => {
@@ -312,6 +333,38 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
       where('entrevistadorId', '==', entrevistador.id)
     )).then(snap => setTotalFeitas(snap.size)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    refreshBackupSummary();
+  }, [refreshBackupSummary]);
+
+  useEffect(() => {
+    const handleStorage = () => refreshBackupSummary();
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [refreshBackupSummary]);
+
+  const liveTracking = useSurveyLiveTracking({
+    enabled: step !== 'inicio',
+    survey,
+    surveyId,
+    interviewer: entrevistador || null,
+    researcherName: nome.trim() || entrevistador?.nome || 'Pesquisador',
+    researcherUid: null,
+    city,
+    cityId: city,
+    cityName: city,
+    collectionSource: entrevistador?.id ? 'personal_link' : 'public_link',
+    currentStep: step,
+    location: gpsPos,
+    gpsAccuracy,
+    totalCollected: totalFeitas,
+    onLocationUpdate: (nextLocation, nextAccuracy) => {
+      setGpsPos(nextLocation);
+      setGpsAccuracy(nextAccuracy);
+      setGpsStatus('ok');
+    },
+  });
 
   const captureGPS = async () => {
     setGpsStatus('loading');
@@ -344,6 +397,19 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleExportBackups = () => {
+    const exported = exportSurveyBackups(backupScope, {
+      baseName: survey?.title || 'pesquisa',
+    });
+
+    if (!exported) {
+      window.showToast?.('Nenhum backup local disponivel para exportacao.', 'info');
+      return;
+    }
+
+    window.showToast?.(`${exported} backup(s) exportado(s).`, 'success');
+  };
+
   const handleAnswer = (qId, val, isMulti = false) => {
     if (!isMulti) {
       setAnswers(a => ({ ...a, [qId]: val }));
@@ -372,26 +438,63 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
   const handleSubmit = async () => {
     if (!allAnswered()) { setError('Responda todas as perguntas antes de enviar.'); return; }
     setSending(true); setError('');
+    let backupRecord = null;
     try {
       let loc = gpsPos;
       if (!loc && !gpsBlocked) loc = await getGPS();
-      await addDoc(collection(db, 'survey_responses'), {
-        surveyId,
-        surveyTitle:      survey.title,
-        researcherName:   nome.trim(),
-        researcherUid:    null,
-        entrevistadorId:  entrevistador?.id || null,
-        telefone:         telefone.trim() || null,
-        city:             city || '',
-        location:         loc || null,
+      const backupCreatedAtClient = new Date().toISOString();
+      const responsePayload = buildSurveyResponsePayload({
+        survey: { id: surveyId, ...survey },
         answers,
-        numero:           numQuestionario,
-        timestamp:        serverTimestamp(),
+        location: loc || null,
+        researcherName: nome.trim(),
+        researcherUid: null,
+        city: city || '',
+        phone: telefone.trim() || null,
+        interviewerId: entrevistador?.id || null,
+        collectionSource: entrevistador?.id ? 'personal_link' : 'public_link',
+        number: numQuestionario,
+        backupCreatedAtClient,
       });
-      setTotalFeitas(t => t + 1);
+      backupRecord = createSurveyBackupPayload({
+        survey: { id: surveyId, ...survey },
+        responsePayload,
+        interviewerId: entrevistador?.id || null,
+      });
+
+      saveSurveyBackup(backupRecord);
+      refreshBackupSummary();
+
+      const responseRef = await addDoc(collection(db, 'survey_responses'), {
+        ...backupRecord.responsePayload,
+        timestamp: serverTimestamp(),
+      });
+
+      updateSurveyBackupSync(backupRecord.backupId, {
+        syncStatus: 'synced',
+        responseId: responseRef.id,
+        syncError: '',
+      });
+      refreshBackupSummary();
+      const nextTotal = totalFeitas + 1;
+      setTotalFeitas(nextTotal);
+      void liveTracking.markResponseCollected({
+        responseId: responseRef.id,
+        responseNumber: numQuestionario,
+        totalCollected: nextTotal,
+      }).catch(() => {});
       setStep('done');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) { setError('Erro ao enviar: ' + e.message); }
+    } catch (e) {
+      if (backupRecord?.backupId) {
+        updateSurveyBackupSync(backupRecord.backupId, {
+          syncStatus: 'error',
+          syncError: e.message,
+        });
+      }
+      refreshBackupSummary();
+      setError(`Erro ao enviar: ${e.message}. O backup local ficou salvo neste aparelho e pode ser exportado.`);
+    }
     setSending(false);
   };
 
@@ -601,6 +704,13 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
             )}
 
             {/* ── Painel GPS ── */}
+            <SurveyBackupCard
+              summary={backupSummary}
+              onExport={handleExportBackups}
+              title="Backups deste link"
+              subtitle="Os questionarios aplicados por este link ficam salvos localmente para exportacao e contingencia."
+            />
+
             {(() => {
               const gpsOk = gpsStatus === 'ok';
               const gpsLoading = gpsStatus === 'loading';
@@ -723,6 +833,13 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
           <div style={S.body}>
             {error && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: `${colors.danger}15`, border: `1px solid ${colors.danger}40`, borderRadius: '12px', padding: '12px 14px', fontSize: '13px', fontWeight: '700', color: colors.danger }}><AlertCircle size={15} /> {error}</div>}
 
+            <SurveyBackupCard
+              summary={backupSummary}
+              onExport={handleExportBackups}
+              title="Backup operacional"
+              subtitle="Se houver falha de integracao, exporte os questionarios salvos neste aparelho e reimporte no painel."
+            />
+
             {survey.questions?.map((q, i) => renderQuestion(q, i))}
 
             <button onClick={handleSubmit} disabled={sending || !allAnswered()} style={S.bigBtn(colors.success, sending || !allAnswered())}>
@@ -751,6 +868,15 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
               )}
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
                 Respostas registradas com sucesso{gpsPos ? ' com localização GPS' : ''}.
+              </div>
+
+              <div style={{ marginTop: '18px', textAlign: 'left' }}>
+                <SurveyBackupCard
+                  summary={backupSummary}
+                  onExport={handleExportBackups}
+                  title="Backup atualizado"
+                  subtitle="Mantenha a exportacao como contingencia caso seja necessario reimportar essas entrevistas."
+                />
               </div>
 
               {/* Progresso atualizado */}

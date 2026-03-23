@@ -160,6 +160,31 @@ service cloud.firestore {
       allow write:  if isAuth() && isGrowthOrAbove();
     }
 
+    // Presenca ao vivo das coletas: leitura autenticada para monitoramento;
+    // escrita publica para suportar pesquisador autenticado e links pessoais/publicos.
+    match /survey_live_sessions/{id} {
+      allow read: if isAuth();
+      allow create, update: if true;
+      allow delete: if isAuth() && isGrowthOrAbove();
+    }
+
+    // Banco estrategico do Oquei Insights
+    match /survey_themes/{id} {
+      allow read, write: if isAuth() && isGrowthOrAbove();
+    }
+
+    match /survey_question_bank/{id} {
+      allow read, write: if isAuth() && isGrowthOrAbove();
+    }
+
+    match /survey_triggers/{id} {
+      allow read, write: if isAuth() && isGrowthOrAbove();
+    }
+
+    match /insights_action_plans/{id} {
+      allow read, write: if isAuth() && isGrowthOrAbove();
+    }
+
     // Designações de responsável financeiro (Desencaixe)
     match /petty_cash_designacoes/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }
 
