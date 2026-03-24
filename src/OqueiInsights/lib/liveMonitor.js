@@ -1,6 +1,6 @@
 import { getInsightEntityDate, resolveInsightCity } from './insightsExecutive';
 
-export const LIVE_SESSION_TTL_MS = 2 * 60 * 1000;
+export const LIVE_SESSION_TTL_MS = 10 * 60 * 1000;
 
 export function isLiveSessionOnline(session, now = Date.now()) {
   const seenAt = getInsightEntityDate(session)?.getTime?.() || 0;

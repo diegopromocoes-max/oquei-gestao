@@ -237,40 +237,42 @@ export default function QuestionEditor({
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        <button
-          onClick={onMoveUp}
-          disabled={index === 0}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: index === 0 ? 'not-allowed' : 'pointer',
-            opacity: index === 0 ? 0.25 : 1,
-          }}
-        >
-          ▲
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={index === total - 1}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: index === total - 1 ? 'not-allowed' : 'pointer',
-            opacity: index === total - 1 ? 0.25 : 1,
-          }}
-        >
-          ▼
-        </button>
-        <button
-          onClick={onRemove}
-          style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer' }}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
+      {onRemove != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <button
+            onClick={onMoveUp}
+            disabled={index === 0}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: index === 0 ? 'not-allowed' : 'pointer',
+              opacity: index === 0 ? 0.25 : 1,
+            }}
+          >
+            ▲
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: index === total - 1 ? 'not-allowed' : 'pointer',
+              opacity: index === total - 1 ? 0.25 : 1,
+            }}
+          >
+            ▼
+          </button>
+          <button
+            onClick={onRemove}
+            style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer' }}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

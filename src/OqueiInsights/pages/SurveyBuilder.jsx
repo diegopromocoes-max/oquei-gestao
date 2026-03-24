@@ -333,6 +333,12 @@ export default function SurveyBuilder() {
     window.showToast?.('Campanha voltou para rascunho.', 'warning');
   };
 
+  const handleReactivate = async (survey) => {
+    if (!window.confirm('Reativar esta campanha? Ela voltará para rascunho para revisão antes de ser ativada novamente.')) return;
+    await persistSurvey(survey.id, { status: 'draft', reactivatedAt: serverTimestamp() });
+    window.showToast?.('Campanha reativada como rascunho. Revise e ative quando estiver pronta.', 'success');
+  };
+
   const handleToggleStatus = async (survey) => {
     if (survey.status === 'draft') {
       await persistSurvey(survey.id, applySurveyContext(survey));
@@ -608,6 +614,7 @@ export default function SurveyBuilder() {
         onDelete={handleDelete}
         onToggleStatus={handleToggleStatus}
         onPause={handlePause}
+        onReactivate={handleReactivate}
         onAddQuestion={handleAddQuestion}
         onAddBankQuestion={handleAddBankQuestion}
         onAddCoreQuestions={handleAddCoreQuestions}

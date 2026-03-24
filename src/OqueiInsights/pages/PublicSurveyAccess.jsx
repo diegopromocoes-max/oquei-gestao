@@ -12,7 +12,7 @@
 //  · Tela inicial: nome, telefone, progresso vs meta (link pessoal)
 //  · Pós-envio: "Próxima Pesquisa" e "Voltar ao Início"
 // ============================================================
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../../firebase';
 import {
   doc, getDoc, addDoc, collection,
@@ -345,7 +345,9 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
   }, [refreshBackupSummary]);
 
   const liveTracking = useSurveyLiveTracking({
-    enabled: step !== 'inicio',
+    // Ativa tracking quando GPS estiver ok OU quando saiu da tela inicial
+    // Isso garante que o pin aparece assim que o GPS é capturado
+    enabled: gpsStatus === 'ok' || step !== 'inicio',
     survey,
     surveyId,
     interviewer: entrevistador || null,
@@ -359,11 +361,11 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
     location: gpsPos,
     gpsAccuracy,
     totalCollected: totalFeitas,
-    onLocationUpdate: (nextLocation, nextAccuracy) => {
+    onLocationUpdate: useCallback((nextLocation, nextAccuracy) => {
       setGpsPos(nextLocation);
       setGpsAccuracy(nextAccuracy);
       setGpsStatus('ok');
-    },
+    }, []),
   });
 
   const captureGPS = async () => {
@@ -500,13 +502,14 @@ function ResponseScreen({ survey, surveyId, entrevistador }) {
 
   const handleProxima = async () => {
     setAnswers({}); setOutroOpen({}); setError('');
-    // Gera número do próximo questionário antes de ir para perguntas
     const eid = entrevistador?.id || 'geral';
     const num = await gerarNumeroQuestionario(surveyId, eid);
     setNumQuestionario(num);
-    setGpsPos(null);
-    setGpsStatus('idle');
-    captureGPS();
+    // Mantém o GPS já capturado — não resetar entre entrevistas
+    // Apenas atualiza silenciosamente em background se já tiver permissão
+    if (gpsStatus === 'ok' || gpsStatus === 'idle') {
+      captureGPS();
+    }
     setStep('questions');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

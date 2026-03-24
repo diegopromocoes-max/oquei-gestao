@@ -86,6 +86,7 @@ export default function SurveyBuilderCampaigns({
   onDelete,
   onToggleStatus,
   onPause,
+  onReactivate,
   onAddQuestion,
   onAddBankQuestion,
   onAddCoreQuestions,
@@ -155,6 +156,7 @@ export default function SurveyBuilderCampaigns({
                   onDelete={onDelete}
                   onToggleStatus={onToggleStatus}
                   onPause={onPause}
+                  onReactivate={onReactivate}
                   onAddQuestion={onAddQuestion}
                   onAddBankQuestion={onAddBankQuestion}
                   onAddCoreQuestions={onAddCoreQuestions}

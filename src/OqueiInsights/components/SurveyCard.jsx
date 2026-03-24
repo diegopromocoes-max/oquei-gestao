@@ -10,6 +10,7 @@ import {
   Lock,
   PauseCircle,
   Plus,
+  RotateCcw,
   Target,
   Trash2,
   Unlock,
@@ -36,6 +37,7 @@ export default function SurveyCard({
   onDelete,
   onToggleStatus,
   onPause,
+  onReactivate,
   onAddQuestion,
   onAddBankQuestion,
   onAddCoreQuestions,
@@ -245,6 +247,30 @@ export default function SurveyCard({
             </button>
           )}
 
+          {isFinished && (
+            <button
+              onClick={() => setExpanded((current) => !current)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                justifyContent: 'center',
+                padding: '7px 13px',
+                borderRadius: '9px',
+                border: '1px solid var(--border)',
+                background: expanded ? 'var(--bg-panel)' : 'transparent',
+                color: 'var(--text-muted)',
+                fontWeight: '800',
+                fontSize: '12px',
+                cursor: 'pointer',
+                flex: 1,
+              }}
+            >
+              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {expanded ? 'Fechar' : 'Ver perguntas'}
+            </button>
+          )}
+
           <button
             onClick={() => onEdit(survey)}
             style={{
@@ -348,6 +374,30 @@ export default function SurveyCard({
             </button>
           )}
 
+          {isFinished && (
+            <button
+              onClick={() => onReactivate(survey)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                justifyContent: 'center',
+                padding: '7px 13px',
+                borderRadius: '9px',
+                border: `1px solid ${colors.warning}40`,
+                background: `${colors.warning}15`,
+                color: colors.warning,
+                fontWeight: '900',
+                fontSize: '12px',
+                cursor: 'pointer',
+                flex: 1,
+              }}
+            >
+              <RotateCcw size={12} />
+              Reativar
+            </button>
+          )}
+
           <button
             onClick={() => onDelete(survey.id)}
             style={{
@@ -371,7 +421,7 @@ export default function SurveyCard({
 
       {isActive && <EntrevistadoresSection survey={survey} />}
 
-      {expanded && !isFinished && (
+      {expanded && (
         <div
           style={{
             borderTop: '1px solid var(--border)',
@@ -387,7 +437,7 @@ export default function SurveyCard({
             <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Perguntas ({survey.questions?.length || 0})
             </div>
-            {missingCoreQuestions.length > 0 && (
+            {!isFinished && missingCoreQuestions.length > 0 && (
               <button
                 onClick={() => onAddCoreQuestions(survey)}
                 style={{
@@ -436,10 +486,10 @@ export default function SurveyCard({
                   index={index}
                   total={survey.questions.length}
                   themeOptions={questionThemeOptions}
-                  onChange={(nextQuestion) => onUpdateQuestion(survey, index, nextQuestion)}
-                  onRemove={() => onRemoveQuestion(survey, index)}
-                  onMoveUp={() => onMoveQuestion(survey, index, index - 1)}
-                  onMoveDown={() => onMoveQuestion(survey, index, index + 1)}
+                  onChange={isFinished ? null : (nextQuestion) => onUpdateQuestion(survey, index, nextQuestion)}
+                  onRemove={isFinished ? null : () => onRemoveQuestion(survey, index)}
+                  onMoveUp={isFinished ? null : () => onMoveQuestion(survey, index, index - 1)}
+                  onMoveDown={isFinished ? null : () => onMoveQuestion(survey, index, index + 1)}
                 />
               ))}
             </div>
@@ -448,7 +498,7 @@ export default function SurveyCard({
           <button
             onClick={() => onAddQuestion(survey)}
             style={{
-              display: 'inline-flex',
+              display: isFinished ? 'none' : 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '6px',
@@ -466,7 +516,7 @@ export default function SurveyCard({
             Adicionar pergunta manual
           </button>
 
-          {availableBankQuestions.length > 0 && (
+          {!isFinished && availableBankQuestions.length > 0 && (
             <div
               style={{
                 display: 'flex',

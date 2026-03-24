@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { AlertCircle, CheckCircle, Clock, Download, Eye, FileUp, Filter, MapPin, Search, ShieldCheck, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { AlertCircle, CheckCheck, CheckCircle, Clock, Download, Eye, FileUp, Filter, MapPin, Navigation, Search, ShieldCheck, ThumbsDown, ThumbsUp, Trash2, X, XCircle } from 'lucide-react';
 import { db } from '../../firebase';
 import { Card, colors } from '../../components/ui';
 import { styles as global } from '../../styles/globalStyles';
@@ -29,6 +29,156 @@ function BadgeStatus({ status }) {
       <Icon size={11} />
       {cfg.label}
     </span>
+  );
+}
+
+
+// ── Modal de inserção manual de GPS ──────────────────────────
+function GpsModal({ response, onClose }) {
+  const [raw, setRaw]   = useState('');
+  const [lat, setLat]   = useState('');
+  const [lng, setLng]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  // Parseia o formato do Google Maps: "-20.123456, -49.123456"
+  // ou dois campos separados
+  const parseRaw = (value) => {
+    const cleaned = value.trim().replace(/\s+/g, ' ');
+    // Formato "lat, lng" ou "lat lng"
+    const match = cleaned.match(/^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/);
+    if (match) {
+      setLat(match[1]);
+      setLng(match[2]);
+      setError('');
+    } else if (cleaned) {
+      setError('Formato inválido. Cole no formato: -20.123456, -49.123456');
+    }
+    setRaw(value);
+  };
+
+  const handleSave = async () => {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (isNaN(latNum) || isNaN(lngNum)) { setError('Coordenadas inválidas.'); return; }
+    if (latNum < -90 || latNum > 90)    { setError('Latitude deve ser entre -90 e 90.'); return; }
+    if (lngNum < -180 || lngNum > 180)  { setError('Longitude deve ser entre -180 e 180.'); return; }
+
+    setSaving(true);
+    try {
+      // Remove flag gps_ausente se existia
+      const currentFlags = response.auditFlags || [];
+      const newFlags = currentFlags.filter((f) => f !== 'gps_ausente');
+
+      await updateDoc(doc(db, 'survey_responses', response.id), {
+        location: { lat: latNum, lng: lngNum },
+        locationSource: 'manual',
+        locationAddedAt: serverTimestamp(),
+        auditFlags: newFlags,
+      });
+      window.showToast?.('Localização salva com sucesso.', 'success');
+      onClose();
+    } catch (e) {
+      setError('Erro ao salvar: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  const inpStyle = {
+    width: '100%', padding: '10px 13px', borderRadius: '10px',
+    border: '1px solid var(--border)', background: 'var(--bg-app)',
+    color: 'var(--text-main)', fontFamily: 'inherit', fontSize: '14px',
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.75)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: '100%', maxWidth: '440px', background: 'var(--bg-card)', borderRadius: '18px', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+
+        {/* Header */}
+        <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: `${colors.info}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Navigation size={17} color={colors.info} />
+            </div>
+            <div>
+              <div style={{ fontWeight: '900', fontSize: '15px', color: 'var(--text-main)' }}>Inserir localização manual</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{response.researcherName} · {response.numero || response.id.slice(-6)}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
+        </div>
+
+        <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {/* Como obter */}
+          <div style={{ background: `${colors.info}10`, border: `1px solid ${colors.info}25`, borderRadius: '10px', padding: '11px 13px', fontSize: '12px', color: colors.info, lineHeight: 1.55 }}>
+            <strong>Como obter no Google Maps:</strong> clique com botão direito no local → selecione as coordenadas → cole aqui.<br/>
+            <span style={{ opacity: 0.75 }}>Formato esperado: <code>-20.123456, -49.123456</code></span>
+          </div>
+
+          {/* Campo de colar coordenada completa */}
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
+              Colar coordenada do Google Maps
+            </label>
+            <input
+              style={inpStyle}
+              placeholder="-20.123456, -49.123456"
+              value={raw}
+              onChange={(e) => parseRaw(e.target.value)}
+            />
+          </div>
+
+          {/* Separador */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}/>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700' }}>ou insira manualmente</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}/>
+          </div>
+
+          {/* Lat + Lng separados */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Latitude</label>
+              <input style={inpStyle} placeholder="-20.123456" value={lat} onChange={(e) => { setLat(e.target.value); setError(''); }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '5px' }}>Longitude</label>
+              <input style={inpStyle} placeholder="-49.123456" value={lng} onChange={(e) => { setLng(e.target.value); setError(''); }} />
+            </div>
+          </div>
+
+          {/* Preview */}
+          {lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng)) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', background: `${colors.success}10`, border: `1px solid ${colors.success}25`, borderRadius: '9px', fontSize: '12px', color: colors.success, fontWeight: '700' }}>
+              <MapPin size={13} />
+              {parseFloat(lat).toFixed(6)}, {parseFloat(lng).toFixed(6)}
+              <a href={`https://maps.google.com/?q=${lat},${lng}`} target="_blank" rel="noreferrer"
+                style={{ marginLeft: 'auto', fontSize: '11px', color: colors.info, textDecoration: 'none', fontWeight: '800' }}>
+                Verificar no Maps ↗
+              </a>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ fontSize: '12px', color: colors.danger, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <AlertCircle size={13} /> {error}
+            </div>
+          )}
+
+          {/* Botão salvar */}
+          <button
+            onClick={handleSave}
+            disabled={saving || !lat || !lng}
+            style={{ padding: '12px', borderRadius: '12px', border: 'none', background: lat && lng ? colors.info : 'var(--border)', color: '#fff', fontWeight: '900', fontSize: '14px', cursor: lat && lng ? 'pointer' : 'not-allowed', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <Navigation size={15} />
+            {saving ? 'Salvando...' : 'Salvar localização'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -196,6 +346,7 @@ export default function AuditoriaPesquisas({ userData }) {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [detailsModal, setDetailsModal] = useState(null);
   const [decisionState, setDecisionState] = useState(null);
+  const [gpsModal, setGpsModal] = useState(null); // response sem GPS
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef(null);
 
@@ -357,6 +508,39 @@ export default function AuditoriaPesquisas({ userData }) {
     }
   };
 
+  const pendingInView = filteredResponses.filter((r) => (r.auditStatus || 'pendente') === 'pendente');
+
+  const handleBulkAudit = async (decision) => {
+    if (!pendingInView.length) return;
+    const label = decision === 'aceita' ? 'aprovar' : 'reprovar';
+    if (!window.confirm(`${label.charAt(0).toUpperCase() + label.slice(1)} todas as ${pendingInView.length} entrevistas pendentes na visualização atual?`)) return;
+
+    try {
+      // Firestore batch aceita até 500 ops — dividimos se necessário
+      const BATCH_SIZE = 499;
+      for (let i = 0; i < pendingInView.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = pendingInView.slice(i, i + BATCH_SIZE);
+        chunk.forEach((r) => {
+          batch.update(doc(db, 'survey_responses', r.id), {
+            auditStatus: decision,
+            auditReason: `Auditoria em lote — ${label} em massa`,
+            auditNote: '',
+            auditTrustLevel: decision === 'aceita' ? 'media' : 'baixa',
+            auditFlags: [],
+            auditedAt: serverTimestamp(),
+            auditedByUid: userData?.uid || null,
+            auditedByName: userData?.name || userData?.nome || 'Auditoria',
+          });
+        });
+        await batch.commit();
+      }
+      window.showToast?.(`${pendingInView.length} entrevista(s) ${decision === 'aceita' ? 'aprovadas' : 'reprovadas'}.`, 'success');
+    } catch (error) {
+      window.showToast?.(`Erro na auditoria em lote: ${error.message}`, 'error');
+    }
+  };
+
   const inputStyle = { padding: '7px 11px', borderRadius: '8px', border: '1px solid var(--border)', outline: 'none', fontSize: '12px', color: 'var(--text-main)', background: 'var(--bg-app)', fontFamily: 'inherit' };
 
   return (
@@ -409,6 +593,28 @@ export default function AuditoriaPesquisas({ userData }) {
             <option value="all">Todos os pesquisadores</option>
             {researcherOptions.map((researcher) => <option key={researcher} value={researcher}>{researcher}</option>)}
           </select>
+
+          {pendingInView.length > 0 && (
+            <>
+              <div style={{ width: '1px', height: '28px', background: 'var(--border)', flexShrink: 0 }} />
+              <button
+                onClick={() => handleBulkAudit('aceita')}
+                title={`Aprovar todas as ${pendingInView.length} pendentes na visão atual`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 13px', borderRadius: '9px', border: `1px solid ${colors.success}40`, background: `${colors.success}14`, color: colors.success, fontWeight: '900', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                <CheckCheck size={13} />
+                Aprovar todas ({pendingInView.length})
+              </button>
+              <button
+                onClick={() => handleBulkAudit('recusada')}
+                title={`Reprovar todas as ${pendingInView.length} pendentes na visão atual`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 13px', borderRadius: '9px', border: `1px solid ${colors.danger}40`, background: `${colors.danger}14`, color: colors.danger, fontWeight: '900', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                <XCircle size={13} />
+                Reprovar todas ({pendingInView.length})
+              </button>
+            </>
+          )}
         </div>
       </Card>
 
@@ -420,7 +626,7 @@ export default function AuditoriaPesquisas({ userData }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Nº', 'Status', 'Pesquisador', 'Pesquisa', 'Cidade', 'Origem', 'Confianca', 'Data', 'Acoes'].map((header) => (
+                  {['Nº', 'Status', 'Pesquisador', 'Pesquisa', 'Cidade', 'GPS', 'Origem', 'Confianca', 'Data', 'Acoes'].map((header) => (
                     <th key={header} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)', whiteSpace: 'nowrap' }}>{header}</th>
                   ))}
                 </tr>
@@ -433,6 +639,22 @@ export default function AuditoriaPesquisas({ userData }) {
                     <td style={{ padding: '10px 12px' }}><div style={{ fontWeight: '800', color: 'var(--text-main)' }}>{response.researcherName || '—'}</div><div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>{response.telefone || 'Sem telefone'}</div></td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-main)' }}>{response.surveyTitle || '—'}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.city || '—'}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {response.location?.lat ? (
+                        <span title={`${response.location.lat.toFixed(5)}, ${response.location.lng.toFixed(5)}${response.locationSource === 'manual' ? ' (manual)' : ''}`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '700',
+                            color: response.locationSource === 'manual' ? colors.warning : colors.success }}>
+                          <MapPin size={12} />
+                          {response.locationSource === 'manual' ? 'Manual' : 'GPS'}
+                        </span>
+                      ) : (
+                        <button onClick={() => setGpsModal(response)}
+                          title="Inserir localização manual"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 9px', borderRadius: '7px', border: `1px solid ${colors.info}30`, background: `${colors.info}10`, color: colors.info, fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>
+                          <Navigation size={11} /> Inserir
+                        </button>
+                      )}
+                    </td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.collectionSource || '—'}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{response.auditTrustLevel || '—'}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{response.timestamp?.toDate ? response.timestamp.toDate().toLocaleString('pt-BR') : '—'}</td>
@@ -453,6 +675,7 @@ export default function AuditoriaPesquisas({ userData }) {
 
       {detailsModal && <DetailsModal response={detailsModal} survey={surveyMap[detailsModal.surveyId]} onClose={() => setDetailsModal(null)} onAudit={openDecision} onDelete={handleDelete} />}
       {decisionState && <DecisionModal data={decisionState} userData={userData} onClose={() => setDecisionState(null)} />}
+      {gpsModal && <GpsModal response={gpsModal} onClose={() => setGpsModal(null)} />}
     </div>
   );
 }

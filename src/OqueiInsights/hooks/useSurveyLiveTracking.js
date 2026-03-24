@@ -23,19 +23,25 @@ export function useSurveyLiveTracking({
   totalCollected = 0,
   onLocationUpdate,
 }) {
+  // sessionId só muda se surveyId/interviewerId/uid mudar — estável durante a coleta
   const sessionId = useMemo(() => {
-    if (!enabled || !(survey?.id || surveyId)) return null;
+    if (!(survey?.id || surveyId)) return null;
     return getSurveyLiveSessionId({
       surveyId: survey?.id || surveyId,
       interviewerId: interviewer?.id || null,
       researcherUid,
       collectionSource,
     });
-  }, [collectionSource, enabled, interviewer?.id, researcherUid, survey?.id, surveyId]);
+  }, [collectionSource, interviewer?.id, researcherUid, survey?.id, surveyId]);
 
+  // Refs — evitam que mudanças de valor causem remount do effect principal
   const latestRef = useRef({});
   const locationKeyRef = useRef('');
+  // onLocationUpdate via ref — arrow function nova a cada render não causa remount
+  const onLocationUpdateRef = useRef(onLocationUpdate);
+  useEffect(() => { onLocationUpdateRef.current = onLocationUpdate; }, [onLocationUpdate]);
 
+  // Atualiza snapshot de dados para uso nos syncs
   useEffect(() => {
     latestRef.current = {
       sessionId,
@@ -71,7 +77,8 @@ export function useSurveyLiveTracking({
   ]);
 
   useEffect(() => {
-    if (!enabled || !sessionId) return undefined;
+    // Monta sempre que sessionId existir — não desmonta ao mudar step
+    if (!sessionId) return undefined;
 
     let closed = false;
     let syncTimer = null;
@@ -103,11 +110,15 @@ export function useSurveyLiveTracking({
       }
     };
 
+    // Sync imediato ao montar
     syncPresence();
+
+    // Heartbeat a cada 30s — mantém sessão online
     syncTimer = window.setInterval(() => {
       void syncPresence();
-    }, 25000);
+    }, 30000);
 
+    // watchPosition — atualiza localização contínua
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition((position) => {
         const nextLocation = {
@@ -117,7 +128,8 @@ export function useSurveyLiveTracking({
         const nextAccuracy = position.coords.accuracy || null;
         const nextKey = `${nextLocation.lat.toFixed(5)}:${nextLocation.lng.toFixed(5)}`;
 
-        onLocationUpdate?.(nextLocation, nextAccuracy);
+        // Usa ref — não recria o effect quando onLocationUpdate mudar
+        onLocationUpdateRef.current?.(nextLocation, nextAccuracy);
 
         if (locationKeyRef.current === nextKey) return;
         locationKeyRef.current = nextKey;
@@ -133,9 +145,39 @@ export function useSurveyLiveTracking({
       closed = true;
       if (syncTimer) window.clearInterval(syncTimer);
       if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+      // Só marca offline quando o componente desmonta de verdade (fechar o app/tab)
+      // Não marca offline ao trocar de step (inicio→questions→done→questions)
       void setSurveyLiveSessionOffline(sessionId);
     };
-  }, [enabled, onLocationUpdate, sessionId]);
+  }, [sessionId]); // <-- apenas sessionId: estável durante toda a coleta
+
+  // Sync imediato quando localização GPS mudar — garante que o pin aparece
+  // na Central Ao Vivo assim que o pesquisador captura o GPS, sem esperar o heartbeat
+  const prevLocationKeyRef = useRef('');
+  useEffect(() => {
+    if (!enabled || !sessionId || !location?.lat || !location?.lng) return;
+    const key = `${Number(location.lat).toFixed(5)}:${Number(location.lng).toFixed(5)}`;
+    if (prevLocationKeyRef.current === key) return;
+    prevLocationKeyRef.current = key;
+    locationKeyRef.current = key;
+    void syncSurveyLiveSession({
+      sessionId,
+      survey: latestRef.current.survey,
+      surveyId: latestRef.current.surveyId,
+      interviewer: latestRef.current.interviewer,
+      researcherName: latestRef.current.researcherName,
+      researcherUid: latestRef.current.researcherUid,
+      city: latestRef.current.city,
+      cityId: latestRef.current.cityId,
+      cityName: latestRef.current.cityName,
+      collectionSource: latestRef.current.collectionSource,
+      currentStep: latestRef.current.currentStep,
+      location,
+      gpsAccuracy,
+      totalCollected: latestRef.current.totalCollected,
+      extra: {},
+    }).catch(() => {});
+  }, [enabled, sessionId, location, gpsAccuracy]);
 
   const markResponseCollected = async ({
     responseId,
