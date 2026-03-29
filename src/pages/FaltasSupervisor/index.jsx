@@ -36,7 +36,7 @@ export default function FaltasSupervisor({ userData }) {
   });
 
   // --- VERIFICAÇÃO DE PERMISSÃO GLOBAL ---
-  const isGlobal = ['coordinator', 'coordenador', 'master', 'growth_team'].includes(userData?.role);
+  const isGlobal = ['coordinator', 'coordenador', 'master', 'diretor', 'growth_team'].includes(userData?.role);
 
   // --- FUNÇÕES DE CARREGAMENTO (FETCH) ---
   const fetchAbsences = async () => {

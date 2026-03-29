@@ -148,6 +148,8 @@ export default function PainelCoordenador({ userData }) {
       activeTab={activeView}
       onTabChange={setActiveView}
       onLogout={() => authSignOut(auth)}
+      appName="Hub Oquei"
+      logoUrl="/favicon.png"
     >
       <Suspense fallback={<ModuleFallback />}>
         {renderContent()}

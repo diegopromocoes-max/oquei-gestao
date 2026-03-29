@@ -14,7 +14,7 @@ import { styles as global, colors } from '../styles/globalStyles';
 export default function RhSupervisor({ userData, onRHAutomation }) {
   const [activeTab, setActiveTab] = useState('nova'); // 'nova', 'aprovacoes', 'historico'
   const [loading, setLoading] = useState(false);
-  const isCoordinator = userData?.role === 'coordinator';
+  const isCoordinator = ['coordinator', 'coordenador', 'master', 'diretor'].includes(userData?.role);
 
   // --- ESTADOS: NOVA SOLICITAÇÃO ---
   const [requestType, setRequestType] = useState('advertencia'); 
@@ -109,10 +109,14 @@ export default function RhSupervisor({ userData, onRHAutomation }) {
 
   const fetchApprovals = async (storeIds) => {
     try {
-      const qAbsences = query(collection(db, "absences"));
+      const qAbsences = isCoordinator
+        ? query(collection(db, "absences"), where("status", "==", "Pendente"))
+        : query(collection(db, "absences"), where("status", "==", "Pendente"), where("storeId", "in", storeIds.slice(0, 10)));
       const snapAbsences = await getDocs(qAbsences);
-      
-      const qRh = query(collection(db, "rh_requests"));
+
+      const qRh = isCoordinator
+        ? query(collection(db, "rh_requests"), where("status", "==", "Pendente"))
+        : query(collection(db, "rh_requests"), where("status", "==", "Pendente"), where("storeId", "in", storeIds.slice(0, 10)));
       const snapRh = await getDocs(qRh);
 
       let combined = [];
