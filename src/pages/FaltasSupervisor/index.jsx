@@ -23,6 +23,7 @@ export default function FaltasSupervisor({ userData }) {
   const [floaters, setFloaters] = useState([]);
   const [absencesList, setAbsencesList] = useState([]);
   const [holidaysList, setHolidaysList] = useState([]); 
+  const [selectedCluster, setSelectedCluster] = useState('all');
 
   // --- ESTADOS DOS FORMULÁRIOS ---
   const [faltaForm, setFaltaForm] = useState({
@@ -36,15 +37,16 @@ export default function FaltasSupervisor({ userData }) {
   });
 
   // --- VERIFICAÇÃO DE PERMISSÃO GLOBAL ---
-  const isGlobal = ['coordinator', 'coordenador', 'master', 'diretor', 'growth_team'].includes(userData?.role);
+  const isGlobal = ['coordinator', 'coordenador', 'coordenadora', 'master', 'diretor', 'growth_team'].includes(userData?.role);
 
   // --- FUNÇÕES DE CARREGAMENTO (FETCH) ---
   const fetchAbsences = async () => {
     try {
       let qAbs = query(collection(db, "absences"));
-      
-      // Se não for acesso global, filtra apenas as ausências do cluster do Supervisor
-      if (!isGlobal && userData?.clusterId) {
+
+      if (isGlobal && selectedCluster !== 'all') {
+        qAbs = query(collection(db, "absences"), where("clusterId", "==", selectedCluster));
+      } else if (!isGlobal && userData?.clusterId) {
         qAbs = query(collection(db, "absences"), where("clusterId", "==", userData.clusterId));
       }
 
@@ -92,7 +94,7 @@ export default function FaltasSupervisor({ userData }) {
       }
     };
     fetchData();
-  }, [userData]);
+  }, [userData, isGlobal, selectedCluster]);
 
   const fetchAttendantsByStore = async (storeId) => {
     const q = query(collection(db, "users"), where("cityId", "==", storeId), where("role", "==", "attendant"));
@@ -147,6 +149,11 @@ export default function FaltasSupervisor({ userData }) {
     setLoading(false);
   };
 
+  const clusterOptions = [...new Set(stores.map((s) => s.clusterId).filter(Boolean))].sort();
+  const visibleStores = isGlobal && selectedCluster !== 'all'
+    ? stores.filter((store) => store.clusterId === selectedCluster)
+    : stores;
+
   const saveFerias = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -181,6 +188,18 @@ export default function FaltasSupervisor({ userData }) {
             </div>
           </div>
         </div>
+
+        {isGlobal && (
+          <div style={{ minWidth: '260px' }}>
+            <label style={{ ...local.headerSubtitle, display: 'block', marginBottom: '8px' }}>Filtro por cluster</label>
+            <select style={global.select} value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}>
+              <option value="all">Todas as regionais</option>
+              {clusterOptions.map((cluster) => (
+                <option key={cluster} value={cluster}>{cluster}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* ── NAVEGAÇÃO POR ABAS (PILLS) ── */}
@@ -204,21 +223,21 @@ export default function FaltasSupervisor({ userData }) {
         
         {activeTab === 'gestao' && (
           <GestaoView 
-            absencesList={absencesList} stores={stores} attendants={attendants} 
+            absencesList={absencesList} stores={visibleStores} attendants={attendants} 
             floaters={floaters} deleteAbsence={deleteAbsence} updateCoverageQuickly={updateCoverageQuickly} 
           />
         )}
         
         {activeTab === 'escala' && (
           <EscalaView 
-            stores={stores} absencesList={absencesList} holidaysList={holidaysList} 
+            stores={visibleStores} absencesList={absencesList} holidaysList={holidaysList} 
             fetchHolidays={fetchHolidays} floaters={floaters}
           />
         )}
 
         {activeTab === 'faltas' && (
           <FormFaltaView 
-            faltaForm={faltaForm} setFaltaForm={setFaltaForm} stores={stores} 
+            faltaForm={faltaForm} setFaltaForm={setFaltaForm} stores={visibleStores} 
             attendants={attendants} floaters={floaters} handleStoreChange={handleStoreChange} 
             saveFalta={saveFalta} loading={loading} fileName={fileName} handleFileChange={handleFileChange} 
           />
@@ -226,7 +245,7 @@ export default function FaltasSupervisor({ userData }) {
 
         {activeTab === 'ferias' && (
           <FormFeriasView 
-            feriasForm={feriasForm} setFeriasForm={setFeriasForm} stores={stores} 
+            feriasForm={feriasForm} setFeriasForm={setFeriasForm} stores={visibleStores} 
             attendants={attendants} floaters={floaters} handleStoreChange={handleStoreChange} 
             saveFerias={saveFerias} loading={loading}
           />
