@@ -18,6 +18,36 @@ service cloud.firestore {
     function isAttendant() { return userData().role == 'atendente' || userData().role == 'attendant'; }
     function isGrowthOrAbove() { return isCoordinator() || isGrowth() || isSupervisor(); }
     function isSuperOrAbove()  { return isCoordinator() || isSupervisor(); }
+    function isOwnLead(data) { return isAuth() && data.attendantId == request.auth.uid; }
+    function isOwnRhRequest(data) { return isAuth() && data.attendantId == request.auth.uid; }
+    function isAttendantMessageTarget(data) {
+      return isAttendant()
+        && (data.to == 'all' || data.to == request.auth.uid || data.to == userData().cityId);
+    }
+    function canReadActionPlan(data) {
+      return isGrowthOrAbove()
+        || (
+          isAttendant()
+          && data.status == 'Em Andamento'
+          && (data.cityId == userData().cityId || data.cityId == '__all__')
+        );
+    }
+    function employeeDoc(employeeId) { return get(/databases/$(database)/documents/users/$(employeeId)).data; }
+    function employeeExists(employeeId) { return exists(/databases/$(database)/documents/users/$(employeeId)); }
+    function canAccessPerformanceEmployee(employeeId) {
+      return isCoordinator()
+        || (
+          isSupervisor()
+          && employeeExists(employeeId)
+          && (
+            employeeDoc(employeeId).supervisorUid == request.auth.uid
+            || (
+              userData().clusterId != null
+              && employeeDoc(employeeId).clusterId == userData().clusterId
+            )
+          )
+        );
+    }
 
     // ── 1. Usuários ──────────────────────────────────────────────────────────
     match /users/{userId} {
@@ -30,8 +60,34 @@ service cloud.firestore {
 
     // ── 2. Leads e CRM ──────────────────────────────────────────────────────
     match /leads/{docId} {
-      allow read:  if isAuth() && (isGrowthOrAbove() || (isAttendant() && resource.data.cityId == userData().cityId));
-      allow write: if isAuth() && (isCoordinator() || isSupervisor() || (isAttendant() && resource.data.attendantId == request.auth.uid));
+      allow read: if isAuth() && (isGrowthOrAbove() || (isAttendant() && isOwnLead(resource.data)));
+      allow create: if isAuth() && (
+        isCoordinator()
+        || isSupervisor()
+        || (isAttendant() && request.resource.data.attendantId == request.auth.uid)
+      );
+      allow update: if isAuth() && (
+        isCoordinator()
+        || isSupervisor()
+        || (
+          isAttendant()
+          && isOwnLead(resource.data)
+          && request.resource.data.attendantId == request.auth.uid
+        )
+      );
+      allow delete: if isAuth() && (
+        isCoordinator()
+        || isSupervisor()
+        || (isAttendant() && isOwnLead(resource.data))
+      );
+    }
+
+    match /crm_ativo_leads/{docId} {
+      allow read, write: if isAuth() && isSuperOrAbove();
+    }
+
+    match /crm_ativo_vendedores/{docId} {
+      allow read, write: if isAuth() && isSuperOrAbove();
     }
 
     // ── 3. Gestão de Metas e Catálogo ────────────────────────────────────────
@@ -65,7 +121,10 @@ service cloud.firestore {
 
     // ── 5. Hub de Crescimento e Ações ────────────────────────────────────────
     match /growth_plans/{id}           { allow read, write: if isAuth() && isGrowthOrAbove(); }
-    match /action_plans/{id}           { allow read, write: if isAuth() && isGrowthOrAbove(); }
+    match /action_plans/{id} {
+      allow read: if isAuth() && canReadActionPlan(resource.data);
+      allow write: if isAuth() && isGrowthOrAbove();
+    }
     match /action_tasks/{id}           { allow read, write: if isAuth() && isGrowthOrAbove(); }
     match /growth_meetings/{id}        { allow read, write: if isAuth() && isGrowthOrAbove(); }
     match /growth_timeline/{id}        { allow read, write: if isAuth() && isGrowthOrAbove(); }
@@ -92,10 +151,19 @@ service cloud.firestore {
     
     // rh_requests: pedidos de RH (Dashboard, PainelCoordenador, PainelSupervisor)
     match /rh_requests/{id} {
-      allow read:   if isAuth() && (isSuperOrAbove() || resource.data.uid == request.auth.uid);
-      allow create: if isAuth();
-      allow update: if isAuth() && isSuperOrAbove();
-      allow delete: if isAuth() && isCoordinator();
+      allow read: if isAuth() && (isSuperOrAbove() || isOwnRhRequest(resource.data));
+      allow create: if isAuth() && (
+        isSuperOrAbove()
+        || request.resource.data.attendantId == request.auth.uid
+      );
+      allow update: if isAuth() && (
+        isSuperOrAbove()
+        || (
+          isOwnRhRequest(resource.data)
+          && request.resource.data.attendantId == request.auth.uid
+        )
+      );
+      allow delete: if isAuth() && (isCoordinator() || isOwnRhRequest(resource.data));
     }
 
     // holidays: feriados (SalaDeGuerra, BancoHoras)
@@ -107,9 +175,122 @@ service cloud.firestore {
       allow write:  if isAuth() && isSuperOrAbove();
     }
 
+    // desempenho individual: configuracoes, snapshots, feedbacks, comportamento e PDI
+    match /performance_score_configs/{id} {
+      allow read: if isAuth() && isSuperOrAbove();
+      allow write: if isAuth() && isCoordinator();
+    }
+
+    match /performance_commercial_inputs/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_behavior_reviews/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_feedbacks/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_development_plans/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_participation_events/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_score_snapshots/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_alerts/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
+    match /performance_timeline/{id} {
+      allow read, delete: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(resource.data.employeeId);
+      allow create: if isAuth() && isSuperOrAbove() && canAccessPerformanceEmployee(request.resource.data.employeeId);
+      allow update: if isAuth() && isSuperOrAbove()
+        && canAccessPerformanceEmployee(resource.data.employeeId)
+        && canAccessPerformanceEmployee(request.resource.data.employeeId);
+    }
+
     // petty_cash / petty_cash_cycles: caixa local (DesencaixeSupervisor)
-    match /petty_cash/{id}             { allow read, write: if isAuth() && isSuperOrAbove(); }
-    match /petty_cash_cycles/{id}      { allow read, write: if isAuth() && isSuperOrAbove(); }
+    match /petty_cash/{id} {
+      allow read: if isAuth() && (
+        isSuperOrAbove()
+        || (isAttendant() && resource.data.attendantId == request.auth.uid)
+      );
+      allow create: if isAuth() && (
+        isSuperOrAbove()
+        || (
+          isAttendant()
+          && request.resource.data.attendantId == request.auth.uid
+          && request.resource.data.status == 'open'
+        )
+      );
+      allow update: if isAuth() && (
+        isSuperOrAbove()
+        || (
+          isAttendant()
+          && resource.data.attendantId == request.auth.uid
+          && request.resource.data.attendantId == request.auth.uid
+          && resource.data.status == 'open'
+        )
+      );
+      allow delete: if isAuth() && (
+        isSuperOrAbove()
+        || (
+          isAttendant()
+          && resource.data.attendantId == request.auth.uid
+          && resource.data.status == 'open'
+        )
+      );
+    }
+    match /petty_cash_cycles/{id} {
+      allow read: if isAuth() && (
+        isSuperOrAbove()
+        || (isAttendant() && resource.data.attendantId == request.auth.uid)
+      );
+      allow create: if isAuth() && (
+        isSuperOrAbove()
+        || (
+          isAttendant()
+          && request.resource.data.attendantId == request.auth.uid
+        )
+      );
+      allow update, delete: if isAuth() && isSuperOrAbove();
+    }
 
     // Padrão wildcard para subcoleções de absences, rh_requests e cash_register
     match /{path=**}/cash_register/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }
@@ -117,7 +298,10 @@ service cloud.firestore {
     // ── 9. Conteúdo e Comunicação ─────────────────────────────────────────────
     match /comunicados/{id}            { allow read: if isAuth(); allow write: if isAuth() && isSuperOrAbove(); }
     match /colinhas/{id}               { allow read: if isAuth(); allow write: if isAuth() && (isAttendant() || isSuperOrAbove()); }
-    match /messages/{id}               { allow read, write: if isAuth() && isGrowthOrAbove(); }
+    match /messages/{id} {
+      allow read: if isAuth() && (isGrowthOrAbove() || isAttendantMessageTarget(resource.data));
+      allow write: if isAuth() && isGrowthOrAbove();
+    }
     match /agenda/{id}                 { allow read: if isAuth(); allow write: if isAuth() && isSuperOrAbove(); }
 
     // artifacts: conteúdos digitais (ColinhasAtendente)
@@ -133,6 +317,23 @@ service cloud.firestore {
 
     // settings: configuracoes do sistema (ManualSupervisor, ManualAtendente)
     match /settings/{id}               { allow read: if isAuth(); allow write: if isAuth() && isCoordinator(); }
+
+    // user_preferences: preferencias pessoais do painel por usuario
+    match /user_preferences/{uid} {
+      allow read, write: if isAuth() && request.auth.uid == uid;
+    }
+
+    // navigation_roles: modulos habilitados por cargo
+    match /navigation_roles/{roleKey} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isSuperOrAbove();
+    }
+
+    // navigation_user_overrides: excecoes individuais de modulos por usuario
+    match /navigation_user_overrides/{uid} {
+      allow read: if isAuth() && (request.auth.uid == uid || isSuperOrAbove());
+      allow write: if isAuth() && isSuperOrAbove();
+    }
 
     // ── 11. Patrocínios e Campanhas ───────────────────────────────────────────
     match /patrocinios/{id}            { allow read, write: if isAuth() && isSuperOrAbove(); }
@@ -186,7 +387,18 @@ service cloud.firestore {
     }
 
     // Designações de responsável financeiro (Desencaixe)
-    match /petty_cash_designacoes/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }
+    match /petty_cash_designacoes/{id} {
+      allow read: if isAuth() && (
+        isSuperOrAbove()
+        || (isAttendant() && resource.data.userId == request.auth.uid)
+      );
+      allow write: if isAuth() && isSuperOrAbove();
+    }
+
+    match /absence_calendar_public/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
 
     // Bancos de fornecedores e categorias do Desencaixe
     match /petty_cash_fornecedores/{id} { allow read, write: if isAuth() && isSuperOrAbove(); }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { auth } from '../firebase';
 import { 
   Calendar, Phone, X, Search, PlusCircle, 
   Quote, CheckCircle2, UserCircle, MapPin,
@@ -16,6 +15,7 @@ export default function MeusLeads({ userData, onNavigate }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState(null);
   const [draggedLead, setDraggedLead] = useState(null);
+  const [permissionError, setPermissionError] = useState('');
 
   const quotes = [
     { text: "O sucesso é a soma de pequenos esforços repetidos dia após dia.", author: "Robert Collier" },
@@ -39,22 +39,21 @@ export default function MeusLeads({ userData, onNavigate }) {
 
   // ─── INIT: BUSCA DE DADOS VIA SERVICE ───
   useEffect(() => {
-    let unsubscribeSnapshot;
-    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-      if (user) {
-        unsubscribeSnapshot = listenMyLeads(user.uid, (leadsData) => {
-          setMyLeads(leadsData);
-        });
-      } else {
-        setMyLeads([]);
-      }
-    });
+    if (!userData?.uid) {
+      setMyLeads([]);
+      return undefined;
+    }
 
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeSnapshot) unsubscribeSnapshot();
-    };
-  }, []);
+    return listenMyLeads(
+      userData.uid,
+      (leadsData) => {
+        setMyLeads(leadsData);
+        setPermissionError('');
+      },
+      selectedMonth,
+      () => setPermissionError('Nao foi possivel carregar o seu funil neste momento.')
+    );
+  }, [selectedMonth, userData?.uid]);
 
   // ─── AÇÕES KANBAN E CRUD ───
   const handleDeleteLead = async (leadId, customerName) => {
@@ -119,13 +118,12 @@ export default function MeusLeads({ userData, onNavigate }) {
   // ─── FILTROS ───
   const filteredLeads = useMemo(() => {
     return myLeads.filter(l => {
-      const matchesMonth = l.date && l.date.startsWith(selectedMonth);
       const safeName = l.customerName || '';
       const safePhone = l.customerPhone || '';
       const matchesSearch = safeName.toLowerCase().includes(searchTerm.toLowerCase()) || safePhone.includes(searchTerm);
-      return matchesMonth && matchesSearch;
+      return matchesSearch;
     }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)); 
-  }, [myLeads, selectedMonth, searchTerm]);
+  }, [myLeads, searchTerm]);
 
   const closedLeads = filteredLeads.filter(l => ['Contratado', 'Instalado'].includes(l.status)).length;
 
@@ -185,6 +183,12 @@ export default function MeusLeads({ userData, onNavigate }) {
       </div>
 
       {/* ─── KANBAN BOARD ─── */}
+      {permissionError && (
+        <div style={{ padding: '14px 16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: colors.danger, fontWeight: 700 }}>
+          {permissionError}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '20px', minHeight: '600px' }} className="hide-scrollbar">
         {KANBAN_COLUMNS.map(col => {
           // Garante que leads antigos ou sem status apareçam no primeiro card "Em Negociação"

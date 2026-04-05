@@ -12,7 +12,7 @@ export const getCategories = async () => {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 };
 
-export const getProducts = async (onlyActive = false) => {
+export const getProducts = async (onlyActive = true) => {
   let q = collection(db, "products");
   if (onlyActive) {
     q = query(q, where("active", "==", true));

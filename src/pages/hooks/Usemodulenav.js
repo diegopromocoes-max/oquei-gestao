@@ -47,7 +47,7 @@ export function useModuleNav(defaultView = 'dashboard') {
       const base = location.pathname.split('/').slice(0, 2).join('/');
       navigate(`${base}/${defaultView}`, { replace: true });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [defaultView, location.pathname, moduleFromUrl, navigate]);
 
   return [activeView, setActiveView];
 }

@@ -1,10 +1,38 @@
 import { db, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 
+export const LEAD_STATUS_SALE = ['Contratado', 'Instalado'];
+
+export function getMonthKeyFromDate(dateValue) {
+  if (typeof dateValue === 'string' && /^\d{4}-\d{2}/.test(dateValue)) {
+    return dateValue.slice(0, 7);
+  }
+
+  const parsed = new Date(dateValue || Date.now());
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 7) : parsed.toISOString().slice(0, 7);
+}
+
+export function normalizeLeadType(value) {
+  const source = String(value || '').trim().toLowerCase();
+
+  if (source.includes('migra')) {
+    return 'Migração';
+  }
+
+  if (source.includes('sva')) {
+    return 'SVA';
+  }
+
+  return 'Plano Novo';
+}
+
 // 1. Cria um novo Lead
 export const createLead = async (formData, userData, cityDetails, catDetails, prodDetails) => {
+  const leadType = normalizeLeadType(formData.leadType || catDetails?.name || prodDetails?.name);
+
   return addDoc(collection(db, "leads"), {
     date: formData.date,
+    monthKey: getMonthKeyFromDate(formData.date),
     createdAt: serverTimestamp(),
     lastUpdate: serverTimestamp(),
     attendantId: auth.currentUser?.uid,
@@ -16,6 +44,7 @@ export const createLead = async (formData, userData, cityDetails, catDetails, pr
     address: `${formData.logradouro}, ${formData.numero} - ${formData.bairro}`,
     categoryName: catDetails?.name || 'Geral',
     categoryId: formData.categoria,
+    leadType,
     productId: formData.produto,
     productName: prodDetails?.name || 'Produto',
     productPrice: Number(prodDetails?.price || 0),
@@ -28,13 +57,25 @@ export const createLead = async (formData, userData, cityDetails, catDetails, pr
 };
 
 // 2. Escuta os Leads do Atendente (Tempo Real)
-export const listenMyLeads = (uid, callback) => {
-  const q = query(collection(db, "leads"), where("attendantId", "==", uid));
+export const listenMyLeads = (uid, callback, monthKey = '', onError) => {
+  const constraints = [where("attendantId", "==", uid)];
+  if (monthKey) {
+    constraints.push(where("monthKey", "==", monthKey));
+  }
+
+  const q = query(collection(db, "leads"), ...constraints);
   return onSnapshot(q, (snap) => {
-    const leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const leads = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((left, right) => {
+        const leftDate = String(left.date || left.monthKey || '');
+        const rightDate = String(right.date || right.monthKey || '');
+        return rightDate.localeCompare(leftDate);
+      });
     callback(leads);
   }, (error) => {
     console.error("Erro ao buscar leads: ", error);
+    onError?.(error);
     callback([]);
   });
 };

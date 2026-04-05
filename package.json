@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "import:crm-ativo:patrick": "node scripts/import-crm-ativo-patrick.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

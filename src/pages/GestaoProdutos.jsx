@@ -37,7 +37,7 @@ export default function GestaoProdutos() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [cats, prods] = await Promise.all([getCategories(), getProducts()]);
+        const [cats, prods] = await Promise.all([getCategories(), getProducts(false)]);
       
       // Auto-criação de categorias iniciais se o banco estiver vazio
       if (cats.length === 0) {
@@ -129,7 +129,7 @@ export default function GestaoProdutos() {
       await saveProduct(editingId, payload);
       if (window.showToast) window.showToast("Produto salvo no catálogo!", "success");
       closeModal();
-      const refreshedProds = await getProducts();
+      const refreshedProds = await getProducts(false);
       setProdutos(refreshedProds);
     } catch (err) {
       if (window.showToast) window.showToast("Erro ao salvar produto.", "error");
@@ -150,7 +150,7 @@ export default function GestaoProdutos() {
 
       await deleteProduct(id);
       if (window.showToast) window.showToast("Produto excluído com sucesso.");
-      const refreshedProds = await getProducts();
+      const refreshedProds = await getProducts(false);
       setProdutos(refreshedProds);
     } catch (err) {
       if (window.showToast) window.showToast("Erro ao excluir.", "error");
@@ -160,7 +160,7 @@ export default function GestaoProdutos() {
   const handleToggleStatus = async (id, currentStatus) => {
     try {
       await toggleProductStatus(id, currentStatus);
-      const refreshedProds = await getProducts();
+      const refreshedProds = await getProducts(false);
       setProdutos(refreshedProds);
     } catch (err) {
       if (window.showToast) window.showToast("Erro ao alterar status.", "error");

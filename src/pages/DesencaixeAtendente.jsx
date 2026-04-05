@@ -1,436 +1,438 @@
-// ============================================================
-//  DesencaixeAtendente.jsx — Oquei Gestão
-//  Sistema de Desencaixe — Visão Responsável Financeiro (Atendente/Gerente)
-// ============================================================
-
-import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth } from '../firebase';
-import {
-  collection, query, where, getDocs, addDoc, updateDoc,
-  serverTimestamp, deleteDoc, doc, writeBatch
-} from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import {
-  Wallet, TrendingDown, FileText, Trash2, UploadCloud,
-  CheckCircle, AlertTriangle, Download, Eye, Edit3,
-  Receipt, X, History, BarChart3, Archive
+  AlertTriangle,
+  Archive,
+  BarChart3,
+  CheckCircle,
+  Download,
+  Edit3,
+  Eye,
+  FileText,
+  History,
+  Receipt,
+  Trash2,
+  TrendingDown,
+  UploadCloud,
+  X,
 } from 'lucide-react';
 
 import {
-  Page, Card, KpiCard, DataTable, Btn, Badge,
-  Input, Select, Tabs, StatRow, Modal, InfoBox, Empty
+  Page,
+  Card,
+  KpiCard,
+  DataTable,
+  Btn,
+  Badge,
+  Input,
+  Select,
+  Tabs,
+  StatRow,
+  Modal,
+  InfoBox,
 } from '../components/ui';
 import { colors, moeda, data as formatData } from '../globalStyles';
+import {
+  closeCashCycle,
+  getMyCashDesignation,
+  listMyCashCycles,
+  listMyOpenCashExpenses,
+  removeCashExpense,
+  saveCashExpense,
+} from '../services/atendenteCashService';
 
-const CATEGORIAS = [
-  'Luz','Água','Limpeza','Manutenção','Marketing',
-  'Bonificação','Material Técnico','Combustível','Outros'
-];
+const CATEGORIAS = ['Luz', 'Agua', 'Limpeza', 'Manutencao', 'Marketing', 'Bonificacao', 'Material Tecnico', 'Combustivel', 'Outros'];
 
 function nomePadrao(supplier, date, amount) {
-  const s = String(supplier || 'fornecedor').replace(/[^a-zA-Z0-9]/g, '_');
-  const d = String(date || '').replace(/-/g, '');
-  const v = String(amount || '0').replace('.', '-');
-  return `${s}-${d}-${v}`;
+  const safeSupplier = String(supplier || 'fornecedor').replace(/[^a-zA-Z0-9]/g, '_');
+  const safeDate = String(date || '').replace(/-/g, '');
+  const safeAmount = String(amount || '0').replace('.', '-');
+  return `${safeSupplier}-${safeDate}-${safeAmount}`;
+}
+
+function InlineAlert({ children }) {
+  return (
+    <div style={{ background: 'var(--bg-danger-light)', border: '1px solid var(--border-danger)', color: '#b45309', borderRadius: '14px', padding: '14px 16px', marginBottom: '16px', fontSize: '13px' }}>
+      {children}
+    </div>
+  );
 }
 
 export default function DesencaixeAtendente({ userData }) {
-  const [loading, setLoading]         = useState(false);
-  const [activeTab, setActiveTab]     = useState('Lançamentos');
-  const [expenses, setExpenses]       = useState([]);
-  const [cycles, setCycles]           = useState([]);
-  const [designacaoLoja, setDesignacaoLoja] = useState(null); // loja designada ao user
-
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('Lancamentos');
+  const [expenses, setExpenses] = useState([]);
+  const [cycles, setCycles] = useState([]);
+  const [designacaoLoja, setDesignacaoLoja] = useState(null);
+  const [permissionError, setPermissionError] = useState('');
   const [form, setForm] = useState({
-    description: '', amount: '',
+    description: '',
+    amount: '',
     date: new Date().toISOString().split('T')[0],
-    category: '', supplier: '', recibo: '', authorizedBy: ''
+    category: '',
+    supplier: '',
+    recibo: '',
+    authorizedBy: '',
   });
   const [comprovanteBase64, setComprovanteBase64] = useState(null);
-  const [comprovanteNome, setComprovanteNome]     = useState('');
-  const [editingExpense, setEditingExpense]        = useState(null);
-  const [previewUrl, setPreviewUrl]               = useState(null);
-
-  // ── Conferência ───────────────────────────────────────────
+  const [comprovanteNome, setComprovanteNome] = useState('');
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [conferencia, setConferencia] = useState({ systemValue: '', cashValue: '' });
 
-  // ─────────────────────────────────────────────────────────
-  // LOAD
-  // ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!userData?.uid) return;
     loadInitialData();
-  }, [userData]);
+  }, [userData?.uid]);
 
   const loadInitialData = async () => {
-    try {
-      // Busca se este user tem uma designação (foi designado como responsável de alguma loja)
-      const qDesig = query(
-        collection(db, 'petty_cash_designacoes'),
-        where('userId', '==', auth.currentUser.uid)
-      );
-      const snapDesig = await getDocs(qDesig);
-      if (!snapDesig.empty) {
-        setDesignacaoLoja(snapDesig.docs[0].data());
-      }
-    } catch (err) { console.error(err); }
-    await fetchExpenses();
-  };
-
-  const fetchExpenses = async () => {
     setLoading(true);
+    setPermissionError('');
     try {
-      // Notas abertas lançadas por este atendente
-      const qOpen = query(
-        collection(db, 'petty_cash'),
-        where('attendantId', '==', auth.currentUser.uid),
-        where('status', '==', 'open')
-      );
-      const snapOpen = await getDocs(qOpen);
-      const list = snapOpen.docs.map(d => ({ id: d.id, ...d.data() }));
-      list.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setExpenses(list);
-
-      // Ciclos fechados por este atendente
-      const qCycles = query(
-        collection(db, 'petty_cash_cycles'),
-        where('attendantId', '==', auth.currentUser.uid)
-      );
-      const snapCycles = await getDocs(qCycles);
-      setCycles(snapCycles.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
-        const da = a.closedAt?.toDate ? a.closedAt.toDate() : new Date(a.closedAt || 0);
-        const db2 = b.closedAt?.toDate ? b.closedAt.toDate() : new Date(b.closedAt || 0);
-        return db2 - da;
-      }));
-    } catch (err) { console.error(err); }
+      const [designacao, openExpenses, closedCycles] = await Promise.all([
+        getMyCashDesignation(userData?.uid),
+        listMyOpenCashExpenses(userData?.uid),
+        listMyCashCycles(userData?.uid),
+      ]);
+      setDesignacaoLoja(designacao);
+      setExpenses(openExpenses);
+      setCycles(closedCycles);
+    } catch (error) {
+      setPermissionError(error?.code === 'permission-denied' ? 'Sem permissao para operar o caixa da loja.' : 'Nao foi possivel carregar o caixa da loja.');
+      setDesignacaoLoja(null);
+      setExpenses([]);
+      setCycles([]);
+    }
     setLoading(false);
   };
 
-  // ── MÉTRICAS ──────────────────────────────────────────────
-  const totalDespesas   = useMemo(() => expenses.reduce((a, c) => a + parseFloat(c.amount || 0), 0), [expenses]);
-  const totalHistorico  = useMemo(() => cycles.reduce((a, c) => a + (c.totalExpenses || 0), 0), [cycles]);
+  const totalDespesas = useMemo(() => expenses.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0), [expenses]);
+  const totalHistorico = useMemo(() => cycles.reduce((sum, item) => sum + (item.totalExpenses || 0), 0), [cycles]);
   const diffConferencia = useMemo(() => {
     const sistema = parseFloat(conferencia.systemValue) || 0;
-    const fisico  = parseFloat(conferencia.cashValue) || 0;
+    const fisico = parseFloat(conferencia.cashValue) || 0;
     return (fisico + totalDespesas) - sistema;
   }, [conferencia, totalDespesas]);
 
-  // ─────────────────────────────────────────────────────────
-  // LANÇAMENTO
-  // ─────────────────────────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.amount || parseFloat(form.amount) <= 0) return window.alert('Informe um valor válido.');
-    setLoading(true);
-    try {
-      const storeId   = designacaoLoja?.cityId   || userData.cityId   || 'Geral';
-      const storeName = designacaoLoja?.cityName  || userData.cityName || storeId;
+  const resetForm = () => {
+    setEditingExpense(null);
+    setForm({
+      description: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      category: '',
+      supplier: '',
+      recibo: '',
+      authorizedBy: '',
+    });
+    setComprovanteBase64(null);
+    setComprovanteNome('');
+  };
 
-      const payload = {
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!form.amount || parseFloat(form.amount) <= 0) {
+      window.alert('Informe um valor valido.');
+      return;
+    }
+
+    setLoading(true);
+    setPermissionError('');
+    try {
+      const storeId = designacaoLoja?.cityId || userData?.cityId || 'Geral';
+      const storeName = designacaoLoja?.cityName || userData?.cityName || storeId;
+
+      await saveCashExpense(editingExpense?.id, {
         ...form,
         amount: parseFloat(form.amount),
-        storeId, storeName,
-        attendantId: auth.currentUser.uid,
-        attendantName: userData.name,
-        // supervisorId herdado da designação ou campo padrão
+        storeId,
+        storeName,
+        attendantId: userData?.uid,
+        attendantName: userData?.name,
         supervisorId: designacaoLoja?.supervisorId || 'pendente',
         status: 'open',
         comprovante: comprovanteBase64 || null,
         comprovanteNome: comprovanteBase64 ? nomePadrao(form.supplier, form.date, form.amount) : null,
-        updatedAt: serverTimestamp(),
-      };
+      });
 
-      if (editingExpense) {
-        await updateDoc(doc(db, 'petty_cash', editingExpense.id), payload);
-        setEditingExpense(null);
-        window.showToast?.('Lançamento atualizado!');
-      } else {
-        await addDoc(collection(db, 'petty_cash'), { ...payload, createdAt: serverTimestamp() });
-        window.showToast?.('Lançamento registrado!');
-      }
-
-      setForm({ description:'', amount:'', date: new Date().toISOString().split('T')[0],
-        category:'', supplier:'', recibo:'', authorizedBy:'' });
-      setComprovanteBase64(null); setComprovanteNome('');
-      fetchExpenses();
-    } catch (err) { window.alert(err.message); }
+      window.showToast?.(editingExpense ? 'Lancamento atualizado!' : 'Lancamento registrado!', 'success');
+      resetForm();
+      await loadInitialData();
+    } catch (error) {
+      const message = error?.code === 'permission-denied' ? 'Sem permissao para salvar este lancamento.' : 'Nao foi possivel salvar o lancamento.';
+      setPermissionError(message);
+      window.showToast?.(message, 'error');
+    }
     setLoading(false);
   };
 
-  const handleEditExpense = (exp) => {
-    setEditingExpense(exp);
-    setForm({ description: exp.description, amount: exp.amount, date: exp.date,
-      category: exp.category||'', supplier: exp.supplier||'', recibo: exp.recibo||'',
-      authorizedBy: exp.authorizedBy||'' });
-    setComprovanteBase64(exp.comprovante || null);
-    setComprovanteNome(exp.comprovanteNome || '');
-    setActiveTab('Lançamentos');
+  const handleEditExpense = (expense) => {
+    setEditingExpense(expense);
+    setForm({
+      description: expense.description,
+      amount: expense.amount,
+      date: expense.date,
+      category: expense.category || '',
+      supplier: expense.supplier || '',
+      recibo: expense.recibo || '',
+      authorizedBy: expense.authorizedBy || '',
+    });
+    setComprovanteBase64(expense.comprovante || null);
+    setComprovanteNome(expense.comprovanteNome || '');
+    setActiveTab('Lancamentos');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeleteExpense = async (id) => {
-    if (!window.confirm('Excluir este lançamento?')) return;
-    await deleteDoc(doc(db, 'petty_cash', id));
-    fetchExpenses();
-    window.showToast?.('Removido.', 'warning');
+  const handleDeleteExpense = async (expenseId) => {
+    if (!window.confirm('Excluir este lancamento?')) return;
+    try {
+      await removeCashExpense(expenseId);
+      await loadInitialData();
+      window.showToast?.('Removido.', 'warning');
+    } catch (error) {
+      const message = error?.code === 'permission-denied' ? 'Sem permissao para excluir este lancamento.' : 'Nao foi possivel excluir o lancamento.';
+      setPermissionError(message);
+      window.showToast?.(message, 'error');
+    }
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]; if (!file) return;
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => { setComprovanteBase64(reader.result); setComprovanteNome(file.name); };
+    reader.onloadend = () => {
+      setComprovanteBase64(reader.result);
+      setComprovanteNome(file.name);
+    };
     reader.readAsDataURL(file);
   };
 
-  const handleDownloadComprovante = (exp) => {
-    if (!exp.comprovante) return;
+  const handleDownloadComprovante = (expense) => {
+    if (!expense.comprovante) return;
     const link = document.createElement('a');
-    link.href = exp.comprovante;
-    link.download = `${nomePadrao(exp.supplier, exp.date, exp.amount)}.${exp.comprovante.includes('pdf') ? 'pdf' : 'jpg'}`;
+    link.href = expense.comprovante;
+    link.download = `${nomePadrao(expense.supplier, expense.date, expense.amount)}.${expense.comprovante.includes('pdf') ? 'pdf' : 'jpg'}`;
     link.click();
   };
 
-  // ── RECIBO PDF ────────────────────────────────────────────
-  const gerarReciboPDF = (exp) => {
+  const gerarReciboPDF = (expense) => {
     const pdf = new jsPDF();
-    pdf.setFontSize(18); pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
     pdf.text('RECIBO DE PAGAMENTO', 105, 25, { align: 'center' });
-    pdf.setFontSize(11); pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
     pdf.text('Oquei Telecom', 105, 35, { align: 'center' });
     pdf.line(20, 42, 190, 42);
-    pdf.setFontSize(12); pdf.setFont('helvetica', 'bold');
-    pdf.text(`Valor: ${moeda(exp.amount)}`, 20, 55);
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Valor: ${moeda(expense.amount)}`, 20, 55);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Fornecedor: ${exp.supplier || '___________________________'}`, 20, 67);
-    pdf.text(`Descrição: ${exp.description}`, 20, 79);
-    pdf.text(`Categoria: ${exp.category || '—'}`, 20, 91);
-    pdf.text(`Loja: ${exp.storeName || exp.storeId}`, 20, 103);
-    pdf.text(`Data: ${exp.date}`, 20, 115);
-    pdf.text(`Nº Recibo/NF: ${exp.recibo || 'SN'}`, 20, 127);
-    pdf.text(`Autorizado por: ${exp.authorizedBy || '—'}`, 20, 139);
+    pdf.text(`Fornecedor: ${expense.supplier || '___________________________'}`, 20, 67);
+    pdf.text(`Descricao: ${expense.description}`, 20, 79);
+    pdf.text(`Categoria: ${expense.category || '-'}`, 20, 91);
+    pdf.text(`Loja: ${expense.storeName || expense.storeId}`, 20, 103);
+    pdf.text(`Data: ${expense.date}`, 20, 115);
+    pdf.text(`No. Recibo/NF: ${expense.recibo || 'SN'}`, 20, 127);
+    pdf.text(`Autorizado por: ${expense.authorizedBy || '-'}`, 20, 139);
     pdf.text(`Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 20, 151);
     pdf.line(20, 165, 190, 165);
     pdf.text('Assinatura do Fornecedor: _________________________________', 20, 178);
-    pdf.text('Assinatura do Responsável: ________________________________', 20, 192);
-    pdf.setFontSize(9); pdf.setTextColor(150);
-    pdf.text('Documento gerado pelo sistema Oquei Gestão — uso interno', 105, 210, { align: 'center' });
-    pdf.save(`Recibo_${nomePadrao(exp.supplier, exp.date, exp.amount)}.pdf`);
-    window.showToast?.('Recibo gerado!');
+    pdf.text('Assinatura do Responsavel: ________________________________', 20, 192);
+    pdf.setFontSize(9);
+    pdf.setTextColor(150);
+    pdf.text('Documento gerado pelo sistema Oquei Gestao - uso interno', 105, 210, { align: 'center' });
+    pdf.save(`Recibo_${nomePadrao(expense.supplier, expense.date, expense.amount)}.pdf`);
+    window.showToast?.('Recibo gerado!', 'success');
   };
 
-  // ── FECHAMENTO ────────────────────────────────────────────
   const handleGerarRelatorio = () => {
     const pdf = new jsPDF();
-    pdf.setFontSize(16); pdf.setFont('helvetica', 'bold');
-    pdf.text('Relatório de Desencaixe', 14, 18);
-    pdf.setFontSize(10); pdf.setFont('helvetica', 'normal');
-    pdf.text(`Responsável: ${userData.name}`, 14, 27);
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Relatorio de Desencaixe', 14, 18);
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Responsavel: ${userData?.name}`, 14, 27);
     pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 34);
     autoTable(pdf, {
       startY: 42,
-      head: [['Data','Fornecedor','Descrição','Categoria','Valor']],
-      body: expenses.map(e => [formatData(e.date), e.supplier, e.description, e.category||'—', moeda(e.amount)]),
+      head: [['Data', 'Fornecedor', 'Descricao', 'Categoria', 'Valor']],
+      body: expenses.map((item) => [formatData(item.date), item.supplier, item.description, item.category || '-', moeda(item.amount)]),
       headStyles: { fillColor: [5, 150, 105] },
-      foot: [['','','','TOTAL', moeda(totalDespesas)]],
+      foot: [['', '', '', 'TOTAL', moeda(totalDespesas)]],
       footStyles: { fillColor: [5, 150, 105], fontStyle: 'bold' },
     });
     pdf.save(`Relatorio_Desencaixe_${new Date().toISOString().split('T')[0]}.pdf`);
-    window.showToast?.('PDF gerado!');
+    window.showToast?.('PDF gerado!', 'success');
   };
 
   const handleCloseCycle = async () => {
-    if (expenses.length === 0) return window.alert('Nenhuma nota em aberto para fechar.');
-    if (!window.confirm('Encerrar este ciclo e enviá-lo ao histórico?')) return;
+    if (!expenses.length) {
+      window.alert('Nenhuma nota em aberto para fechar.');
+      return;
+    }
+    if (!window.confirm('Encerrar este ciclo e envia-lo ao historico?')) return;
+
     setLoading(true);
     try {
-      const batch = writeBatch(db);
-      const cycleRef = doc(collection(db, 'petty_cash_cycles'));
-      batch.set(cycleRef, {
-        attendantId: auth.currentUser.uid,
-        attendantName: userData.name,
+      await closeCashCycle({
+        uid: userData?.uid,
+        userName: userData?.name,
         supervisorId: designacaoLoja?.supervisorId || 'pendente',
-        closedAt: new Date(),
+        expenses,
         totalExpenses: totalDespesas,
         systemBalance: parseFloat(conferencia.systemValue) || 0,
-        physicalCash:  parseFloat(conferencia.cashValue) || 0,
+        physicalCash: parseFloat(conferencia.cashValue) || 0,
         difference: diffConferencia,
-        itemCount: expenses.length,
-        itemsSnapshot: expenses,
         storeId: expenses[0]?.storeId || 'Geral',
       });
-      expenses.forEach(exp =>
-        batch.update(doc(db, 'petty_cash', exp.id), { status: 'closed', cycleId: cycleRef.id }));
-      await batch.commit();
-      setConferencia({ systemValue:'', cashValue:'' });
-      fetchExpenses(); setActiveTab('Histórico');
-      window.showToast?.('Ciclo encerrado com sucesso!');
-    } catch (err) { window.alert(err.message); }
+
+      setConferencia({ systemValue: '', cashValue: '' });
+      await loadInitialData();
+      setActiveTab('Historico');
+      window.showToast?.('Ciclo encerrado com sucesso!', 'success');
+    } catch (error) {
+      const message = error?.code === 'permission-denied' ? 'Sem permissao para fechar este ciclo.' : 'Nao foi possivel fechar o ciclo.';
+      setPermissionError(message);
+      window.showToast?.(message, 'error');
+    }
     setLoading(false);
   };
 
-  // ── ZIP ───────────────────────────────────────────────────
-  const handleDownloadZIP = async (lista, filename) => {
+  const handleDownloadZIP = async (list, filename) => {
     const zip = new JSZip();
     const folder = zip.folder('Comprovantes');
     const pdf = new jsPDF();
-    pdf.setFontSize(14); pdf.text('Relatório de Desencaixe', 14, 18);
+    pdf.setFontSize(14);
+    pdf.text('Relatorio de Desencaixe', 14, 18);
     autoTable(pdf, {
       startY: 28,
-      head: [['Data','Fornecedor','Descrição','Valor']],
-      body: lista.map(e => [formatData(e.date), e.supplier, e.description, moeda(e.amount)]),
+      head: [['Data', 'Fornecedor', 'Descricao', 'Valor']],
+      body: list.map((item) => [formatData(item.date), item.supplier, item.description, moeda(item.amount)]),
       headStyles: { fillColor: [5, 150, 105] },
     });
     zip.file('Relatorio.pdf', pdf.output('blob'));
-    lista.forEach(exp => {
-      if (exp.comprovante) {
-        const base64 = exp.comprovante.split(',')[1];
-        const ext = exp.comprovante.includes('pdf') ? 'pdf' : 'jpg';
-        folder.file(`${nomePadrao(exp.supplier, exp.date, exp.amount)}.${ext}`, base64, { base64: true });
-      }
+
+    list.forEach((expense) => {
+      if (!expense.comprovante) return;
+      const base64 = expense.comprovante.split(',')[1];
+      const extension = expense.comprovante.includes('pdf') ? 'pdf' : 'jpg';
+      folder.file(`${nomePadrao(expense.supplier, expense.date, expense.amount)}.${extension}`, base64, { base64: true });
     });
+
     const content = await zip.generateAsync({ type: 'blob' });
     saveAs(content, `${filename}.zip`);
-    window.showToast?.('ZIP gerado!');
+    window.showToast?.('ZIP gerado!', 'success');
   };
 
-  // ─────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────
   return (
     <Page title="Caixa da Loja" subtitle={`Gerencie as despesas e comprovantes da unidade ${designacaoLoja?.cityId || userData?.cityId || ''}.`}>
+      {permissionError && <InlineAlert>{permissionError}</InlineAlert>}
 
-      {/* Banner de designação */}
       {designacaoLoja ? (
-        <div style={{
-          background: `${colors.success}10`, border: `1px solid ${colors.success}40`,
-          borderLeft: `4px solid ${colors.success}`, borderRadius: '12px',
-          padding: '13px 18px', display: 'flex', alignItems: 'center', gap: '12px',
-        }}>
+        <div style={{ background: `${colors.success}10`, border: `1px solid ${colors.success}40`, borderLeft: `4px solid ${colors.success}`, borderRadius: '12px', padding: '13px 18px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <CheckCircle size={16} color={colors.success} style={{ flexShrink: 0 }} />
           <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-            Você é o <strong>Responsável Financeiro</strong> designado para a loja <strong>{designacaoLoja.cityId}</strong>.
-            Seus lançamentos serão visíveis ao supervisor.
+            Voce e o <strong>Responsavel Financeiro</strong> designado para a loja <strong>{designacaoLoja.cityId}</strong>.
           </span>
         </div>
       ) : (
         <InfoBox type="warning">
-          <strong>Atenção:</strong> Você ainda não foi designado como responsável financeiro de nenhuma loja.
-          Solicite ao seu supervisor que faça a designação em "Desencaixe › Designações".
+          <strong>Atencao:</strong> Voce ainda nao foi designado como responsavel financeiro de nenhuma loja.
         </InfoBox>
       )}
 
       <InfoBox type="warning">
-        Todo lançamento exige um comprovante válido. Solicite sempre a fatura ou recibo assinado pelo fornecedor.
+        Todo lancamento exige um comprovante valido. Solicite sempre a fatura ou recibo assinado pelo fornecedor.
       </InfoBox>
 
-      <Tabs tabs={['Lançamentos','Conferência','Histórico']} active={activeTab} onChange={setActiveTab} />
+      <Tabs tabs={['Lancamentos', 'Conferencia', 'Historico']} active={activeTab} onChange={setActiveTab} />
 
-      {/* ─── LANÇAMENTOS ─── */}
-      {activeTab === 'Lançamentos' && (
+      {activeTab === 'Lancamentos' && (
         <div className="animated-view">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px', marginBottom:'24px' }}>
-            <KpiCard label="Total no Ciclo" valor={moeda(totalDespesas)} icon={<TrendingDown size={20}/>} accent={colors.danger} />
-            <KpiCard label="Notas Abertas" valor={expenses.length} icon={<FileText size={20}/>} accent={colors.primary} />
-            <KpiCard label="Com Comprovante" valor={expenses.filter(e=>e.comprovante).length} icon={<Receipt size={20}/>} accent={colors.success} />
-            <KpiCard label="Sem Comprovante" valor={expenses.filter(e=>!e.comprovante).length} icon={<AlertTriangle size={20}/>} accent={colors.warning} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '16px', marginBottom: '24px' }}>
+            <KpiCard label="Total no Ciclo" valor={moeda(totalDespesas)} icon={<TrendingDown size={20} />} accent={colors.danger} />
+            <KpiCard label="Notas Abertas" valor={expenses.length} icon={<FileText size={20} />} accent={colors.primary} />
+            <KpiCard label="Com Comprovante" valor={expenses.filter((item) => item.comprovante).length} icon={<Receipt size={20} />} accent={colors.success} />
+            <KpiCard label="Sem Comprovante" valor={expenses.filter((item) => !item.comprovante).length} icon={<AlertTriangle size={20} />} accent={colors.warning} />
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'340px 1fr', gap:'24px', alignItems:'start' }}>
-            {/* Formulário */}
-            <Card title={editingExpense ? '✏️ Editando Lançamento' : 'Adicionar Despesa'} accent={editingExpense ? colors.warning : colors.success}>
-              <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                <Input label="Valor Pago (R$)" type="number" step="0.01" min="0.01"
-                  value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} required />
+          <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '24px', alignItems: 'start' }}>
+            <Card title={editingExpense ? 'Editando Lancamento' : 'Adicionar Despesa'} accent={editingExpense ? colors.warning : colors.success}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <Input label="Valor Pago (R$)" type="number" step="0.01" min="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required />
 
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                  <Input label="Data" type="date" value={form.date}
-                    onChange={e => setForm({...form, date: e.target.value})} required />
-                  <Input label="Nº Recibo/NF" placeholder="5412" value={form.recibo}
-                    onChange={e => setForm({...form, recibo: e.target.value})} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <Input label="Data" type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
+                  <Input label="No. Recibo/NF" placeholder="5412" value={form.recibo} onChange={(event) => setForm({ ...form, recibo: event.target.value })} />
                 </div>
 
-                <Input label="O que foi pago?" placeholder="Ex: Tonner para Impressora"
-                  value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
+                <Input label="O que foi pago?" placeholder="Ex: Toner para impressora" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required />
+                <Input label="Fornecedor / Onde comprou?" placeholder="Nome do local" value={form.supplier} onChange={(event) => setForm({ ...form, supplier: event.target.value })} required />
+                <Input label="Quem autorizou?" placeholder="Nome do gestor" value={form.authorizedBy} onChange={(event) => setForm({ ...form, authorizedBy: event.target.value })} required />
 
-                <Input label="Fornecedor / Onde comprou?" placeholder="Nome do local"
-                  value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value})} required />
+                <Select label="Categoria" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} options={CATEGORIAS.map((item) => ({ value: item, label: item }))} placeholder="Selecione..." />
 
-                <Input label="Quem autorizou?" placeholder="Nome do gestor"
-                  value={form.authorizedBy} onChange={e => setForm({...form, authorizedBy: e.target.value})} required />
-
-                <Select label="Categoria" value={form.category}
-                  onChange={e => setForm({...form, category: e.target.value})}
-                  options={CATEGORIAS.map(c => ({value:c, label:c}))} placeholder="Selecione..." />
-
-                {/* Upload */}
                 <div>
-                  <p style={{ fontSize:'11px', fontWeight:'800', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'6px' }}>Comprovante *</p>
-                  <label style={{
-                    border: `2px dashed ${comprovanteBase64 ? colors.success : 'var(--border)'}`,
-                    padding: '14px', borderRadius: '10px', textAlign: 'center', display: 'block', cursor: 'pointer',
-                    background: comprovanteBase64 ? `${colors.success}08` : 'transparent',
-                  }}>
+                  <p style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Comprovante *</p>
+                  <label style={{ border: `2px dashed ${comprovanteBase64 ? colors.success : 'var(--border)'}`, padding: '14px', borderRadius: '10px', textAlign: 'center', display: 'block', cursor: 'pointer', background: comprovanteBase64 ? `${colors.success}08` : 'transparent' }}>
                     <input type="file" hidden onChange={handleFileUpload} accept="image/*,application/pdf" />
                     <UploadCloud size={20} color={comprovanteBase64 ? colors.success : 'var(--text-muted)'} style={{ margin: '0 auto 6px' }} />
-                    <p style={{ fontSize:'12px', margin:0, fontWeight:'700', color: comprovanteBase64 ? colors.success : 'var(--text-muted)' }}>
-                      {comprovanteBase64 ? `✅ ${comprovanteNome || 'Arquivo Anexado'}` : 'Clique para anexar foto do recibo'}
+                    <p style={{ fontSize: '12px', margin: 0, fontWeight: '700', color: comprovanteBase64 ? colors.success : 'var(--text-muted)' }}>
+                      {comprovanteBase64 ? `Arquivo anexado: ${comprovanteNome || 'Comprovante'}` : 'Clique para anexar foto do recibo'}
                     </p>
                   </label>
                 </div>
 
-                <div style={{ display:'flex', gap:'8px' }}>
-                  <Btn type="submit" loading={loading} style={{ flex:1 }}>
-                    {editingExpense ? 'Salvar Alterações' : 'Registrar Lançamento'}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Btn type="submit" loading={loading} style={{ flex: 1 }}>
+                    {editingExpense ? 'Salvar Alteracoes' : 'Registrar Lancamento'}
                   </Btn>
-                  {editingExpense && (
-                    <Btn variant="secondary" onClick={() => {
-                      setEditingExpense(null);
-                      setForm({ description:'', amount:'', date: new Date().toISOString().split('T')[0], category:'', supplier:'', recibo:'', authorizedBy:'' });
-                      setComprovanteBase64(null); setComprovanteNome('');
-                    }}><X size={14}/></Btn>
-                  )}
+                  {editingExpense && <Btn type="button" variant="secondary" onClick={resetForm}><X size={14} /></Btn>}
                 </div>
               </form>
             </Card>
 
-            {/* Lista de despesas */}
-            <Card title="Meus Lançamentos (Abertos)"
-              actions={
-                <div style={{ display:'flex', gap:'8px' }}>
-                  <Btn variant="secondary" size="sm" onClick={handleGerarRelatorio}><FileText size={14}/> PDF</Btn>
-                  <Btn variant="secondary" size="sm" onClick={() => handleDownloadZIP(expenses, 'Pack_Atual')}><Archive size={14}/> ZIP</Btn>
+            <Card
+              title="Meus Lancamentos (Abertos)"
+              actions={(
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Btn variant="secondary" size="sm" onClick={handleGerarRelatorio}><FileText size={14} /> PDF</Btn>
+                  <Btn variant="secondary" size="sm" onClick={() => handleDownloadZIP(expenses, 'Pack_Atual')}><Archive size={14} /> ZIP</Btn>
                 </div>
-              }
+              )}
             >
-              <DataTable loading={loading} emptyMsg="Nenhuma despesa registrada neste ciclo."
+              <DataTable
+                loading={loading}
+                emptyMsg="Nenhuma despesa registrada neste ciclo."
                 columns={[
-                  { key:'date', label:'Data', render: v => formatData(v) },
-                  { key:'supplier', label:'Fornecedor' },
-                  { key:'description', label:'Descrição', render: v => <span style={{ color:'var(--text-muted)', fontSize:'12px' }}>{v}</span> },
-                  { key:'amount', label:'Valor', render: v => <strong style={{ color:colors.danger }}>-{moeda(v)}</strong> },
-                  { key:'comprovante', label:'Anexo', render: (v, row) =>
-                    v ? <Btn variant="ghost" size="sm" onClick={() => setPreviewUrl(v)}><Eye size={13} color={colors.primary}/></Btn>
-                      : <Badge cor="warning">Pendente</Badge>
+                  { key: 'date', label: 'Data', render: (value) => formatData(value) },
+                  { key: 'supplier', label: 'Fornecedor' },
+                  { key: 'description', label: 'Descricao', render: (value) => <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{value}</span> },
+                  { key: 'amount', label: 'Valor', render: (value) => <strong style={{ color: colors.danger }}>-{moeda(value)}</strong> },
+                  { key: 'comprovante', label: 'Anexo', render: (value) => (value ? <Btn variant="ghost" size="sm" onClick={() => setPreviewUrl(value)}><Eye size={13} color={colors.primary} /></Btn> : <Badge cor="warning">Pendente</Badge>) },
+                  {
+                    key: 'actions',
+                    label: 'Acoes',
+                    render: (_, row) => (
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                        <Btn variant="secondary" size="sm" onClick={() => gerarReciboPDF(row)} title="Gerar Recibo"><Receipt size={13} /></Btn>
+                        {row.comprovante && <Btn variant="secondary" size="sm" onClick={() => handleDownloadComprovante(row)} title="Baixar Comprovante"><Download size={13} /></Btn>}
+                        <Btn variant="secondary" size="sm" onClick={() => handleEditExpense(row)} title="Editar"><Edit3 size={13} color={colors.warning} /></Btn>
+                        <Btn variant="ghost" size="sm" onClick={() => handleDeleteExpense(row.id)} title="Excluir"><Trash2 size={13} color={colors.danger} /></Btn>
+                      </div>
+                    ),
                   },
-                  { key:'actions', label:'Ações', render: (_, row) => (
-                    <div style={{ display:'flex', gap:'4px', justifyContent:'flex-end' }}>
-                      <Btn variant="secondary" size="sm" onClick={() => gerarReciboPDF(row)} title="Gerar Recibo"><Receipt size={13}/></Btn>
-                      {row.comprovante && (
-                        <Btn variant="secondary" size="sm" onClick={() => handleDownloadComprovante(row)} title="Baixar Comprovante"><Download size={13}/></Btn>
-                      )}
-                      <Btn variant="secondary" size="sm" onClick={() => handleEditExpense(row)} title="Editar"><Edit3 size={13} color={colors.warning}/></Btn>
-                      <Btn variant="ghost" size="sm" onClick={() => handleDeleteExpense(row.id)} title="Excluir"><Trash2 size={13} color={colors.danger}/></Btn>
-                    </div>
-                  )},
                 ]}
                 data={expenses}
               />
               {expenses.length > 0 && (
-                <div style={{ display:'flex', justifyContent:'flex-end', padding:'12px 18px 0', borderTop:'1px solid var(--border)', marginTop: 0 }}>
-                  <strong style={{ color:colors.danger, fontSize:'15px' }}>Total: {moeda(totalDespesas)}</strong>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 18px 0', borderTop: '1px solid var(--border)', marginTop: 0 }}>
+                  <strong style={{ color: colors.danger, fontSize: '15px' }}>Total: {moeda(totalDespesas)}</strong>
                 </div>
               )}
             </Card>
@@ -438,62 +440,44 @@ export default function DesencaixeAtendente({ userData }) {
         </div>
       )}
 
-      {/* ─── CONFERÊNCIA ─── */}
-      {activeTab === 'Conferência' && (
-        <div className="animated-view" style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+      {activeTab === 'Conferencia' && (
+        <div className="animated-view" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <InfoBox type="info">
-            Use este painel para conferir se o dinheiro físico bate com os lançamentos.
-            Fórmula: <strong>(Dinheiro Físico + Notas Lançadas) − Saldo Inicial = Diferença</strong>
+            Use este painel para conferir se o dinheiro fisico bate com os lancamentos.
+            Formula: <strong>(Dinheiro Fisico + Notas Lancadas) - Saldo Inicial = Diferenca</strong>
           </InfoBox>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <Card title="Resumo do Caixa" accent={colors.success}>
-              <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-                <div style={{ background:'var(--bg-app)', padding:'16px', borderRadius:'12px' }}>
-                  <StatRow label="(-) Total de Notas Lançadas" value={moeda(totalDespesas)} />
-                  <StatRow label="Saldo Informado no Sistema" value={moeda(parseFloat(conferencia.systemValue)||0)} />
-                  <StatRow label="Dinheiro Físico em Mãos" value={moeda(parseFloat(conferencia.cashValue)||0)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: 'var(--bg-app)', padding: '16px', borderRadius: '12px' }}>
+                  <StatRow label="(-) Total de Notas Lancadas" value={moeda(totalDespesas)} />
+                  <StatRow label="Saldo Informado no Sistema" value={moeda(parseFloat(conferencia.systemValue) || 0)} />
+                  <StatRow label="Dinheiro Fisico em Maos" value={moeda(parseFloat(conferencia.cashValue) || 0)} />
                 </div>
-                <div style={{
-                  textAlign:'center', padding:'36px 20px', borderRadius:'16px',
-                  background: conferencia.systemValue ? (diffConferencia===0 ? `${colors.success}10` : `${colors.danger}08`) : 'var(--bg-panel)',
-                  border: `2px dashed ${conferencia.systemValue ? (diffConferencia===0 ? colors.success : colors.danger) : 'var(--border)'}40`,
-                }}>
-                  <p style={{ fontSize:'11px', fontWeight:'800', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'1px', marginBottom:'8px' }}>
-                    Diferença Final Apurada
-                  </p>
-                  <p style={{ fontSize:'52px', fontWeight:'900', margin:'0 0 12px', letterSpacing:'-0.03em',
-                    color: conferencia.systemValue ? (diffConferencia===0 ? colors.success : colors.danger) : 'var(--text-muted)'
-                  }}>{moeda(diffConferencia)}</p>
-                  {conferencia.systemValue && (
-                    <Badge cor={diffConferencia===0?'success':'danger'}>
-                      {diffConferencia===0 ? '✅ Caixa Batido!' : '⚠️ Diferença no Caixa'}
-                    </Badge>
-                  )}
+                <div style={{ textAlign: 'center', padding: '36px 20px', borderRadius: '16px', background: conferencia.systemValue ? (diffConferencia === 0 ? `${colors.success}10` : `${colors.danger}08`) : 'var(--bg-panel)', border: `2px dashed ${conferencia.systemValue ? (diffConferencia === 0 ? colors.success : colors.danger) : 'var(--border)'}40` }}>
+                  <p style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Diferenca Final Apurada</p>
+                  <p style={{ fontSize: '52px', fontWeight: '900', margin: '0 0 12px', letterSpacing: '-0.03em', color: conferencia.systemValue ? (diffConferencia === 0 ? colors.success : colors.danger) : 'var(--text-muted)' }}>{moeda(diffConferencia)}</p>
+                  {conferencia.systemValue && <Badge cor={diffConferencia === 0 ? 'success' : 'danger'}>{diffConferencia === 0 ? 'Caixa batido' : 'Diferenca no caixa'}</Badge>}
                 </div>
               </div>
             </Card>
 
             <Card title="Informar Valores e Fechar Ciclo">
-              <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
-                <Input label="1. Saldo no Sistema (Centralizador)" type="number" step="0.01"
-                  value={conferencia.systemValue} placeholder="0,00"
-                  onChange={e => setConferencia({...conferencia, systemValue: e.target.value})} />
-                <Input label="2. Dinheiro Físico em Mãos" type="number" step="0.01"
-                  value={conferencia.cashValue} placeholder="0,00"
-                  onChange={e => setConferencia({...conferencia, cashValue: e.target.value})} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <Input label="1. Saldo no Sistema (Centralizador)" type="number" step="0.01" value={conferencia.systemValue} placeholder="0,00" onChange={(event) => setConferencia({ ...conferencia, systemValue: event.target.value })} />
+                <Input label="2. Dinheiro Fisico em Maos" type="number" step="0.01" value={conferencia.cashValue} placeholder="0,00" onChange={(event) => setConferencia({ ...conferencia, cashValue: event.target.value })} />
 
-                <div style={{ background:'var(--bg-app)', padding:'12px', borderRadius:'10px', fontSize:'12px', color:'var(--text-muted)', lineHeight:1.6 }}>
-                  Após conferir, clique em "Encerrar Ciclo" para arquivar as notas e gerar o relatório para o setor financeiro.
+                <div style={{ background: 'var(--bg-app)', padding: '12px', borderRadius: '10px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  Apos conferir, clique em "Encerrar Ciclo" para arquivar as notas e gerar o relatorio para o setor financeiro.
                 </div>
 
-                <Btn style={{ height:'52px' }} onClick={handleCloseCycle}
-                  disabled={!conferencia.systemValue || expenses.length===0 || loading} loading={loading}>
-                  <CheckCircle size={18} style={{ marginRight:'8px' }}/> Encerrar e Arquivar Ciclo
+                <Btn style={{ height: '52px' }} onClick={handleCloseCycle} disabled={!conferencia.systemValue || !expenses.length || loading} loading={loading}>
+                  <CheckCircle size={18} style={{ marginRight: '8px' }} /> Encerrar e Arquivar Ciclo
                 </Btn>
 
-                <Btn variant="secondary" style={{ height:'44px' }} onClick={handleGerarRelatorio}>
-                  <FileText size={16} style={{ marginRight:'8px' }}/> Gerar PDF sem Fechar
+                <Btn variant="secondary" style={{ height: '44px' }} onClick={handleGerarRelatorio}>
+                  <FileText size={16} style={{ marginRight: '8px' }} /> Gerar PDF sem Fechar
                 </Btn>
               </div>
             </Card>
@@ -501,37 +485,42 @@ export default function DesencaixeAtendente({ userData }) {
         </div>
       )}
 
-      {/* ─── HISTÓRICO ─── */}
-      {activeTab === 'Histórico' && (
-        <div className="animated-view" style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px' }}>
-            <KpiCard label="Total Acumulado" valor={moeda(totalHistorico)} icon={<BarChart3 size={20}/>} accent={colors.success} />
-            <KpiCard label="Ciclos Fechados" valor={cycles.length} icon={<History size={20}/>} accent={colors.info} />
+      {activeTab === 'Historico' && (
+        <div className="animated-view" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '16px' }}>
+            <KpiCard label="Total Acumulado" valor={moeda(totalHistorico)} icon={<BarChart3 size={20} />} accent={colors.success} />
+            <KpiCard label="Ciclos Fechados" valor={cycles.length} icon={<History size={20} />} accent={colors.info} />
           </div>
-          <Card title="Histórico de Fechamentos">
-            <DataTable loading={loading} emptyMsg="Nenhum ciclo fechado ainda." columns={[
-              { key:'closedAt', label:'Data Fechamento', render: v => formatData(v?.toDate ? v.toDate() : v) },
-              { key:'itemCount', label:'Notas', render: v => <strong>{v} itens</strong> },
-              { key:'totalExpenses', label:'Total', render: v => moeda(v) },
-              { key:'difference', label:'Diferença', render: v => <Badge cor={v===0?'success':'danger'}>{moeda(v)}</Badge> },
-              { key:'actions', label:'Ações', render: (_, row) => (
-                <Btn variant="secondary" size="sm"
-                  onClick={() => handleDownloadZIP(row.itemsSnapshot||[], `Ciclo_${row.id}`)}
-                  title="Baixar Pack ZIP">
-                  <Download size={15}/> ZIP
-                </Btn>
-              )},
-            ]} data={cycles} />
+          <Card title="Historico de Fechamentos">
+            <DataTable
+              loading={loading}
+              emptyMsg="Nenhum ciclo fechado ainda."
+              columns={[
+                { key: 'closedAt', label: 'Data Fechamento', render: (value) => formatData(value?.toDate ? value.toDate() : value) },
+                { key: 'itemCount', label: 'Notas', render: (value) => <strong>{value} itens</strong> },
+                { key: 'totalExpenses', label: 'Total', render: (value) => moeda(value) },
+                { key: 'difference', label: 'Diferenca', render: (value) => <Badge cor={value === 0 ? 'success' : 'danger'}>{moeda(value)}</Badge> },
+                {
+                  key: 'actions',
+                  label: 'Acoes',
+                  render: (_, row) => (
+                    <Btn variant="secondary" size="sm" onClick={() => handleDownloadZIP(row.itemsSnapshot || [], `Ciclo_${row.id}`)} title="Baixar Pack ZIP">
+                      <Download size={15} /> ZIP
+                    </Btn>
+                  ),
+                },
+              ]}
+              data={cycles}
+            />
           </Card>
         </div>
       )}
 
-      {/* ─── MODAL PREVIEW COMPROVANTE ─── */}
       <Modal open={!!previewUrl} onClose={() => setPreviewUrl(null)} title="Visualizar Comprovante" size="lg">
         {previewUrl && (
           previewUrl.includes('application/pdf')
-            ? <iframe src={previewUrl} style={{ width:'100%', height:'500px', border:'none', borderRadius:'8px' }} />
-            : <img src={previewUrl} alt="Comprovante" style={{ width:'100%', maxHeight:'500px', objectFit:'contain', borderRadius:'8px' }} />
+            ? <iframe src={previewUrl} style={{ width: '100%', height: '500px', border: 'none', borderRadius: '8px' }} />
+            : <img src={previewUrl} alt="Comprovante" style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '8px' }} />
         )}
       </Modal>
     </Page>
