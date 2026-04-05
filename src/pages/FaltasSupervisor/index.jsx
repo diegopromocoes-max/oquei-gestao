@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../../firebase';
+import { db } from '../../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { UserX, Briefcase, LayoutGrid, AlertTriangle, CalendarDays } from 'lucide-react';
+import {
+  deleteAbsenceCalendarEntries,
+  reindexAbsenceCalendar,
+  syncAbsenceCalendarEntries,
+} from '../../services/absenceCalendar';
 
 // IMPORTAÇÃO DOS ESTILOS GLOBAIS
 import { styles as global, colors } from '../../styles/globalStyles';
@@ -15,6 +20,7 @@ import FormFeriasView from './FormFeriasView';
 export default function FaltasSupervisor({ userData }) {
   const [activeTab, setActiveTab] = useState('gestao');
   const [loading, setLoading] = useState(false);
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
   const [fileName, setFileName] = useState(null);
   
   // --- DADOS DO FIREBASE ---
@@ -117,16 +123,78 @@ export default function FaltasSupervisor({ userData }) {
     if (file) setFileName(file.name);
   };
 
+  const resolveStore = (storeId) => stores.find((store) => store.id === storeId) || null;
+  const resolveAttendant = (attendantId) => (
+    attendants.find((attendant) => attendant.id === attendantId)
+    || floaters.find((floater) => floater.id === attendantId)
+    || null
+  );
+
+  const buildAbsencePayload = (basePayload, type, clusterId) => {
+    const store = resolveStore(basePayload.storeId);
+    const attendant = resolveAttendant(basePayload.attendantId);
+
+    return {
+      type,
+      ...basePayload,
+      storeName: store?.name || basePayload.storeName || basePayload.storeId || '',
+      cityName: store?.name || basePayload.cityName || basePayload.storeId || '',
+      attendantName: attendant?.name || basePayload.attendantName || basePayload.attendantId || 'Colaborador',
+      employeeName: attendant?.name || basePayload.employeeName || basePayload.attendantId || 'Colaborador',
+      createdBy: userData.name,
+      createdAt: serverTimestamp(),
+      clusterId,
+      status: type === 'ferias' ? 'Programada' : 'Pendente',
+    };
+  };
+
+  const enrichAbsenceForCalendar = (absence = {}) => {
+    const store = resolveStore(absence.storeId);
+    const attendant = resolveAttendant(absence.attendantId);
+
+    return {
+      ...absence,
+      storeName: store?.name || absence.storeName || absence.storeId || '',
+      cityName: store?.name || absence.cityName || absence.storeId || '',
+      attendantName: attendant?.name || absence.attendantName || absence.attendantId || 'Colaborador',
+      employeeName: attendant?.name || absence.employeeName || absence.attendantId || 'Colaborador',
+    };
+  };
+
+  const reportCalendarSyncError = (actionLabel, error) => {
+    console.error(`Erro ao sincronizar espelho publico apos ${actionLabel}:`, error);
+    window.showToast?.(
+      'O registo foi salvo, mas o espelho publico da escala nao foi atualizado. Use "Reindexar Escala Publica".',
+      'error',
+    );
+  };
+
   const deleteAbsence = async (id) => {
     if(!window.confirm("Pretende excluir este registo permanentemente?")) return;
-    try { await deleteDoc(doc(db, "absences", id)); fetchAbsences(); } catch (err) { alert(err.message); }
+    try {
+      await deleteAbsenceCalendarEntries(id);
+      await deleteDoc(doc(db, "absences", id));
+      fetchAbsences();
+      window.showToast?.('Registo removido com sucesso.', 'success');
+    } catch (err) { alert(err.message); }
   };
 
   const updateCoverageQuickly = async (absenceId, date, floaterId, currentMap) => {
     try {
       const newMap = { ...currentMap, [date]: floaterId };
       await updateDoc(doc(db, "absences", absenceId), { coverageMap: newMap });
-      fetchAbsences(); 
+      const currentAbsence = absencesList.find((absence) => absence.id === absenceId);
+      if (currentAbsence) {
+        try {
+          await syncAbsenceCalendarEntries(absenceId, enrichAbsenceForCalendar({
+            ...currentAbsence,
+            coverageMap: newMap,
+          }));
+        } catch (syncError) {
+          reportCalendarSyncError('atualizar a cobertura', syncError);
+        }
+      }
+      fetchAbsences();
     } catch (e) { alert("Erro ao atualizar a cobertura: " + e.message); }
   };
 
@@ -135,11 +203,13 @@ export default function FaltasSupervisor({ userData }) {
     setLoading(true);
     try {
       const clusterDaLoja = stores.find(s => s.id === faltaForm.storeId)?.clusterId || userData.clusterId || 'global';
-      await addDoc(collection(db, "absences"), {
-        type: 'falta', ...faltaForm,
-        createdBy: userData.name, createdAt: serverTimestamp(),
-        clusterId: clusterDaLoja, status: 'Pendente'
-      });
+      const absencePayload = buildAbsencePayload(faltaForm, 'falta', clusterDaLoja);
+      const docRef = await addDoc(collection(db, "absences"), absencePayload);
+      try {
+        await syncAbsenceCalendarEntries(docRef.id, absencePayload);
+      } catch (syncError) {
+        reportCalendarSyncError('registrar a falta', syncError);
+      }
       alert("Falta registada com sucesso!");
       setFaltaForm({ storeId: '', attendantId: '', startDate: '', endDate: '', isFullDay: true, startTime: '', endTime: '', reason: '', obs: '', coverageMap: {} });
       setFileName(null);
@@ -159,17 +229,39 @@ export default function FaltasSupervisor({ userData }) {
     setLoading(true);
     try {
       const clusterDaLoja = stores.find(s => s.id === feriasForm.storeId)?.clusterId || userData.clusterId || 'global';
-      await addDoc(collection(db, "absences"), {
-        type: 'ferias', ...feriasForm,
-        createdBy: userData.name, createdAt: serverTimestamp(),
-        clusterId: clusterDaLoja, status: 'Programada'
-      });
+      const absencePayload = buildAbsencePayload(feriasForm, 'ferias', clusterDaLoja);
+      const docRef = await addDoc(collection(db, "absences"), absencePayload);
+      try {
+        await syncAbsenceCalendarEntries(docRef.id, absencePayload);
+      } catch (syncError) {
+        reportCalendarSyncError('agendar as ferias', syncError);
+      }
       alert("Férias agendadas com sucesso!");
       setFeriasForm({ storeId: '', attendantId: '', startDate: '', endDate: '', coverageMap: {}, obs: '' });
       fetchAbsences();
       setActiveTab('gestao');
     } catch (err) { alert("Erro: " + err.message); }
     setLoading(false);
+  };
+
+  const handleReindexPublicCalendar = async () => {
+    if (!absencesList.length) {
+      window.showToast?.('Nao ha ausencias carregadas para reindexar.', 'info');
+      return;
+    }
+
+    setSyncingCalendar(true);
+    try {
+      const result = await reindexAbsenceCalendar(absencesList.map((absence) => enrichAbsenceForCalendar(absence)));
+      window.showToast?.(
+        `Escala publica reindexada: ${result.syncedAbsences} ausencias e ${result.syncedEntries} dias sincronizados.`,
+        'success',
+      );
+    } catch (error) {
+      console.error('Erro ao reindexar escala publica:', error);
+      alert(`Erro ao reindexar a escala publica: ${error.message}`);
+    }
+    setSyncingCalendar(false);
   };
 
   return (
@@ -189,17 +281,28 @@ export default function FaltasSupervisor({ userData }) {
           </div>
         </div>
 
-        {isGlobal && (
-          <div style={{ minWidth: '260px' }}>
-            <label style={{ ...local.headerSubtitle, display: 'block', marginBottom: '8px' }}>Filtro por cluster</label>
-            <select style={global.select} value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}>
-              <option value="all">Todas as regionais</option>
-              {clusterOptions.map((cluster) => (
-                <option key={cluster} value={cluster}>{cluster}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div style={local.headerActions}>
+          {isGlobal && (
+            <div style={{ minWidth: '260px' }}>
+              <label style={{ ...local.headerSubtitle, display: 'block', marginBottom: '8px' }}>Filtro por cluster</label>
+              <select style={global.select} value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}>
+                <option value="all">Todas as regionais</option>
+                {clusterOptions.map((cluster) => (
+                  <option key={cluster} value={cluster}>{cluster}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleReindexPublicCalendar}
+            style={local.reindexBtn}
+            disabled={syncingCalendar}
+          >
+            {syncingCalendar ? 'Reindexando escala...' : 'Reindexar Escala Publica'}
+          </button>
+        </div>
       </div>
 
       {/* ── NAVEGAÇÃO POR ABAS (PILLS) ── */}
@@ -268,7 +371,19 @@ const local = {
   iconBox: { width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '-0.02em' },
   headerSubtitle: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' },
+  headerActions: { display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'wrap' },
   navBar: { display: 'flex', gap: '8px', background: 'var(--bg-card)', padding: '8px', borderRadius: '18px', border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'nowrap' },
   navBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '800', transition: '0.2s', background: 'transparent', color: 'var(--text-muted)' },
   navBtnActive: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '12px', border: '1px solid var(--border)', cursor: 'pointer', fontSize: '13px', fontWeight: '900', transition: '0.2s', background: 'var(--bg-panel)', boxShadow: 'var(--shadow-sm)' },
+  reindexBtn: {
+    height: '42px',
+    borderRadius: '12px',
+    border: `1px solid ${colors.primary}40`,
+    background: `${colors.primary}12`,
+    color: colors.primary,
+    padding: '0 16px',
+    fontSize: '13px',
+    fontWeight: '900',
+    cursor: 'pointer',
+  },
 };

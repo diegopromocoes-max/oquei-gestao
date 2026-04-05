@@ -1,37 +1,166 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
-import { ChevronDown, ChevronUp, Plus, Target, Trash2, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Search, Target, Trash2, Users } from 'lucide-react';
 import { db } from '../../firebase';
 import { colors } from '../../components/ui';
 import CopyButton from './CopyButton';
 import { entrevistadorURL } from '../lib/surveyQuestions';
 
+const normalizeText = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+
+const getInterviewerKey = (item) => {
+  const phone = normalizePhone(item?.telefone);
+  if (phone) return `phone:${phone}`;
+
+  const name = normalizeText(item?.nome);
+  if (name) return `name:${name}`;
+
+  return '';
+};
+
+const getCreatedAtValue = (value) => {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+};
+
+const getRecordScore = (item) => {
+  let score = 0;
+  if (String(item?.nome || '').trim()) score += 3;
+  if (normalizePhone(item?.telefone)) score += 2;
+  if (Number(item?.meta) > 0) score += 1;
+  return score;
+};
+
+const mergeLibraryRecord = (current, candidate) => {
+  const currentScore = getRecordScore(current);
+  const candidateScore = getRecordScore(candidate);
+  const preferred =
+    candidateScore > currentScore || (candidateScore === currentScore && candidate.createdAtValue > current.createdAtValue)
+      ? candidate
+      : current;
+
+  return {
+    ...preferred,
+    useCount: (current.useCount || 1) + 1,
+    createdAtValue: Math.max(current.createdAtValue || 0, candidate.createdAtValue || 0),
+  };
+};
+
+const buildLibrary = (items, surveyId) => {
+  const libraryMap = new Map();
+
+  items.forEach((item) => {
+    if (item?.surveyId === surveyId) return;
+    if (!String(item?.nome || '').trim()) return;
+
+    const normalized = {
+      id: item.id,
+      surveyId: item.surveyId || '',
+      nome: String(item.nome || '').trim(),
+      telefone: String(item.telefone || '').trim(),
+      meta: Number.parseInt(item.meta, 10) || 0,
+      createdAtValue: getCreatedAtValue(item.createdAt),
+      useCount: 1,
+    };
+
+    const key = getInterviewerKey(normalized);
+    if (!key) return;
+
+    const existing = libraryMap.get(key);
+    libraryMap.set(key, existing ? mergeLibraryRecord(existing, normalized) : normalized);
+  });
+
+  return Array.from(libraryMap.values()).sort((a, b) =>
+    (b.createdAtValue || 0) - (a.createdAtValue || 0) || a.nome.localeCompare(b.nome, 'pt-BR'),
+  );
+};
+
+const isSameInterviewer = (left, right) => {
+  const leftPhone = normalizePhone(left?.telefone);
+  const rightPhone = normalizePhone(right?.telefone);
+
+  if (leftPhone && rightPhone) return leftPhone === rightPhone;
+  return normalizeText(left?.nome) === normalizeText(right?.nome);
+};
+
+const buildSearchText = (item) =>
+  [normalizeText(item?.nome), normalizePhone(item?.telefone), String(item?.meta ?? '').trim()].filter(Boolean).join(' ');
+
 export default function EntrevistadoresSection({ survey }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [libraryLoading, setLibraryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [list, setList] = useState([]);
+  const [library, setLibrary] = useState([]);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({ nome: '', telefone: '', meta: '' });
+
+  const filteredLibrary = useMemo(() => {
+    const term = normalizeText(search);
+    const phoneTerm = normalizePhone(search);
+    const available = library.filter((item) => !list.some((current) => isSameInterviewer(current, item)));
+
+    if (!term && !phoneTerm) return available.slice(0, 5);
+    return available
+      .filter((item) => {
+        const textMatch = term ? buildSearchText(item).includes(term) : false;
+        const phoneMatch = phoneTerm ? normalizePhone(item.telefone).includes(phoneTerm) : false;
+        return textMatch || phoneMatch;
+      })
+      .slice(0, 6);
+  }, [library, list, search]);
 
   useEffect(() => {
     if (!expanded) return;
     const load = async () => {
       setLoading(true);
+      setLibraryLoading(true);
       try {
-        const snapshot = await getDocs(
-          query(collection(db, 'survey_entrevistadores'), where('surveyId', '==', survey.id)),
-        );
-        setList(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+        const [currentSnapshot, allSnapshot] = await Promise.all([
+          getDocs(
+            query(collection(db, 'survey_entrevistadores'), where('surveyId', '==', survey.id)),
+          ),
+          getDocs(collection(db, 'survey_entrevistadores')),
+        ]);
+
+        setList(currentSnapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+        setLibrary(buildLibrary(allSnapshot.docs.map((item) => ({ id: item.id, ...item.data() })), survey.id));
       } finally {
         setLoading(false);
+        setLibraryLoading(false);
       }
     };
     load();
   }, [expanded, survey.id]);
 
+  const applyLibraryItem = (item) => {
+    setForm({
+      nome: item.nome || '',
+      telefone: item.telefone || '',
+      meta: item.meta ? String(item.meta) : '',
+    });
+    setSearch('');
+  };
+
   const addInterviewer = async () => {
     if (!form.nome.trim()) {
       window.showToast?.('Informe o nome do entrevistador.', 'error');
+      return;
+    }
+
+    const duplicate = list.some((item) => isSameInterviewer(item, form));
+    if (duplicate) {
+      window.showToast?.('Este entrevistador ja esta vinculado a esta pesquisa.', 'error');
       return;
     }
 
@@ -107,6 +236,104 @@ export default function EntrevistadoresSection({ survey }) {
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
             Cada entrevistador recebe um link unico para rastrear quem aplicou a pesquisa.
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              background: 'var(--bg-panel)',
+              borderRadius: '12px',
+              padding: '14px',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '900', color: 'var(--text-main)' }}>
+                Buscar pesquisadores ja usados em outras pesquisas
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.45 }}>
+                Selecione um pesquisador ja cadastrado para preencher nome, telefone e meta automaticamente.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '0 12px',
+                borderRadius: '10px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+              }}
+            >
+              <Search size={14} color="var(--text-muted)" />
+              <input
+                style={{ ...inputStyle, border: 'none', padding: '11px 0', background: 'transparent' }}
+                placeholder="Buscar por nome ou telefone"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+
+            {libraryLoading ? (
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Carregando pesquisadores ja cadastrados...</div>
+            ) : filteredLibrary.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {filteredLibrary.map((item) => (
+                  <button
+                    key={`${item.surveyId}-${item.id}`}
+                    onClick={() => applyLibraryItem(item)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      width: '100%',
+                      padding: '11px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-card)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)' }}>{item.nome}</div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '10px',
+                          flexWrap: 'wrap',
+                          marginTop: '3px',
+                          fontSize: '11px',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {item.telefone && <span>{item.telefone}</span>}
+                        {!!item.meta && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Target size={10} />
+                            Meta {item.meta}
+                          </span>
+                        )}
+                        {item.useCount > 1 && <span>Usado em {item.useCount} pesquisas</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: colors.success }}>Usar</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                {search.trim()
+                  ? 'Nenhum pesquisador encontrado com esse termo.'
+                  : 'Nenhum pesquisador reaproveitavel encontrado em outras pesquisas.'}
+              </div>
+            )}
           </div>
 
           <div

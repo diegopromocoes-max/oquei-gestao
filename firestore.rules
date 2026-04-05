@@ -397,7 +397,7 @@ service cloud.firestore {
 
     match /absence_calendar_public/{id} {
       allow read: if isAuth();
-      allow write: if false;
+      allow write: if isAuth() && isSuperOrAbove();
     }
 
     // Bancos de fornecedores e categorias do Desencaixe
