@@ -25,10 +25,16 @@ export function summarizeAttendantLeads(leads = []) {
     return accumulator;
   }, {});
   const statusSummary = leads.reduce((accumulator, lead) => {
-    const status = lead?.status || 'Em negociação';
+    const status = lead?.status || 'Em negociacao';
     accumulator[status] = (accumulator[status] || 0) + 1;
     return accumulator;
   }, {});
+  const discardReasonSummary = discarded.reduce((accumulator, lead) => {
+    const reason = lead?.discardMotive || 'Sem motivo informado';
+    accumulator[reason] = (accumulator[reason] || 0) + 1;
+    return accumulator;
+  }, {});
+  const discardReasonsSorted = Object.entries(discardReasonSummary).sort((left, right) => right[1] - left[1]);
 
   return {
     totalLeads: leads.length,
@@ -39,10 +45,12 @@ export function summarizeAttendantLeads(leads = []) {
     averageTicket: Number(averageTicket.toFixed(2)),
     totalValue: Number(totalValue.toFixed(2)),
     planos: typeSummary['Plano Novo'] || 0,
-    migracoes: typeSummary['Migração'] || 0,
+    migracoes: typeSummary['Migracao'] || typeSummary['Migração'] || 0,
     svas: typeSummary.SVA || 0,
     typeSummary,
     statusSummary,
+    discardReasonSummary,
+    topDiscardReason: discardReasonsSorted[0]?.[0] || '',
     recentLeads: leads
       .slice()
       .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))

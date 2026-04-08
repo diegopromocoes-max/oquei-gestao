@@ -171,6 +171,7 @@ export const MODULE_CATALOG = [
   buildModule(PANEL_KEYS.ATTENDANT, 'nova_venda', 'Registrar Lead', 'Comercial', PlusCircle, colors.primary, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'clientes', 'Meu Funil', 'Comercial', Users, colors.success, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'relatorio_leads', 'Relatório Mensal', 'Comercial', FileSpreadsheet, colors.purple, ROLE_KEYS.ATTENDANT),
+  buildModule(PANEL_KEYS.ATTENDANT, 'mapa_leads', 'Meu mapa de Leads', 'Comercial', MapPin, colors.primary, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'rh', 'Solicitações RH', 'Ferramentas', FileCheck, colors.warning, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'colinhas', 'Colinhas', 'Ferramentas', BookMarked, colors.purple, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'desencaixe', 'Caixa da Loja', 'Ferramentas', Wallet, colors.success, ROLE_KEYS.ATTENDANT),

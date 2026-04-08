@@ -9,6 +9,7 @@ import {
   X, Bell, ArrowRight, CheckCircle
 } from 'lucide-react';
 import { colors } from '../styles/globalStyles';
+import { loadMonthlySalesScope } from '../services/monthlySalesService';
 
 // ── Helpers ──────────────────────────────────────────────────
 const getDatesInRange = (start, end) => {
@@ -193,7 +194,7 @@ function FaltaCard({ falta, floaters, onNavigate, onCoverageChange }) {
 // ── Componente principal ──────────────────────────────────────
 export default function DashboardCoordenador({ userData, setActiveView }) {
   const [loading, setLoading]           = useState(false);
-  const [stats, setStats]               = useState({ cidades: 0, supervisores: 0, vendasMes: 0, alertasRh: 0 });
+  const [stats, setStats]               = useState({ cidades: 0, supervisores: 0, vendasMes: 0, metaVendas: 0, alertasRh: 0 });
   const [rhPendentes, setRhPendentes]   = useState([]);
   const [faltas, setFaltas]             = useState([]);
   const [floaters, setFloaters]         = useState([]);
@@ -225,11 +226,11 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
 
       // 1. Vendas em Lojas
       let vendas = 0;
+      let metaVendas = 0;
       try {
-        const proxMes  = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-        const mesFim   = `${proxMes.getFullYear()}-${String(proxMes.getMonth() + 1).padStart(2, '0')}-01`;
-        const leadsSnap = await getDocs(query(collection(db, 'leads'), where('date', '>=', `${mesAtual}-01`), where('date', '<', mesFim)));
-        vendas = leadsSnap.docs.filter(d => ['Contratado', 'Instalado'].includes(d.data().status)).length;
+        const salesScope = await loadMonthlySalesScope({ scope: 'global', monthKey: mesAtual });
+        vendas = salesScope.salesCount || 0;
+        metaVendas = salesScope.totals?.goalSales || 0;
       } catch (e) { console.warn('Aviso Leads:', e); }
 
       // 2. RH Pendentes
@@ -254,7 +255,7 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
           .sort((a, b) => a.startDate.localeCompare(b.startDate));
       } catch (e) { console.warn('Aviso Faltas:', e); }
 
-      setStats({ cidades: citySnap.size, supervisores: supervisores.length, vendasMes: vendas, alertasRh: rhData.length });
+      setStats({ cidades: citySnap.size, supervisores: supervisores.length, vendasMes: vendas, metaVendas, alertasRh: rhData.length });
       setRhPendentes(rhData);
       setFaltas(faltasData);
     } catch (err) {
@@ -278,7 +279,7 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
   };
 
   const dataAtual    = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const metaGlobal   = stats.cidades > 0 ? stats.cidades * 30 : 500;
+  const metaGlobal   = stats.metaVendas > 0 ? stats.metaVendas : (stats.cidades > 0 ? stats.cidades * 30 : 500);
   const percentualMeta = Math.min(Math.round((stats.vendasMes / metaGlobal) * 100), 100);
 
   const toggleRotina = id => setRotinas(prev => prev.map(r => r.id === id ? { ...r, done: !r.done } : r));

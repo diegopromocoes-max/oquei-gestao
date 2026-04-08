@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Target, Calendar, BarChart2, MapPin, ShieldAlert, Sliders, Briefcase } from 'lucide-react';
+import { Target, Calendar, BarChart2, MapPin, ShieldAlert, Sliders, Briefcase, Users } from 'lucide-react';
 
 import { styles as global, colors } from '../styles/globalStyles';
 
 // IMPORTAÇÃO DAS ABAS (VIEWS)
 import TabMetasCanais    from './tabs_metas/TabMetasCanais';
 import TabMetasCidades   from './tabs_metas/TabMetasCidades';
+import TabMetasIndividuais from './tabs_metas/TabMetasIndividuais';
 import TabMetasChurn     from './tabs_metas/TabMetasChurn';
 import TabSimuladorSOP   from './tabs_metas/TabSimuladorSOP';
 import TabPlanoAcoes     from './tabs_metas/TabPlanoAcoes';
@@ -14,6 +15,7 @@ import TabPlanoAcoes     from './tabs_metas/TabPlanoAcoes';
 const TAB_CONTENT = {
   canais:     TabMetasCanais,
   cidades:    TabMetasCidades,
+  individuais: TabMetasIndividuais,
   churn:      TabMetasChurn,
   simulador:  TabSimuladorSOP,
   planos:     TabPlanoAcoes,
@@ -23,9 +25,10 @@ const TAB_CONTENT = {
 const TABS_CONFIG = [
   { id: 'canais', label: '1. Metas Canais', icon: BarChart2 },
   { id: 'cidades', label: '2. Micro (Cidades)', icon: MapPin },
-  { id: 'churn', label: '3. Churn e Alvo', icon: ShieldAlert },
-  { id: 'simulador', label: '4. Simulador S&OP', icon: Sliders },
-  { id: 'planos', label: '5. Plano de Ações', icon: Briefcase }
+  { id: 'individuais', label: '3. Metas Individuais', icon: Users },
+  { id: 'churn', label: '4. Churn e Alvo', icon: ShieldAlert },
+  { id: 'simulador', label: '5. Simulador S&OP', icon: Sliders },
+  { id: 'planos', label: '6. Plano de Ações', icon: Briefcase }
 ];
 
 export default function GestaoMetas({ userData }) {

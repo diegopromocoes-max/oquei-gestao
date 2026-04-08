@@ -66,6 +66,9 @@ export const styles = {
   col:        { display: 'flex', flexDirection: 'column', gap: '8px' },
   form:       { display: 'flex', flexDirection: 'column', gap: '18px' },
   formRow:    { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' },
+  input:      { padding: '11px 13px', borderRadius: '9px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', color: 'var(--text-main)', background: 'var(--bg-input, var(--bg-app))', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' },
+  select:     { padding: '11px 13px', borderRadius: '9px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', color: 'var(--text-main)', background: 'var(--bg-input, var(--bg-app))', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', cursor: 'pointer' },
+  textarea:   { padding: '11px 13px', borderRadius: '9px', border: '1px solid var(--border)', outline: 'none', fontSize: '14px', color: 'var(--text-main)', background: 'var(--bg-input, var(--bg-app))', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical', minHeight: '88px' },
 };
 
 // ─────────────────────────────────────────────────────────────

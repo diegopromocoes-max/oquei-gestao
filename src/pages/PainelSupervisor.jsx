@@ -154,6 +154,8 @@ export default function PainelSupervisor({ userData }) {
       activeTab={activeView}
       onTabChange={setActiveView}
       onLogout={() => authSignOut(auth)}
+      appName="Hub Oquei"
+      logoUrl="/favicon.png"
       preferences={preferences}
       onPreferenceChange={updatePreferences}
     >

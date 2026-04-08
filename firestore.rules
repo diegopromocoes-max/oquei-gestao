@@ -82,6 +82,23 @@ service cloud.firestore {
       );
     }
 
+    match /lead_origins/{id} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isAuth() && isSuperOrAbove();
+    }
+
+    match /lead_discard_reasons/{id} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isAuth() && isSuperOrAbove();
+    }
+
+    match /lead_partnership_sources/{id} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isSuperOrAbove();
+    }
+
     match /crm_ativo_leads/{docId} {
       allow read, write: if isAuth() && isSuperOrAbove();
     }
@@ -109,8 +126,15 @@ service cloud.firestore {
     match /monthly_bases/{id}          { allow read: if isAuth(); allow write: if isAuth() && isGrowthOrAbove(); }
 
     // ── monthly_goals / monthly_cluster_goals (Sala de Guerra, Relatorios) ───
-    match /monthly_goals/{id}          { allow read: if isAuth(); allow write: if isAuth() && isCoordinator(); }
-    match /monthly_cluster_goals/{id}  { allow read: if isAuth(); allow write: if isAuth() && isCoordinator(); }
+    match /monthly_goals/{id}          { allow read: if isAuth(); allow write: if isAuth() && isGrowthOrAbove(); }
+    match /monthly_cluster_goals/{id}  { allow read: if isAuth(); allow write: if isAuth() && isGrowthOrAbove(); }
+    match /monthly_attendant_goals/{id} {
+      allow read: if isAuth() && (
+        isGrowthOrAbove()
+        || (isAttendant() && resource.data.attendantId == request.auth.uid)
+      );
+      allow write: if isAuth() && (isCoordinator() || isSupervisor() || isGrowth());
+    }
 
     // ── S&OP ─────────────────────────────────────────────────────────────────
     match /sop_simulations/{id}        { allow read: if isAuth(); allow write: if isAuth() && isGrowthOrAbove(); }

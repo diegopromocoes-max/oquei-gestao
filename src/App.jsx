@@ -4,7 +4,7 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 import { auth, db } from './firebase';
 import { injectGlobalCSS, injectPublicCSS } from './globalStyles';
@@ -83,35 +83,27 @@ function AuthApp() {
   }, []);
 
   useEffect(() => {
-    let unsubProfile = null;
-
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        unsubProfile?.();
-        unsubProfile = onSnapshot(
-          doc(db, 'users', currentUser.uid),
-          (snapshot) => {
-            setUserData({ uid: currentUser.uid, ...(snapshot.exists() ? snapshot.data() : { role: 'guest' }) });
-            setLoading(false);
-          },
-          () => {
-            setUserData({ uid: currentUser.uid, role: 'guest' });
-            setLoading(false);
-          },
-        );
+        try {
+          const snapshot = await getDoc(doc(db, 'users', currentUser.uid));
+          setUserData({ uid: currentUser.uid, ...(snapshot.exists() ? snapshot.data() : { role: 'guest' }) });
+        } catch (error) {
+          console.warn('Nao foi possivel carregar o perfil do usuario no bootstrap:', error);
+          setUserData({ uid: currentUser.uid, role: 'guest' });
+        } finally {
+          setLoading(false);
+        }
         return;
       }
 
-      unsubProfile?.();
-      unsubProfile = null;
       setUser(null);
       setUserData(null);
       setLoading(false);
     });
 
     return () => {
-      unsubProfile?.();
       unsub();
     };
   }, []);

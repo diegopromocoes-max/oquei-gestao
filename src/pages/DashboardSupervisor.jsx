@@ -8,10 +8,11 @@ import {
   CheckCircle2, FileText, UserCheck, ListChecks, Wallet
 } from 'lucide-react';
 import { colors } from '../styles/globalStyles';
+import { loadMonthlySalesScope } from '../services/monthlySalesService';
 
 export default function DashboardSupervisor({ userData, setActiveView }) {
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({ lojas: 0, consultores: 0, vendasMes: 0, alertasRh: 0 });
+  const [stats, setStats] = useState({ lojas: 0, consultores: 0, vendasMes: 0, metaVendas: 0, alertasRh: 0 });
   
   // Estados para a Gestão Diária
   const [rhPendentes, setRhPendentes] = useState([]);
@@ -48,12 +49,11 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
       const dataHojeStr = hoje.toISOString().split('T')[0];
       
       let vendas = 0;
+      let metaVendas = 0;
       try {
-        const qLeads = query(collection(db, "leads"), where("date", ">=", `${mesAtual}-01`), where("date", "<=", `${mesAtual}-31`));
-        const leadsSnap = await getDocs(qLeads);
-        // Filtra as vendas apenas da regional do supervisor
-        const leadsRegional = leadsSnap.docs.filter(d => String(d.data().clusterId || d.data().cluster || '').trim() === myCluster);
-        vendas = leadsRegional.filter(d => ['Contratado', 'Instalado'].includes(d.data().status)).length;
+        const salesScope = await loadMonthlySalesScope({ scope: 'cluster', clusterId: myCluster, monthKey: mesAtual });
+        vendas = salesScope.salesCount || 0;
+        metaVendas = salesScope.totals?.goalSales || 0;
       } catch (e) { console.warn("Aviso Leads:", e); }
 
       // 4. Pedidos de RH Pendentes (Para este Supervisor)
@@ -73,7 +73,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
         faltasData = faltasSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(f => f.startDate <= dataHojeStr && f.endDate >= dataHojeStr);
       } catch (e) { console.warn("Aviso Faltas:", e); }
 
-      setStats({ lojas: citySnap.size, consultores: consultores.length, vendasMes: vendas, alertasRh: rhData.length });
+      setStats({ lojas: citySnap.size, consultores: consultores.length, vendasMes: vendas, metaVendas, alertasRh: rhData.length });
       setRhPendentes(rhData);
       setFaltasHoje(faltasData);
 
@@ -87,7 +87,7 @@ export default function DashboardSupervisor({ userData, setActiveView }) {
 
   // Formatação de data e meta
   const dataAtual = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const metaRegional = stats.lojas > 0 ? stats.lojas * 30 : 100; // Meta baseada no n.º de lojas da regional
+  const metaRegional = stats.metaVendas > 0 ? stats.metaVendas : (stats.lojas > 0 ? stats.lojas * 30 : 100);
   const percentualMeta = metaRegional > 0 ? Math.min(Math.round((stats.vendasMes / metaRegional) * 100), 100) : 0;
 
   const toggleRotina = (id) => {

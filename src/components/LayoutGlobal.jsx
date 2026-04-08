@@ -23,6 +23,8 @@ import { normalizeRole } from '../lib/roleUtils';
 const SIDEBAR_OPEN = 240;
 const SIDEBAR_COLLAPSED = 68;
 const TOPBAR_H = 64;
+const DEFAULT_APP_NAME = 'Hub Oquei';
+const DEFAULT_LOGO_URL = '/favicon.png';
 
 const PERFIL_CORES = {
   coordinator: { bg: colors.purple, shadow: 'rgba(124,58,237,0.35)', light: 'rgba(124,58,237,0.12)', label: 'Coordenador' },
@@ -41,8 +43,8 @@ export default function LayoutGlobal({
   onTabChange,
   onLogout,
   extraFooter,
-  appName = 'OQUEI CRM',
-  logoUrl = null,
+  appName = DEFAULT_APP_NAME,
+  logoUrl = DEFAULT_LOGO_URL,
   preferences = null,
   onPreferenceChange,
 }) {
@@ -308,7 +310,7 @@ export default function LayoutGlobal({
               letterSpacing: '-0.5px',
             }}
           >
-            {appName}
+            {appName || DEFAULT_APP_NAME}
           </span>
         </div>
 
@@ -550,9 +552,9 @@ export default function LayoutGlobal({
           style={{
             position: 'absolute',
             top: '80px',
-            right: '-11px',
-            width: '22px',
-            height: '22px',
+            right: '10px',
+            width: '30px',
+            height: '30px',
             borderRadius: '50%',
             backgroundColor: 'var(--bg-panel)',
             border: '1px solid var(--border)',
@@ -562,19 +564,21 @@ export default function LayoutGlobal({
             cursor: 'pointer',
             color: 'var(--text-muted)',
             zIndex: 101,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-            transition: 'background 0.15s',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.18)',
+            transition: 'background 0.15s, color 0.15s, transform 0.15s',
           }}
           onMouseEnter={(event) => {
             event.currentTarget.style.background = 'var(--bg-app)';
             event.currentTarget.style.color = 'var(--text-main)';
+            event.currentTarget.style.transform = 'translateX(0)';
           }}
           onMouseLeave={(event) => {
             event.currentTarget.style.background = 'var(--bg-panel)';
             event.currentTarget.style.color = 'var(--text-muted)';
+            event.currentTarget.style.transform = 'translateX(0)';
           }}
         >
-          {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </aside>
 

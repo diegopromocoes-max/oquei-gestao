@@ -42,6 +42,9 @@ const DEFAULT_ATTENDANT_SCORE_CONFIG = {
     improvementStreakCount: 4,
   },
 };
+const NOMINATIM_BASE_URL = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+const CITY_CACHE = new Map();
+const CLUSTER_CACHE = new Map();
 
 function clamp(value, min = 0, max = 100) {
   return Math.min(max, Math.max(min, Number(value) || 0));
@@ -641,6 +644,185 @@ function sanitizeKey(value) {
   return String(value || 'item').replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+function normalizeText(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function uniqueAddressParts(parts = []) {
+  return Array.from(new Set(parts.filter(Boolean).map((item) => normalizeText(item)).filter(Boolean)));
+}
+
+function buildAddressSearchVariants(address) {
+  const safeAddress = normalizeText(address);
+  if (!safeAddress) {
+    return [];
+  }
+
+  const parts = safeAddress.split('-').map((item) => normalizeText(item));
+  const streetPart = parts[0] || safeAddress;
+  const neighborhoodPart = parts[1] || '';
+  const cityPart = parts[2] || '';
+
+  return uniqueAddressParts([
+    [streetPart, neighborhoodPart, cityPart, 'Brasil'].filter(Boolean).join(', '),
+    [streetPart, cityPart, 'Brasil'].filter(Boolean).join(', '),
+    [safeAddress, 'Brasil'].filter(Boolean).join(', '),
+    safeAddress,
+  ]);
+}
+
+function scoreGeocodeCandidate(candidate = {}, address = '') {
+  const parsed = extractAddressComponents(candidate);
+  const display = normalizeText(candidate.display_name || '');
+  const safeAddress = normalizeText(address).toLowerCase();
+  const street = normalizeText(parsed.addressStreet).toLowerCase();
+  const neighborhood = normalizeText(parsed.addressNeighborhood).toLowerCase();
+
+  let score = 0;
+  if (street && safeAddress.includes(street)) score += 30;
+  if (neighborhood && safeAddress.includes(neighborhood)) score += 34;
+  if (display.includes(safeAddress)) score += 20;
+  if (display.includes('brasil')) score += 4;
+  if (String(candidate.addresstype || candidate.type || '').match(/house|building|residential|road/i)) score += 6;
+  return score;
+}
+
+function extractAddressComponents(result = {}) {
+  const address = result.address || {};
+
+  return {
+    addressStreet: address.road || address.pedestrian || address.footway || address.path || address.cycleway || '',
+    addressNumber: address.house_number || '',
+    addressNeighborhood: address.suburb || address.neighbourhood || address.quarter || address.borough || address.city_district || address.residential || address.hamlet || '',
+    geoFormattedAddress: result.display_name || '',
+  };
+}
+
+function buildLeadAddressString(data = {}) {
+  const structuredAddress = [
+    [data.addressStreet || '', data.addressNumber || ''].filter(Boolean).join(', '),
+    data.addressNeighborhood || '',
+    data.cityName || '',
+  ].filter(Boolean).join(' - ');
+
+  return structuredAddress || data.address || '';
+}
+
+async function geocodeAddress(address) {
+  if (!address) {
+    return null;
+  }
+
+  const variants = buildAddressSearchVariants(address);
+  for (const variant of variants) {
+    const response = await fetch(`${NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&addressdetails=1&countrycodes=br&q=${encodeURIComponent(variant)}`, {
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'User-Agent': 'oquei-gestao/1.0',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Nominatim geocoding request failed with status ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (!Array.isArray(payload) || !payload.length) {
+      continue;
+    }
+
+    return payload.sort((left, right) => scoreGeocodeCandidate(right, address) - scoreGeocodeCandidate(left, address))[0];
+  }
+  return null;
+}
+
+async function resolveCityRef(cityValue) {
+  const safeValue = normalizeText(cityValue);
+  if (!safeValue) {
+    return { cityId: '__all__', cityName: 'Todas as cidades', clusterId: '', clusterName: '' };
+  }
+
+  if (CITY_CACHE.has(safeValue.toLowerCase())) {
+    return CITY_CACHE.get(safeValue.toLowerCase());
+  }
+
+  const byId = await db.collection('cities').doc(cityValue).get();
+  if (byId.exists) {
+    const clusterRef = await resolveClusterRef(byId.data()?.clusterId);
+    const result = {
+      cityId: byId.id,
+      cityName: byId.data()?.name || safeValue,
+      clusterId: byId.data()?.clusterId || '',
+      clusterName: clusterRef.clusterName || '',
+    };
+    CITY_CACHE.set(safeValue.toLowerCase(), result);
+    return result;
+  }
+
+  const byName = await db.collection('cities').where('name', '==', safeValue).limit(1).get();
+  if (!byName.empty) {
+    const document = byName.docs[0];
+    const clusterRef = await resolveClusterRef(document.data()?.clusterId);
+    const result = {
+      cityId: document.id,
+      cityName: document.data()?.name || safeValue,
+      clusterId: document.data()?.clusterId || '',
+      clusterName: clusterRef.clusterName || '',
+    };
+    CITY_CACHE.set(safeValue.toLowerCase(), result);
+    return result;
+  }
+
+  const fallback = { cityId: safeValue, cityName: safeValue, clusterId: '', clusterName: '' };
+  CITY_CACHE.set(safeValue.toLowerCase(), fallback);
+  return fallback;
+}
+
+async function resolveClusterRef(clusterValue) {
+  const safeValue = normalizeText(clusterValue);
+  if (!safeValue) {
+    return { clusterId: '', clusterName: '' };
+  }
+
+  if (CLUSTER_CACHE.has(safeValue.toLowerCase())) {
+    return CLUSTER_CACHE.get(safeValue.toLowerCase());
+  }
+
+  const byId = await db.collection('clusters').doc(clusterValue).get();
+  if (byId.exists) {
+    const result = { clusterId: byId.id, clusterName: byId.data()?.name || clusterValue };
+    CLUSTER_CACHE.set(safeValue.toLowerCase(), result);
+    return result;
+  }
+
+  const byName = await db.collection('clusters').where('name', '==', clusterValue).limit(1).get();
+  if (!byName.empty) {
+    const document = byName.docs[0];
+    const result = { clusterId: document.id, clusterName: document.data()?.name || clusterValue };
+    CLUSTER_CACHE.set(safeValue.toLowerCase(), result);
+    return result;
+  }
+
+  const fallback = { clusterId: clusterValue, clusterName: clusterValue };
+  CLUSTER_CACHE.set(safeValue.toLowerCase(), fallback);
+  return fallback;
+}
+
+async function upsertLeadPartnershipSource(documentId, payload) {
+  await db.collection('lead_partnership_sources').doc(documentId).set({
+    ...payload,
+    normalizedName: normalizeText(payload.name).toLowerCase(),
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+}
+
+async function deleteLeadPartnershipSource(documentId) {
+  await db.collection('lead_partnership_sources').doc(documentId).delete().catch(() => null);
+}
+
 async function getPerformanceConfig() {
   const configSnap = await db.collection('performance_score_configs').doc('attendant').get();
   return normalizeScoreConfig(configSnap.exists ? configSnap.data() : DEFAULT_ATTENDANT_SCORE_CONFIG);
@@ -789,13 +971,151 @@ async function syncLeadDerivedFields(event) {
   const data = after.data() || {};
   const monthKey = data.monthKey || deriveMonthKey(data.date || data.createdAt || data.lastUpdate);
   const leadType = data.leadType || normalizeLeadTypeValue(data.categoryName || data.productName || data.status);
+  const cityRef = await resolveCityRef(data.cityId || data.cityName || data.city);
+  const clusterId = data.clusterId || cityRef.clusterId || '';
+  let clusterName = data.clusterName || '';
 
-  if (data.monthKey === monthKey && data.leadType === leadType) {
+  if (!clusterName && clusterId) {
+    const clusterRef = await resolveClusterRef(clusterId);
+    clusterName = clusterRef.clusterName || '';
+  }
+
+  const needsUpdate = (
+    data.monthKey !== monthKey
+    || data.leadType !== leadType
+    || (clusterId && data.clusterId !== clusterId)
+    || (clusterName && data.clusterName !== clusterName)
+  );
+
+  if (!needsUpdate) {
     return null;
   }
 
-  await after.ref.set({ monthKey, leadType, updatedAt: new Date().toISOString() }, { merge: true });
-  return { monthKey, leadType };
+  await after.ref.set({
+    monthKey,
+    leadType,
+    clusterId: clusterId || null,
+    clusterName: clusterName || null,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+
+  return { monthKey, leadType, clusterId, clusterName };
+}
+
+async function syncLeadGeolocation(event) {
+  const after = event.data?.after;
+  if (!after?.exists) return null;
+
+  const data = after.data() || {};
+  const beforeData = event.data?.before?.exists ? event.data.before.data() || {} : null;
+  const address = buildLeadAddressString(data);
+  const previousAddress = beforeData ? buildLeadAddressString(beforeData) : '';
+  const addressChanged = !beforeData || address !== previousAddress;
+  const hasGeoCoordinates = Number.isFinite(Number(data.geoLat)) && Number.isFinite(Number(data.geoLng));
+  const geoAlreadyResolved = hasGeoCoordinates && data.geoStatus === 'resolved';
+
+  if (!address) {
+    return null;
+  }
+
+  if (!beforeData && geoAlreadyResolved) {
+    return null;
+  }
+
+  if (!addressChanged && geoAlreadyResolved) {
+    return null;
+  }
+
+  if (!addressChanged && data.geoStatus === 'failed') {
+    return null;
+  }
+
+  const geocoded = await geocodeAddress(address);
+  if (!geocoded?.lat || !geocoded?.lon) {
+    await after.ref.set({
+      geoStatus: 'failed',
+      geoUpdatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return null;
+  }
+
+  const geoPayload = extractAddressComponents(geocoded);
+  await after.ref.set({
+    ...geoPayload,
+    address: buildLeadAddressString({ ...data, ...geoPayload }),
+    geoLat: Number(geocoded.lat),
+    geoLng: Number(geocoded.lon),
+    geoStatus: 'resolved',
+    geoUpdatedAt: new Date().toISOString(),
+  }, { merge: true });
+
+  return {
+    geoLat: Number(geocoded.lat),
+    geoLng: Number(geocoded.lon),
+  };
+}
+
+async function syncActionPlanPartnershipSource(event) {
+  const documentId = `action_plan_${event.params?.docId}`;
+  const after = event.data?.after;
+
+  if (!after?.exists) {
+    await deleteLeadPartnershipSource(documentId);
+    return null;
+  }
+
+  const data = after.data() || {};
+  if (data.deleted || data.status !== 'Em Andamento') {
+    await deleteLeadPartnershipSource(documentId);
+    return null;
+  }
+
+  await upsertLeadPartnershipSource(documentId, {
+    name: data.name || 'Acao sem nome',
+    cityId: data.cityId || '__all__',
+    cityName: data.cityName || (data.cityId === '__all__' ? 'Todas as cidades' : data.cityId || 'Cidade nao informada'),
+    sourceType: 'action_plan',
+    sourceId: event.params?.docId,
+    status: data.status || 'Em Andamento',
+    active: true,
+    originLabel: 'Acao em Parceria',
+    startDate: normalizeDateKey(data.startDate || data.createdAt || data.updatedAt),
+    endDate: normalizeDateKey(data.endDate || data.deadline || data.updatedAt),
+    createdAt: normalizeTimestamp(data.createdAt)?.toISOString() || new Date().toISOString(),
+  });
+  return true;
+}
+
+async function syncSponsorshipPartnershipSource(event) {
+  const documentId = `sponsorship_${event.params?.docId}`;
+  const after = event.data?.after;
+
+  if (!after?.exists) {
+    await deleteLeadPartnershipSource(documentId);
+    return null;
+  }
+
+  const data = after.data() || {};
+  if (data.status !== 'Aprovado') {
+    await deleteLeadPartnershipSource(documentId);
+    return null;
+  }
+
+  const cityRef = await resolveCityRef(data.cityId || data.city || data.cityName);
+  await upsertLeadPartnershipSource(documentId, {
+    name: data.eventName || data.title || 'Evento parceiro',
+    cityId: cityRef.cityId || '__all__',
+    cityName: cityRef.cityName || 'Cidade nao informada',
+    sourceType: 'sponsorship',
+    sourceId: event.params?.docId,
+    status: data.status,
+    active: true,
+    originLabel: 'Acao em Parceria',
+    startDate: normalizeDateKey(data.dateTime || data.date || data.createdAt),
+    endDate: normalizeDateKey(data.endDate || data.dateTime || data.date || data.createdAt),
+    createdAt: normalizeTimestamp(data.createdAt)?.toISOString() || new Date().toISOString(),
+  });
+  return true;
 }
 
 async function syncAbsenceCalendarPublic(event) {
@@ -823,7 +1143,14 @@ async function syncAbsenceCalendarPublic(event) {
   return entries;
 }
 
-exports.onLeadWrite = onDocumentWritten('leads/{docId}', async (event) => syncLeadDerivedFields(event));
+exports.onLeadWrite = onDocumentWritten('leads/{docId}', async (event) => {
+  await Promise.all([
+    syncLeadDerivedFields(event),
+    syncLeadGeolocation(event),
+  ]);
+});
+exports.onActionPlanWrite = onDocumentWritten('action_plans/{docId}', async (event) => syncActionPlanPartnershipSource(event));
+exports.onSponsorshipWrite = onDocumentWritten('sponsorships/{docId}', async (event) => syncSponsorshipPartnershipSource(event));
 exports.onPerformanceCommercialInputWrite = onDocumentWritten('performance_commercial_inputs/{docId}', async (event) => recomputeFromEvent(event));
 exports.onPerformanceBehaviorReviewWrite = onDocumentWritten('performance_behavior_reviews/{docId}', async (event) => recomputeFromEvent(event));
 exports.onPerformanceFeedbackWrite = onDocumentWritten('performance_feedbacks/{docId}', async (event) => recomputeFromEvent(event));
