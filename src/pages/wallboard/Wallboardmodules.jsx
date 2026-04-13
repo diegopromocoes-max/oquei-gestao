@@ -21,6 +21,13 @@ import { colors } from '../../components/ui';
 
 // ─── Módulo 1: Operação e Equipe ──────────────────────────────────────────────
 export function Mod1Operacao({ collapsed, onToggle, rhData }) {
+  const topPositivo = Array.isArray(rhData.topPositivo) ? rhData.topPositivo : [];
+  const topNegativo = Array.isArray(rhData.topNegativo) ? rhData.topNegativo : [];
+  const lojasAbertas = Number(rhData.lojasAbertas || 0);
+  const lojasFechadas = Number(rhData.lojasFechadas || 0);
+  const atendentesTrabalhando = Number(rhData.atendentesTrabalhando || 0);
+  const atendentesAtestado = Number(rhData.atendentesAtestado || 0);
+
   return (
     <div style={styles.moduleBox}>
       <div style={styles.moduleHeader} onClick={onToggle}>
@@ -43,14 +50,14 @@ export function Mod1Operacao({ collapsed, onToggle, rhData }) {
               <div style={styles.statusBox}>
                 <Store size={22} color="#0ba360" style={{ filter: 'drop-shadow(0 0 5px rgba(11,163,96,0.6))' }} />
                 <div>
-                  <span style={styles.statusValue}>{rhData.lojasAbertas}</span>
+                  <span style={styles.statusValue}>{lojasAbertas}</span>
                   <span style={styles.statusLabel}>Lojas Abertas</span>
                 </div>
               </div>
-              <div style={{ ...styles.statusBox, border: rhData.lojasFechadas > 0 ? '1px solid rgba(248, 54, 0, 0.4)' : '1px solid #2d325a' }}>
-                <Store size={22} color={rhData.lojasFechadas > 0 ? '#f83600' : '#8b8fa3'} />
+              <div style={{ ...styles.statusBox, border: lojasFechadas > 0 ? '1px solid rgba(248, 54, 0, 0.4)' : '1px solid #2d325a' }}>
+                <Store size={22} color={lojasFechadas > 0 ? '#f83600' : '#8b8fa3'} />
                 <div>
-                  <span style={{ ...styles.statusValue, color: rhData.lojasFechadas > 0 ? '#f83600' : 'white' }}>{rhData.lojasFechadas}</span>
+                  <span style={{ ...styles.statusValue, color: lojasFechadas > 0 ? '#f83600' : 'white' }}>{lojasFechadas}</span>
                   <span style={styles.statusLabel}>Lojas Fechadas</span>
                 </div>
               </div>
@@ -59,14 +66,14 @@ export function Mod1Operacao({ collapsed, onToggle, rhData }) {
               <div style={styles.statusBox}>
                 <Users size={22} color="#00f2fe" style={{ filter: 'drop-shadow(0 0 5px rgba(0,242,254,0.6))' }} />
                 <div>
-                  <span style={styles.statusValue}>{rhData.atendentesTrabalhando}</span>
+                  <span style={styles.statusValue}>{atendentesTrabalhando}</span>
                   <span style={styles.statusLabel}>Comerciais Hoje</span>
                 </div>
               </div>
-              <div style={{ ...styles.statusBox, border: rhData.atendentesAtestado > 0 ? '1px solid rgba(249, 212, 35, 0.4)' : '1px solid #2d325a' }}>
+              <div style={{ ...styles.statusBox, border: atendentesAtestado > 0 ? '1px solid rgba(249, 212, 35, 0.4)' : '1px solid #2d325a' }}>
                 <UserX size={22} color="#f9d423" />
                 <div>
-                  <span style={{ ...styles.statusValue, color: '#f9d423' }}>{rhData.atendentesAtestado}</span>
+                  <span style={{ ...styles.statusValue, color: '#f9d423' }}>{atendentesAtestado}</span>
                   <span style={styles.statusLabel}>Atestados/Faltas</span>
                 </div>
               </div>
@@ -79,22 +86,22 @@ export function Mod1Operacao({ collapsed, onToggle, rhData }) {
             <div style={{ display: 'flex', gap: '20px', flex: 1 }}>
               <div style={{ flex: 1 }}>
                 <h4 style={styles.bhSubTitle}><ArrowUpCircle size={14} color="#0ba360" /> Top Positivos</h4>
-                {rhData.topPositivo.map((user, idx) => (
+                {topPositivo.length ? topPositivo.map((user, idx) => (
                   <div key={idx} style={styles.bhRow}>
                     <span style={styles.bhName}>{user.name}</span>
                     <span style={{ ...styles.bhVal, color: '#3cba92' }}>{user.hours}</span>
                   </div>
-                ))}
+                )) : <div style={{ ...styles.bhRow, borderBottom: 'none' }}><span style={styles.bhName}>Sem saldo positivo no momento</span></div>}
               </div>
               <div style={{ width: '1px', background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.1), transparent)' }} />
               <div style={{ flex: 1 }}>
                 <h4 style={styles.bhSubTitle}><ArrowDownCircle size={14} color="#f83600" /> Top Negativos</h4>
-                {rhData.topNegativo.map((user, idx) => (
+                {topNegativo.length ? topNegativo.map((user, idx) => (
                   <div key={idx} style={styles.bhRow}>
                     <span style={styles.bhName}>{user.name}</span>
                     <span style={{ ...styles.bhVal, color: '#f83600' }}>{user.hours}</span>
                   </div>
-                ))}
+                )) : <div style={{ ...styles.bhRow, borderBottom: 'none' }}><span style={styles.bhName}>Sem saldo negativo no momento</span></div>}
               </div>
             </div>
           </div>
@@ -106,6 +113,10 @@ export function Mod1Operacao({ collapsed, onToggle, rhData }) {
 
 // ─── Módulo 2: Tração de Vendas ───────────────────────────────────────────────
 export function Mod2Vendas({ collapsed, onToggle, salesData }) {
+  const safeCities = Array.isArray(salesData.cities) ? salesData.cities : [];
+  const safeTopSellers = Array.isArray(salesData.topSellers) ? salesData.topSellers : [];
+  const cluster = salesData.cluster || {};
+
   return (
     <div style={styles.moduleBox}>
       <div style={styles.moduleHeader} onClick={onToggle}>
@@ -125,13 +136,13 @@ export function Mod2Vendas({ collapsed, onToggle, salesData }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {/* Velocímetros globais */}
             <div style={styles.globalSpeedGrid}>
-              <BigSpeedometer title="VENDAS GLOBAIS"   current={salesData.cluster.sales}    target={salesData.cluster.salesGoal}    color1="#00f2fe" color2="#4facfe" />
-              <BigSpeedometer title="INSTALAÇÕES SLA"  current={salesData.cluster.installs} target={salesData.cluster.installsGoal} color1="#0ba360" color2="#3cba92" backlog={salesData.cluster.backlog} />
+              <BigSpeedometer title="VENDAS GLOBAIS" current={Number(cluster.sales || 0)} target={Number(cluster.salesGoal || 0)} color1="#00f2fe" color2="#4facfe" />
+              <BigSpeedometer title="INSTALAÇÕES SLA" current={Number(cluster.installs || 0)} target={Number(cluster.installsGoal || 0)} color1="#0ba360" color2="#3cba92" backlog={Number(cluster.backlog || 0)} />
             </div>
 
             {/* Barras por cidade */}
             <div style={styles.citiesSpeedGrid}>
-              {salesData.cities.map((city, idx) => (
+              {safeCities.map((city, idx) => (
                 <div key={idx} style={styles.cityDashCard}>
                   <h4 style={styles.cityDashTitle}>
                     <MapPin size={14} color="#00f2fe" /> {city.name}
@@ -152,7 +163,7 @@ export function Mod2Vendas({ collapsed, onToggle, salesData }) {
               Top 5 Vendedores (Regional)
             </h3>
             <div style={styles.sellerList}>
-              {salesData.topSellers.map((seller, index) => {
+              {safeTopSellers.length ? safeTopSellers.map((seller, index) => {
                 const isFirst = index === 0;
                 return (
                   <div key={seller.id} style={{ ...styles.sellerItem, background: isFirst ? 'rgba(249, 212, 35, 0.05)' : 'rgba(255, 255, 255, 0.02)', borderColor: isFirst ? 'rgba(249, 212, 35, 0.3)' : 'rgba(255,255,255,0.05)' }}>
@@ -170,7 +181,7 @@ export function Mod2Vendas({ collapsed, onToggle, salesData }) {
                     </div>
                   </div>
                 );
-              })}
+              }) : <div style={{ ...styles.sellerItem, justifyContent: 'center', color: 'var(--text-muted)' }}>Nenhuma venda fechada encontrada no período.</div>}
             </div>
           </div>
         </div>
@@ -181,6 +192,12 @@ export function Mod2Vendas({ collapsed, onToggle, salesData }) {
 
 // ─── Módulo 3: Saúde da Base e Churn ─────────────────────────────────────────
 export function Mod3Churn({ collapsed, onToggle, churnData }) {
+  const safeReasons = Array.isArray(churnData.churnReasons) ? churnData.churnReasons : [];
+  const safeCities = Array.isArray(churnData.cities) ? churnData.cities : [];
+  const penetrationSeries = Array.isArray(churnData.penetrationSeries) ? churnData.penetrationSeries : [];
+  const penetrationData = Array.isArray(churnData.penetrationEvolution) ? churnData.penetrationEvolution : [];
+  const clusterGrowth = churnData.clusterGrowth || '+0';
+
   return (
     <div style={styles.moduleBox}>
       <div style={styles.moduleHeader} onClick={onToggle}>
@@ -203,7 +220,7 @@ export function Mod3Churn({ collapsed, onToggle, churnData }) {
               <span style={styles.netAddsLabel}>Crescimento Líquido (Net Adds)</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <TrendingUp size={28} color="white" />
-                <span style={styles.netAddsVal}>{churnData.clusterGrowth}</span>
+                <span style={styles.netAddsVal}>{clusterGrowth}</span>
               </div>
               <div style={styles.netAddsGlow} />
             </div>
@@ -213,29 +230,34 @@ export function Mod3Churn({ collapsed, onToggle, churnData }) {
               <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Activity size={14} /> Motivos de Evasão (Mês Atual)
               </h4>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '160px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={churnData.churnReasons} innerRadius={50} outerRadius={75} paddingAngle={4} dataKey="value" stroke="none">
-                      {churnData.churnReasons.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={`url(#${entry.gradId})`} style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.2))' }} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip contentStyle={{ backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', fontSize: '11px', backdropFilter: 'blur(5px)' }} itemStyle={{ fontWeight: 'bold' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
-                {churnData.churnReasons.slice(0, 3).map((item, idx) => {
-                  const baseColor = item.gradId === 'neon-orange' ? '#f83600' : item.gradId === 'neon-purple' ? '#c471ed' : '#00f2fe';
-                  return (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#ffffff', fontWeight: 'bold' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: baseColor, boxShadow: `0 0 5px ${baseColor}` }} />
-                      {item.name}
-                    </div>
-                  );
-                })}
-              </div>
+              {safeReasons.length ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '160px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={safeReasons} innerRadius={50} outerRadius={75} paddingAngle={4} dataKey="value" stroke="none">
+                          {safeReasons.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={`url(#${entry.gradId})`} style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.2))' }} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip contentStyle={{ backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', fontSize: '11px', backdropFilter: 'blur(5px)' }} itemStyle={{ fontWeight: 'bold' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                    {safeReasons.slice(0, 3).map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#ffffff', fontWeight: 'bold' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: item.solidColor, boxShadow: `0 0 5px ${item.solidColor}` }} />
+                        {item.name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '160px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
+                  Nenhum motivo de evasão registrado neste mês.
+                </div>
+              )}
             </div>
           </div>
 
@@ -249,24 +271,37 @@ export function Mod3Churn({ collapsed, onToggle, churnData }) {
                 </div>
               </div>
               <div style={{ width: '100%', height: '220px' }}>
-                <ResponsiveContainer>
-                  <AreaChart data={churnData.penetrationEvolution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="month" stroke="#8b8fa3" tick={{ fill: '#8b8fa3', fontSize: 11, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                    <YAxis stroke="#8b8fa3" tick={{ fill: '#8b8fa3', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={val => `${val}%`} />
-                    <RechartsTooltip contentStyle={{ backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', backdropFilter: 'blur(5px)', fontSize: '12px' }} itemStyle={{ fontWeight: 'bold' }} />
-                    <Area type="monotone" dataKey="Bady Bassitt" stroke="#00f2fe" fill="url(#neon-cyan-alpha)"   strokeWidth={3} style={{ filter: 'drop-shadow(0 0 4px rgba(0,242,254,0.5))'   }} />
-                    <Area type="monotone" dataKey="Nova Granada"  stroke="#0ba360" fill="url(#neon-green-alpha)"  strokeWidth={3} style={{ filter: 'drop-shadow(0 0 4px rgba(11,163,96,0.5))'   }} />
-                    <Area type="monotone" dataKey="Nova Aliança"  stroke="#f64f59" fill="url(#neon-purple-alpha)" strokeWidth={3} style={{ filter: 'drop-shadow(0 0 4px rgba(246,79,89,0.5))'   }} />
-                    <Area type="monotone" dataKey="Borborema"     stroke="#f9d423" fill="url(#neon-orange-alpha)" strokeWidth={3} style={{ filter: 'drop-shadow(0 0 4px rgba(249,212,35,0.5))'  }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {penetrationSeries.length ? (
+                  <ResponsiveContainer>
+                    <AreaChart data={penetrationData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                      <XAxis dataKey="month" stroke="#8b8fa3" tick={{ fill: '#8b8fa3', fontSize: 11, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
+                      <YAxis stroke="#8b8fa3" tick={{ fill: '#8b8fa3', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(val) => `${val}%`} />
+                      <RechartsTooltip contentStyle={{ backgroundColor: 'rgba(22, 25, 59, 0.95)', borderColor: '#2d325a', color: '#ffffff', borderRadius: '12px', backdropFilter: 'blur(5px)', fontSize: '12px' }} itemStyle={{ fontWeight: 'bold' }} />
+                      {penetrationSeries.map((series) => (
+                        <Area
+                          key={series.key}
+                          type="monotone"
+                          dataKey={series.key}
+                          stroke={series.color}
+                          fill={`url(#${series.fillId})`}
+                          strokeWidth={3}
+                          style={{ filter: `drop-shadow(0 0 4px ${series.color}80)` }}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    Sem histórico suficiente para montar a evolução.
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Net Adds por cidade */}
             <div style={styles.citiesGrowthCard}>
-              {churnData.cities.map((city, idx) => {
+              {safeCities.length ? safeCities.map((city, idx) => {
                 const isNegative = city.growth.includes('-');
                 return (
                   <div key={idx} style={styles.cityGrowthRow}>
@@ -276,7 +311,7 @@ export function Mod3Churn({ collapsed, onToggle, churnData }) {
                     </span>
                   </div>
                 );
-              })}
+              }) : <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Nenhuma praça com movimentação no período.</div>}
             </div>
           </div>
         </div>
@@ -294,6 +329,8 @@ export function Mod4Expansion({
   filteredMegaData, isMegaFiltered,
   totalFilteredNetAdds, glowStyle,
 }) {
+  const safeFilteredMegaData = Array.isArray(filteredMegaData) ? filteredMegaData : [];
+
   return (
     <div style={{ ...styles.moduleBox, ...glowStyle, transition: 'all 0.4s ease' }}>
       <div style={styles.moduleHeader} onClick={onToggle}>
@@ -337,21 +374,27 @@ export function Mod4Expansion({
               Crescimento Líquido (Base Dia 1 vs Base Hoje)
             </h3>
             <div style={{ width: '100%', height: '340px' }}>
-              <ResponsiveContainer>
-                <ComposedChart data={filteredMegaData} margin={{ top: 35, right: 20, left: -20, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="city" axisLine={false} tickLine={false} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold', fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b8fa3', fontSize: 12 }} />
-                  <RechartsTooltip content={props => <MegaTooltip {...props} />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                  <ReferenceLine y={0} stroke="#475569" strokeWidth={2} />
-                  <Bar dataKey="netAdds" barSize={4} radius={4}>
-                    {filteredMegaData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.gradId} opacity={0.6} />
-                    ))}
-                  </Bar>
-                  <Line type="monotone" dataKey="netAdds" stroke="none" isAnimationActive dot={<NeonLollipopDot />} activeDot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
+              {safeFilteredMegaData.length ? (
+                <ResponsiveContainer>
+                  <ComposedChart data={safeFilteredMegaData} margin={{ top: 35, right: 20, left: -20, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="city" axisLine={false} tickLine={false} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold', fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b8fa3', fontSize: 12 }} />
+                    <RechartsTooltip content={(props) => <MegaTooltip {...props} />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                    <ReferenceLine y={0} stroke="#475569" strokeWidth={2} />
+                    <Bar dataKey="netAdds" barSize={4} radius={4}>
+                      {safeFilteredMegaData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.gradId} opacity={0.6} />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="netAdds" stroke="none" isAnimationActive dot={<NeonLollipopDot />} activeDot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  Nenhuma praça encontrada para os filtros selecionados.
+                </div>
+              )}
             </div>
           </div>
         </div>

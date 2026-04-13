@@ -307,11 +307,11 @@ export function Badge({ children, cor, status }) {
 // ─────────────────────────────────────────────────────────────
 // BTN
 // ─────────────────────────────────────────────────────────────
-export function Btn({ children, variant = 'primary', size = 'md', loading = false, disabled = false, onClick, style: extStyle = {}, title }) {
+export function Btn({ children, variant = 'primary', size = 'md', loading = false, disabled = false, onClick, style: extStyle = {}, title, type = 'button' }) {
   const base = { primary:S.btnPrimary, secondary:S.btnSecondary, danger:S.btnDanger, success:S.btnSuccess, icon:S.btnIcon }[variant] || S.btnPrimary;
   const sz   = { sm:{ padding:'7px 13px', fontSize:'12px' }, md:{}, lg:{ padding:'14px 26px', fontSize:'15px' } }[size] || {};
   return (
-    <button onClick={onClick} disabled={disabled || loading} title={title}
+    <button type={type} onClick={onClick} disabled={disabled || loading} title={title}
       style={{ ...base, ...sz, opacity:disabled?0.5:1, cursor:disabled||loading?'not-allowed':'pointer', ...extStyle }}
       onMouseEnter={e => { if(!disabled && !loading) e.currentTarget.style.opacity='0.8'; }}
       onMouseLeave={e => { e.currentTarget.style.opacity = disabled?'0.5':'1'; }}

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { signOut as authSignOut } from 'firebase/auth';
 
 import { auth } from '../firebase';
@@ -6,26 +6,27 @@ import LayoutGlobal from '../components/LayoutGlobal';
 import { Empty, Page, Spinner } from '../components/ui';
 import { TourGuide, resetTour } from '../components/TourGuide';
 import { usePanelAccess } from '../hooks/usePanelAccess';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { PANEL_KEYS } from '../lib/moduleCatalog';
 import { getCachedUserPreferences } from '../services/userSettings';
 
-const VisaoGeralGrowth = lazy(() => import('./VisaoGeralGrowth'));
-const HubCrescimento = lazy(() => import('../HubCrescimento'));
-const Comunicados = lazy(() => import('./Comunicados'));
-const AgendaSupervisor = lazy(() => import('./AgendaSupervisor'));
-const PatrocinioSupervisor = lazy(() => import('./PatrocinioSupervisor'));
-const SolicitarCampanha = lazy(() => import('./SolicitarCampanha'));
-const CatalogoRoteadores = lazy(() => import('./CatalogoRoteadores'));
-const LinksUteis = lazy(() => import('./LinksUteis'));
-const PlanilhasEssenciais = lazy(() => import('./PlanilhasEssenciais'));
-const JapaSupervisor = lazy(() => import('./JapaSupervisor'));
-const EventosGrowth = lazy(() => import('./EventosGrowth'));
-const GestaoMetas = lazy(() => import('./GestaoMetas'));
-const ApuracaoResultados = lazy(() => import('./ApuracaoResultados'));
-const HubOquei = lazy(() => import('./HubOquei'));
-const LaboratorioChurn = lazy(() => import('./LaboratorioChurn'));
-const OqueiInsights = lazy(() => import('../OqueiInsights'));
-const Configuracoes = lazy(() => import('./Configuracoes'));
+const VisaoGeralGrowth = lazyWithRetry(() => import('./VisaoGeralGrowth'), 'visao_geral_growth');
+const HubCrescimento = lazyWithRetry(() => import('../HubCrescimento'), 'hub_growth');
+const Comunicados = lazyWithRetry(() => import('./Comunicados'), 'comunicados_growth');
+const AgendaSupervisor = lazyWithRetry(() => import('./AgendaSupervisor'), 'agenda_growth');
+const PatrocinioSupervisor = lazyWithRetry(() => import('./PatrocinioSupervisor'), 'patrocinio_growth');
+const SolicitarCampanha = lazyWithRetry(() => import('./SolicitarCampanha'), 'campanha_growth');
+const CatalogoRoteadores = lazyWithRetry(() => import('./CatalogoRoteadores'), 'roteadores_growth');
+const LinksUteis = lazyWithRetry(() => import('./LinksUteis'), 'links_growth');
+const PlanilhasEssenciais = lazyWithRetry(() => import('./PlanilhasEssenciais'), 'planilhas_growth');
+const JapaSupervisor = lazyWithRetry(() => import('./JapaSupervisor'), 'japa_growth');
+const EventosGrowth = lazyWithRetry(() => import('./EventosGrowth'), 'eventos_growth');
+const GestaoMetas = lazyWithRetry(() => import('./GestaoMetas'), 'metas_growth');
+const ApuracaoResultados = lazyWithRetry(() => import('./ApuracaoResultados'), 'apuracao_growth');
+const HubOquei = lazyWithRetry(() => import('./HubOquei'), 'hub_oquei_growth');
+const LaboratorioChurn = lazyWithRetry(() => import('./LaboratorioChurn'), 'churn_growth');
+const OqueiInsights = lazyWithRetry(() => import('../OqueiInsights'), 'insights_growth');
+const Configuracoes = lazyWithRetry(() => import('./Configuracoes'), 'config_growth');
 
 const Loading = () => (
   <div style={{ display: 'flex', height: '100%', justifyContent: 'center', alignItems: 'center', padding: '60px' }}>

@@ -22,7 +22,7 @@ export function normalizeRole(value) {
     .replace(/[\s_-]/g, '')
     .trim();
 
-  if (['coordinator', 'coordenador', 'master', 'diretor'].includes(normalized)) {
+  if (['coordinator', 'coordenador', 'coordenadora', 'master', 'diretor'].includes(normalized)) {
     return ROLE_KEYS.COORDINATOR;
   }
 

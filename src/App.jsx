@@ -1,7 +1,7 @@
 // ============================================================
 //  App.jsx - Oquei Gestao
 // ============================================================
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,6 +10,7 @@ import { auth, db } from './firebase';
 import { injectGlobalCSS, injectPublicCSS } from './globalStyles';
 import { AppErrorBoundary } from './components/ModuleErrorBoundary';
 import { Btn, Card, Spinner, colors } from './components/ui';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 import { ROLE_KEYS, normalizeRole } from './lib/roleUtils';
 import OqueiInsights from './OqueiInsights';
 import CRMAtendente from './pages/CRMAtendente';
@@ -18,7 +19,7 @@ import PainelCoordenador from './pages/PainelCoordenador';
 import PainelGrowthTeam from './pages/PainelGrowthTeam';
 import PainelSupervisor from './pages/PainelSupervisor';
 
-const PublicSurveyAccess = lazy(() => import('./OqueiInsights/pages/PublicSurveyAccess'));
+const PublicSurveyAccess = lazyWithRetry(() => import('./OqueiInsights/pages/PublicSurveyAccess'), 'public_survey_access');
 
 const PublicSpinner = () => (
   <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>

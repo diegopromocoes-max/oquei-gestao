@@ -669,6 +669,7 @@ function buildAddressSearchVariants(address) {
   return uniqueAddressParts([
     [streetPart, neighborhoodPart, cityPart, 'Brasil'].filter(Boolean).join(', '),
     [streetPart, cityPart, 'Brasil'].filter(Boolean).join(', '),
+    [neighborhoodPart, cityPart, 'Brasil'].filter(Boolean).join(', '),
     [safeAddress, 'Brasil'].filter(Boolean).join(', '),
     safeAddress,
   ]);
@@ -679,11 +680,21 @@ function scoreGeocodeCandidate(candidate = {}, address = '') {
   const display = normalizeText(candidate.display_name || '');
   const safeAddress = normalizeText(address).toLowerCase();
   const street = normalizeText(parsed.addressStreet).toLowerCase();
+  const city = normalizeText(parsed.cityName).toLowerCase();
   const neighborhood = normalizeText(parsed.addressNeighborhood).toLowerCase();
+  const parts = normalizeText(address).split('-').map((item) => normalizeText(item));
+  const expectedStreet = (parts[0] || '').toLowerCase();
+  const expectedNeighborhood = (parts[1] || '').toLowerCase();
+  const expectedCity = (parts[2] || '').toLowerCase();
 
   let score = 0;
   if (street && safeAddress.includes(street)) score += 30;
+  if (expectedStreet && street === expectedStreet) score += 18;
   if (neighborhood && safeAddress.includes(neighborhood)) score += 34;
+  if (expectedNeighborhood && neighborhood === expectedNeighborhood) score += 20;
+  if (expectedCity && city === expectedCity) score += 70;
+  else if (expectedCity && display.includes(expectedCity)) score += 45;
+  else if (expectedCity) score -= 90;
   if (display.includes(safeAddress)) score += 20;
   if (display.includes('brasil')) score += 4;
   if (String(candidate.addresstype || candidate.type || '').match(/house|building|residential|road/i)) score += 6;
@@ -697,6 +708,7 @@ function extractAddressComponents(result = {}) {
     addressStreet: address.road || address.pedestrian || address.footway || address.path || address.cycleway || '',
     addressNumber: address.house_number || '',
     addressNeighborhood: address.suburb || address.neighbourhood || address.quarter || address.borough || address.city_district || address.residential || address.hamlet || '',
+    cityName: address.city || address.town || address.village || address.municipality || address.county || '',
     geoFormattedAddress: result.display_name || '',
   };
 }
@@ -717,6 +729,9 @@ async function geocodeAddress(address) {
   }
 
   const variants = buildAddressSearchVariants(address);
+  const parts = normalizeText(address).split('-').map((item) => normalizeText(item));
+  const expectedCity = (parts[2] || '').toLowerCase();
+
   for (const variant of variants) {
     const response = await fetch(`${NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&addressdetails=1&countrycodes=br&q=${encodeURIComponent(variant)}`, {
       headers: {
@@ -729,15 +744,36 @@ async function geocodeAddress(address) {
       throw new Error(`Nominatim geocoding request failed with status ${response.status}`);
     }
 
-    const payload = await response.json();
-    if (!Array.isArray(payload) || !payload.length) {
-      continue;
-    }
+      const payload = await response.json();
+      if (!Array.isArray(payload) || !payload.length) {
+        continue;
+      }
 
-    return payload.sort((left, right) => scoreGeocodeCandidate(right, address) - scoreGeocodeCandidate(left, address))[0];
+      const cityMatched = expectedCity
+        ? payload.filter((candidate) => {
+          const parsed = extractAddressComponents(candidate);
+          const candidateCity = normalizeText(parsed.cityName).toLowerCase();
+          const display = normalizeText(candidate.display_name || '').toLowerCase();
+          return candidateCity === expectedCity || display.includes(expectedCity);
+        })
+        : payload;
+
+      const candidates = cityMatched.length ? cityMatched : payload;
+      const [bestCandidate] = candidates.sort((left, right) => scoreGeocodeCandidate(right, address) - scoreGeocodeCandidate(left, address));
+
+      if (expectedCity) {
+        const parsed = extractAddressComponents(bestCandidate);
+        const candidateCity = normalizeText(parsed.cityName).toLowerCase();
+        const display = normalizeText(bestCandidate.display_name || '').toLowerCase();
+        if (candidateCity !== expectedCity && !display.includes(expectedCity)) {
+          continue;
+        }
+      }
+
+      return bestCandidate;
+    }
+    return null;
   }
-  return null;
-}
 
 async function resolveCityRef(cityValue) {
   const safeValue = normalizeText(cityValue);
@@ -1019,6 +1055,10 @@ async function syncLeadGeolocation(event) {
   }
 
   if (!beforeData && geoAlreadyResolved) {
+    return null;
+  }
+
+  if (geoAlreadyResolved) {
     return null;
   }
 

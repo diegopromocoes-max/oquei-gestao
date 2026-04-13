@@ -114,6 +114,7 @@ export const MODULE_CATALOG = [
   buildModule(PANEL_KEYS.COORDINATOR, 'conteudos_digitais', 'Conteúdos Digitais', 'Marketing', MonitorPlay, colors.info, ROLE_KEYS.COORDINATOR),
   buildModule(PANEL_KEYS.COORDINATOR, 'reunioes', 'Agenda', 'Agenda', CalendarClock, colors.primary, ROLE_KEYS.COORDINATOR),
   buildModule(PANEL_KEYS.COORDINATOR, 'roteadores', 'Catálogo Roteadores', 'Ferramentas', Router, colors.info, ROLE_KEYS.COORDINATOR),
+  buildModule(PANEL_KEYS.COORDINATOR, 'devolucoes', 'Devoluções', 'Ferramentas', FileCheck, colors.success, ROLE_KEYS.COORDINATOR),
   buildModule(PANEL_KEYS.COORDINATOR, 'configuracoes', 'Configurações', 'Ferramentas', Settings, colors.primary, ROLE_KEYS.COORDINATOR),
   buildModule(PANEL_KEYS.COORDINATOR, 'links', 'Links Úteis', 'Ferramentas', LayoutGrid, colors.neutral, ROLE_KEYS.COORDINATOR),
 
@@ -145,6 +146,7 @@ export const MODULE_CATALOG = [
   buildModule(PANEL_KEYS.SUPERVISOR, 'conteudos_digitais', 'Conteúdos Digitais', 'Marketing', MonitorPlay, colors.info, ROLE_KEYS.SUPERVISOR),
   buildModule(PANEL_KEYS.SUPERVISOR, 'reunioes', 'Agenda', 'Agenda', CalendarClock, colors.primary, ROLE_KEYS.SUPERVISOR),
   buildModule(PANEL_KEYS.SUPERVISOR, 'roteadores', 'Catálogo Roteadores', 'Ferramentas', Router, colors.info, ROLE_KEYS.SUPERVISOR),
+  buildModule(PANEL_KEYS.SUPERVISOR, 'devolucoes', 'Devoluções', 'Ferramentas', FileCheck, colors.success, ROLE_KEYS.SUPERVISOR),
   buildModule(PANEL_KEYS.SUPERVISOR, 'configuracoes', 'Configurações', 'Ferramentas', Settings, colors.primary, ROLE_KEYS.SUPERVISOR),
   buildModule(PANEL_KEYS.SUPERVISOR, 'links', 'Links Úteis', 'Ferramentas', LayoutGrid, colors.neutral, ROLE_KEYS.SUPERVISOR),
 
@@ -175,6 +177,8 @@ export const MODULE_CATALOG = [
   buildModule(PANEL_KEYS.ATTENDANT, 'rh', 'Solicitações RH', 'Ferramentas', FileCheck, colors.warning, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'colinhas', 'Colinhas', 'Ferramentas', BookMarked, colors.purple, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'desencaixe', 'Caixa da Loja', 'Ferramentas', Wallet, colors.success, ROLE_KEYS.ATTENDANT),
+  buildModule(PANEL_KEYS.ATTENDANT, 'roteadores', 'Catálogo Roteadores', 'Ferramentas', Router, colors.info, ROLE_KEYS.ATTENDANT),
+  buildModule(PANEL_KEYS.ATTENDANT, 'devolucoes', 'Devoluções', 'Ferramentas', FileCheck, colors.success, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'manual', 'Manual', 'Ferramentas', BookOpen, colors.info, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'japa', 'Ações do Japa', 'Consulta & Escala', Zap, colors.warning, ROLE_KEYS.ATTENDANT),
   buildModule(PANEL_KEYS.ATTENDANT, 'escala', 'Escala da Rede', 'Consulta & Escala', Calendar, colors.primary, ROLE_KEYS.ATTENDANT),

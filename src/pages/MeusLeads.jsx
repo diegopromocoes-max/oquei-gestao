@@ -15,6 +15,7 @@ import {
 
 import LeadAddressMapModal from '../components/LeadAddressMapModal';
 import { Btn, Card, InfoBox, Modal, Page, colors, styles as uiStyles } from '../components/ui';
+import { LEAD_GEO_STATUS, hasValidLeadCoordinates, normalizeLeadGeoStatus } from '../lib/leadGeo';
 import { deleteLead, listenMyLeads, updateLeadDetails, updateLeadStatus } from '../services/leads';
 import {
   createLeadDiscardReason,
@@ -32,6 +33,7 @@ const KANBAN_COLUMNS = [
 function normalizeLeadForEdit(lead) {
   return {
     ...lead,
+    id: lead?.id || lead?.leadId || lead?.docId || '',
     nome: lead.customerName || '',
     tel: lead.customerPhone || '',
     email: lead.customerEmail || '',
@@ -41,7 +43,7 @@ function normalizeLeadForEdit(lead) {
     bairro: lead.addressNeighborhood || '',
     geoLat: lead.geoLat || null,
     geoLng: lead.geoLng || null,
-    geoStatus: lead.geoStatus || 'pending',
+    geoStatus: normalizeLeadGeoStatus(lead.geoStatus),
     geoFormattedAddress: lead.geoFormattedAddress || '',
     status: lead.status || 'Em negociacao',
     discardMotive: lead.discardMotive || '',
@@ -75,6 +77,8 @@ export default function MeusLeads({ userData, onNavigate }) {
   const [newDiscardReasonName, setNewDiscardReasonName] = useState('');
   const [creatingDiscardReason, setCreatingDiscardReason] = useState(false);
   const [discardReasonError, setDiscardReasonError] = useState('');
+  const [addressBaseline, setAddressBaseline] = useState(null);
+  const [pendingAddressInvalidation, setPendingAddressInvalidation] = useState(null);
 
   const showToast = (message, type = 'success') => {
     setNotification({ message, type });
@@ -113,6 +117,20 @@ export default function MeusLeads({ userData, onNavigate }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!updateModal) {
+      setAddressBaseline(null);
+      setPendingAddressInvalidation(null);
+      return;
+    }
+
+    setAddressBaseline({
+      logradouro: updateModal.logradouro || '',
+      numero: updateModal.numero || '',
+      bairro: updateModal.bairro || '',
+    });
+  }, [updateModal?.id]);
 
   const filteredLeads = useMemo(() => (
     myLeads
@@ -175,16 +193,57 @@ export default function MeusLeads({ userData, onNavigate }) {
     setUpdateModal((current) => ({
       ...current,
       [field]: value,
-      geoStatus: current.geoLat || current.geoLng ? 'pending' : current.geoStatus,
+    }));
+  };
+
+  const handleEditAddressBlur = (field) => {
+    if (!updateModal || !addressBaseline || !hasValidLeadCoordinates(updateModal) || pendingAddressInvalidation) return;
+
+    const previousValue = String(addressBaseline[field] || '');
+    const nextValue = String(updateModal[field] || '');
+    if (previousValue === nextValue) return;
+
+    setPendingAddressInvalidation({ field, previousValue, nextValue });
+  };
+
+  const confirmAddressInvalidation = () => {
+    if (!pendingAddressInvalidation) return;
+
+    setUpdateModal((current) => ({
+      ...current,
       geoLat: null,
       geoLng: null,
       geoFormattedAddress: '',
+      geoStatus: LEAD_GEO_STATUS.PENDING,
     }));
+    setAddressBaseline((current) => ({
+      ...(current || {}),
+      logradouro: String(updateModal?.logradouro || ''),
+      numero: String(updateModal?.numero || ''),
+      bairro: String(updateModal?.bairro || ''),
+    }));
+    setPendingAddressInvalidation(null);
+    showToast('Coordenadas antigas removidas. Confirme um novo ponto no mapa antes de salvar.', 'success');
+  };
+
+  const cancelAddressInvalidation = () => {
+    if (!pendingAddressInvalidation) return;
+
+    setUpdateModal((current) => ({
+      ...current,
+      [pendingAddressInvalidation.field]: pendingAddressInvalidation.previousValue,
+    }));
+    setPendingAddressInvalidation(null);
   };
 
   const handleSave = async (event) => {
     event?.preventDefault();
     if (!updateModal) return;
+    if (!String(updateModal.id || '').trim()) {
+      console.error('Lead sem id valido para edicao:', updateModal);
+      showToast('Nao foi possivel identificar o lead para salvar.', 'error');
+      return;
+    }
     if (updateModal.status === 'Descartado' && !updateModal.discardMotive) {
       showToast('Defina o motivo da perda.', 'error');
       return;
@@ -379,6 +438,7 @@ export default function MeusLeads({ userData, onNavigate }) {
           setShowNewDiscardReasonCreator(false);
           setNewDiscardReasonName('');
           setDiscardReasonError('');
+          setPendingAddressInvalidation(null);
         }}
         title="Editar lead"
         size="lg"
@@ -391,6 +451,7 @@ export default function MeusLeads({ userData, onNavigate }) {
                 setShowNewDiscardReasonCreator(false);
                 setNewDiscardReasonName('');
                 setDiscardReasonError('');
+                setPendingAddressInvalidation(null);
               }}
             >
               Cancelar
@@ -433,22 +494,37 @@ export default function MeusLeads({ userData, onNavigate }) {
               <div style={{ ...uiStyles.formRow, marginBottom: '14px' }}>
                 <div style={{ display: 'grid', gap: '6px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Logradouro</label>
-                  <input value={updateModal.logradouro} onChange={(event) => handleEditAddressChange('logradouro', event.target.value)} style={uiStyles.input} />
+                  <input
+                    value={updateModal.logradouro}
+                    onChange={(event) => handleEditAddressChange('logradouro', event.target.value)}
+                    onBlur={() => handleEditAddressBlur('logradouro')}
+                    style={uiStyles.input}
+                  />
                 </div>
                 <div style={{ display: 'grid', gap: '6px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Numero</label>
-                  <input value={updateModal.numero} onChange={(event) => handleEditAddressChange('numero', event.target.value)} style={uiStyles.input} />
+                  <input
+                    value={updateModal.numero}
+                    onChange={(event) => handleEditAddressChange('numero', event.target.value)}
+                    onBlur={() => handleEditAddressBlur('numero')}
+                    style={uiStyles.input}
+                  />
                 </div>
                 <div style={{ display: 'grid', gap: '6px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bairro</label>
-                  <input value={updateModal.bairro} onChange={(event) => handleEditAddressChange('bairro', event.target.value)} style={uiStyles.input} />
+                  <input
+                    value={updateModal.bairro}
+                    onChange={(event) => handleEditAddressChange('bairro', event.target.value)}
+                    onBlur={() => handleEditAddressBlur('bairro')}
+                    style={uiStyles.input}
+                  />
                 </div>
               </div>
 
               <InfoBox type={updateModal.geoLat && updateModal.geoLng ? 'success' : 'info'}>
                 {updateModal.geoLat && updateModal.geoLng
-                  ? 'Endereco com coordenadas prontas para aparecer no mapa.'
-                  : 'Se o endereco for preenchido agora, o lead sera geocodificado e podera aparecer no mapa quando as coordenadas forem resolvidas.'}
+                  ? 'Esse lead ja tem coordenadas confirmadas. Se o endereco mudar, voce precisara confirmar um novo ponto.'
+                  : 'Use o mapa para confirmar o ponto do lead. O endereco textual nao define a localizacao sozinho.'}
               </InfoBox>
             </Card>
 
@@ -538,7 +614,7 @@ export default function MeusLeads({ userData, onNavigate }) {
       <LeadAddressMapModal
         open={editMapOpen}
         onClose={() => setEditMapOpen(false)}
-        cityName={userData?.cityName || ''}
+        cityName={updateModal?.cityName || userData?.cityName || ''}
         initialValue={updateModal}
         onConfirm={(location) => {
           setUpdateModal((current) => ({
@@ -546,14 +622,48 @@ export default function MeusLeads({ userData, onNavigate }) {
             logradouro: location.logradouro || current.logradouro || '',
             numero: location.numero || current.numero || '',
             bairro: location.bairro || current.bairro || '',
-            geoLat: location.geoLat || null,
-            geoLng: location.geoLng || null,
+            geoLat: location.geoLat ?? null,
+            geoLng: location.geoLng ?? null,
             geoFormattedAddress: location.geoFormattedAddress || '',
-            geoStatus: location.geoStatus || 'resolved',
+            geoStatus: normalizeLeadGeoStatus(location.geoStatus),
           }));
+          setAddressBaseline({
+            logradouro: location.logradouro || updateModal?.logradouro || '',
+            numero: location.numero || updateModal?.numero || '',
+            bairro: location.bairro || updateModal?.bairro || '',
+          });
           setEditMapOpen(false);
         }}
       />
+
+      <Modal
+        open={Boolean(pendingAddressInvalidation)}
+        onClose={cancelAddressInvalidation}
+        title="Endereco alterado"
+        footer={(
+          <>
+            <Btn variant="secondary" onClick={cancelAddressInvalidation}>
+              Manter coordenadas atuais
+            </Btn>
+            <Btn variant="danger" onClick={confirmAddressInvalidation}>
+              Limpar coordenadas
+            </Btn>
+          </>
+        )}
+      >
+        {pendingAddressInvalidation ? (
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <InfoBox type="warning">
+              O endereco foi alterado depois que este lead ja tinha coordenadas confirmadas. Se continuar, as coordenadas atuais serao removidas e sera preciso confirmar um novo ponto no mapa.
+            </InfoBox>
+            <div style={{ display: 'grid', gap: '8px', fontSize: '13px', color: 'var(--text-main)' }}>
+              <div><strong>Campo alterado:</strong> {pendingAddressInvalidation.field}</div>
+              <div><strong>Valor anterior:</strong> {pendingAddressInvalidation.previousValue || '-'}</div>
+              <div><strong>Novo valor:</strong> {pendingAddressInvalidation.nextValue || '-'}</div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       {notification && (
         <div style={{ position: 'fixed', bottom: '30px', right: '30px', padding: '16px 24px', borderRadius: '14px', color: 'white', background: notification.type === 'error' ? colors.danger : colors.success, zIndex: 9999, fontWeight: 900, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>

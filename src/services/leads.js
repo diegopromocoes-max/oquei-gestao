@@ -1,5 +1,6 @@
 import { db, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, updateDoc, doc, deleteDoc, getDocs } from 'firebase/firestore';
+import { LEAD_GEO_STATUS, normalizeLeadGeoStatus } from '../lib/leadGeo';
 
 export const LEAD_STATUS_SALE = ['Contratado', 'Instalado'];
 
@@ -65,10 +66,11 @@ function buildAddress(formData = {}) {
 
 function buildGeoPayload(formData = {}) {
   const hasGeo = Number.isFinite(Number(formData.geoLat)) && Number.isFinite(Number(formData.geoLng));
+  const geoStatus = normalizeLeadGeoStatus(formData.geoStatus);
   return {
     geoLat: hasGeo ? Number(formData.geoLat) : null,
     geoLng: hasGeo ? Number(formData.geoLng) : null,
-    geoStatus: hasGeo ? (formData.geoStatus || 'resolved') : (formData.geoStatus || 'pending'),
+    geoStatus: hasGeo ? geoStatus : LEAD_GEO_STATUS.PENDING,
     geoFormattedAddress: formData.geoFormattedAddress || '',
     geoUpdatedAt: hasGeo ? new Date().toISOString() : null,
   };
@@ -124,7 +126,7 @@ export const listenMyLeads = (uid, callback, monthKey = '', onError) => {
   const q = query(collection(db, "leads"), ...constraints);
   return onSnapshot(q, (snap) => {
     const leads = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
+      .map(d => ({ ...d.data(), id: d.id }))
       .sort((left, right) => {
         const leftDate = String(left.date || left.monthKey || '');
         const rightDate = String(right.date || right.monthKey || '');
@@ -158,6 +160,10 @@ export const updateLeadStatus = async (leadId, newStatus, discardData = {}) => {
 };
 
 export const updateLeadDetails = async (leadId, leadData = {}) => {
+  if (!String(leadId || '').trim()) {
+    throw new Error('Lead invalido para atualizacao.');
+  }
+
   const personalPayload = buildPersonalPayload(leadData);
   const originPayload = buildOriginPayload(leadData);
   const payload = {
@@ -188,7 +194,7 @@ export const listAttendantLeadOptions = async (uid) => {
 
   const snapshot = await getDocs(query(collection(db, 'leads'), where('attendantId', '==', uid)));
   return snapshot.docs
-    .map((document) => ({ id: document.id, ...document.data() }))
+    .map((document) => ({ ...document.data(), id: document.id }))
     .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')));
 };
 

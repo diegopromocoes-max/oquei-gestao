@@ -4,34 +4,79 @@ const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_SCRIPT_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
 
-const BASE_MAP_PROVIDERS = [
+const OSM_STANDARD_SPEC = {
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  options: {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+  },
+};
+
+const CARTO_VOYAGER_SPEC = {
+  url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  options: {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 20,
+  },
+};
+
+const CARTO_DARK_SPEC = {
+  url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  options: {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  },
+};
+
+const ESRI_SATELLITE_SPEC = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  options: {
+    attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics',
+    maxZoom: 19,
+  },
+};
+
+const CARTO_VOYAGER_LABELS_SPEC = {
+  url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
+  options: {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 20,
+    pane: 'overlayPane',
+  },
+};
+
+const MAP_LAYER_CATALOG = [
   {
-    key: 'carto-dark',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    },
+    key: 'osm-standard',
+    label: 'Mapa padrao',
+    layers: [OSM_STANDARD_SPEC],
   },
   {
     key: 'carto-voyager',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    },
+    label: 'Mapa urbano',
+    layers: [CARTO_VOYAGER_SPEC],
   },
   {
-    key: 'osm-standard',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    options: {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    },
+    key: 'carto-dark',
+    label: 'Modo black',
+    layers: [CARTO_DARK_SPEC],
+  },
+  {
+    key: 'esri-satellite',
+    label: 'Satelite',
+    layers: [ESRI_SATELLITE_SPEC],
+  },
+  {
+    key: 'esri-satellite-labels',
+    label: 'Satelite com rotulos',
+    layers: [ESRI_SATELLITE_SPEC, CARTO_VOYAGER_LABELS_SPEC],
   },
 ];
+
+const MAP_LAYER_LOOKUP = Object.fromEntries(MAP_LAYER_CATALOG.map((layer) => [layer.key, layer]));
 
 let leafletPromise = null;
 
@@ -76,7 +121,9 @@ function scoreSearchResult(result, { cityName = '', neighborhood = '', street = 
 
   let score = 0;
 
-  if (normalizedCity && (resultCity === normalizedCity || display.includes(normalizedCity))) score += 45;
+  if (normalizedCity && resultCity === normalizedCity) score += 70;
+  else if (normalizedCity && display.includes(normalizedCity)) score += 45;
+  else if (normalizedCity) score -= 80;
   if (normalizedNeighborhood && (resultNeighborhood === normalizedNeighborhood || display.includes(normalizedNeighborhood))) score += 35;
   if (normalizedStreet && (resultStreet === normalizedStreet || display.includes(normalizedStreet))) score += 30;
   if (normalizedNumber && display.includes(normalizedNumber)) score += 16;
@@ -110,14 +157,57 @@ export function createLeafletPinIcon(color = '#2563eb') {
   return window.L.divIcon({
     className: 'oquei-leaflet-pin',
     html: `
-      <div style="position:relative;width:22px;height:22px;">
-        <span style="position:absolute;inset:0;border-radius:999px;background:${safeColor};border:3px solid #ffffff;box-shadow:0 8px 18px rgba(15,23,42,0.28);display:block;"></span>
+      <div style="position:relative;width:26px;height:36px;display:flex;align-items:flex-start;justify-content:center;">
+        <span style="position:absolute;top:1px;left:50%;width:20px;height:20px;border-radius:999px;background:#ffffff;transform:translateX(-50%);box-shadow:0 8px 18px rgba(15,23,42,0.18);"></span>
+        <span style="position:absolute;top:0;left:50%;width:26px;height:26px;border-radius:999px 999px 999px 0;background:${safeColor};transform:translateX(-50%) rotate(-45deg);box-shadow:0 10px 20px rgba(15,23,42,0.22);"></span>
+        <span style="position:absolute;top:7px;left:50%;width:10px;height:10px;border-radius:999px;background:${safeColor};border:3px solid #ffffff;transform:translateX(-50%);z-index:2;"></span>
       </div>
     `,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-    popupAnchor: [0, -12],
+    iconSize: [26, 36],
+    iconAnchor: [13, 34],
+    popupAnchor: [0, -30],
   });
+}
+
+function resolveMapLayerDefinition(layerKey = 'osm-standard') {
+  return MAP_LAYER_LOOKUP[layerKey] || MAP_LAYER_LOOKUP['osm-standard'];
+}
+
+export function getMapLayerCatalog() {
+  return MAP_LAYER_CATALOG.map(({ key, label }) => ({ key, label }));
+}
+
+export function createLeafletMapLayer(L, layerKey = 'osm-standard', { onFallback } = {}) {
+  if (!L) {
+    return null;
+  }
+
+  const requestedDefinition = resolveMapLayerDefinition(layerKey);
+  const fallbackDefinition = resolveMapLayerDefinition('osm-standard');
+  const group = L.layerGroup();
+  let activeLayers = [];
+  let fallbackApplied = false;
+
+  const mountDefinition = (definition, allowFallback = true) => {
+    activeLayers.forEach((layer) => group.removeLayer(layer));
+    activeLayers = definition.layers.map((spec) => {
+      const tileLayer = L.tileLayer(spec.url, spec.options);
+      if (allowFallback && definition.key !== fallbackDefinition.key) {
+        tileLayer.on('tileerror', () => {
+          if (fallbackApplied) return;
+          fallbackApplied = true;
+          mountDefinition(fallbackDefinition, false);
+          onFallback?.(fallbackDefinition.key, definition.key);
+        });
+      }
+      group.addLayer(tileLayer);
+      return tileLayer;
+    });
+    group.__oqueiLayerKey = definition.key;
+  };
+
+  mountDefinition(requestedDefinition, true);
+  return group;
 }
 
 async function fetchNominatim(url) {
@@ -151,13 +241,26 @@ export async function searchAddress(query, cityName = '', context = {}) {
     }
   }
 
-  return (Array.isArray(results) ? results : [])
+  const normalizedCity = normalizeText(cityName);
+  const mappedResults = (Array.isArray(results) ? results : [])
     .map((item) => ({
       ...item,
       lat: Number(item.lat),
       lng: Number(item.lon),
       ...parseNominatimAddress(item),
-    }))
+    }));
+
+  const cityMatchedResults = normalizedCity
+    ? mappedResults.filter((item) => {
+      const resultCity = normalizeText(item.cidade || item.city || '');
+      const display = normalizeText(item.display_name || '');
+      return resultCity === normalizedCity || display.includes(normalizedCity);
+    })
+    : mappedResults;
+
+  const candidates = cityMatchedResults.length ? cityMatchedResults : mappedResults;
+
+  return candidates
     .sort((left, right) => (
       scoreSearchResult(right, {
         cityName,
@@ -198,31 +301,8 @@ export function addProfessionalTileLayer(L, mapInstance) {
     return null;
   }
 
-  let activeLayer = null;
-  let providerIndex = 0;
-  let switched = false;
-
-  const applyProvider = (index) => {
-    const provider = BASE_MAP_PROVIDERS[index] || BASE_MAP_PROVIDERS[0];
-    const layer = L.tileLayer(provider.url, provider.options);
-
-    layer.on('tileerror', () => {
-      if (switched || providerIndex >= BASE_MAP_PROVIDERS.length - 1) {
-        return;
-      }
-      switched = true;
-      providerIndex += 1;
-      if (activeLayer) {
-        mapInstance.removeLayer(activeLayer);
-      }
-      activeLayer = applyProvider(providerIndex);
-    });
-
-    layer.addTo(mapInstance);
-    return layer;
-  };
-
-  activeLayer = applyProvider(providerIndex);
+  const activeLayer = createLeafletMapLayer(L, 'osm-standard');
+  activeLayer?.addTo(mapInstance);
   return activeLayer;
 }
 

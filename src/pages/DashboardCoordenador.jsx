@@ -1,526 +1,399 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs, query, where, updateDoc, doc } from 'firebase/firestore';
-import {
-  Store, UserPlus, TrendingUp, Zap, AlertCircle,
-  RefreshCw, Activity, MapPin, Flame, FileCheck,
-  Megaphone, Target, ShieldAlert, Calendar,
-  CheckCircle2, FileText, UserCheck, ListChecks,
-  X, Bell, ArrowRight, CheckCircle
-} from 'lucide-react';
-import { colors } from '../styles/globalStyles';
-import { loadMonthlySalesScope } from '../services/monthlySalesService';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckCircle, CheckCircle2, FileCheck, FileText, Flame, HeartHandshake, ListChecks, MapPin, Megaphone, RefreshCw, ShieldAlert, Target, TrendingUp, UserCheck, UserPlus, X, Zap } from 'lucide-react';
 
-// ── Helpers ──────────────────────────────────────────────────
+import { db } from '../firebase';
+import { loadCoordinatorDashboardData, createEmptyCoordinatorDashboardPayload } from '../services/coordinatorDashboardService';
+import { colors } from '../styles/globalStyles';
+
+const monthKeyNow = () => new Date().toISOString().slice(0, 7);
+
 const getDatesInRange = (start, end) => {
   if (!start || !end) return [];
   const dates = [];
-  let cur = new Date(start + 'T12:00:00');
-  const stop = new Date(end + 'T12:00:00');
-  while (cur <= stop) {
-    dates.push(cur.toISOString().split('T')[0]);
-    cur.setDate(cur.getDate() + 1);
+  let current = new Date(`${start}T12:00:00`);
+  const stop = new Date(`${end}T12:00:00`);
+  while (current <= stop) {
+    dates.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
   }
   return dates;
 };
 
-const horasAte = (dateStr) => {
-  const alvo = new Date(dateStr + 'T00:00:00');
-  return Math.ceil((alvo - new Date()) / (1000 * 60 * 60));
+const horasAte = (dateStr) => Math.ceil((new Date(`${dateStr}T00:00:00`) - new Date()) / (1000 * 60 * 60));
+
+const formatDate = (value, options = { day: '2-digit', month: 'short' }) => {
+  if (!value) return 'Sem data';
+  const safeValue = String(value).includes('T') ? value : `${value}T12:00:00`;
+  const parsed = new Date(safeValue);
+  if (Number.isNaN(parsed.getTime())) return 'Sem data';
+  return parsed.toLocaleDateString('pt-BR', options);
 };
 
-// ── Notificação flutuante de urgência ────────────────────────
+const formatDateTime = (dateValue, timeValue = '') => (timeValue ? `${formatDate(dateValue)} - ${timeValue}` : formatDate(dateValue));
+const formatNumber = (value) => new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+
+const sparkPath = (values = [], width = 280, height = 88) => {
+  if (!values.length) return '';
+  const max = Math.max(...values, 1);
+  return values.map((value, index) => {
+    const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
+    const y = height - ((value / max) * height);
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+};
+
+function SectionHeader({ icon: Icon, title, subtitle, actionLabel, onAction, color = colors.primary }) {
+  return (
+    <div style={styles.sectionHeader}>
+      <div>
+        <div style={styles.sectionTitle}><Icon size={15} color={color} />{title}</div>
+        {subtitle ? <p style={styles.sectionSubtitle}>{subtitle}</p> : null}
+      </div>
+      {actionLabel ? <button type="button" onClick={onAction} style={styles.actionBtn(color)}>{actionLabel}</button> : null}
+    </div>
+  );
+}
+
+function GaugeCard({ title, subtitle, current = 0, target = 0, accent, icon: Icon, inverse = false, currentLabel, targetLabel, helper }) {
+  const safeCurrent = Number(current || 0);
+  const safeTarget = Number(target || 0);
+  const ratio = inverse
+    ? (safeTarget > 0 ? Math.max(0, Math.min(1, 1 - (safeCurrent / safeTarget))) : (safeCurrent === 0 ? 1 : 0))
+    : (safeTarget > 0 ? Math.max(0, Math.min(1, safeCurrent / safeTarget)) : 0);
+  const circumference = Math.PI * 84;
+
+  return (
+    <div style={styles.gaugeCard}>
+      <div style={styles.gaugeGlow(accent)} />
+      <div style={styles.gaugeHeader}>
+        <div>
+          <div style={styles.gaugeEyebrow}>{title}</div>
+          <div style={styles.gaugeSubtitle}>{subtitle}</div>
+        </div>
+        <div style={styles.gaugeIcon(accent)}><Icon size={18} color={accent} /></div>
+      </div>
+      <div style={styles.gaugeSvgWrap}>
+        <svg viewBox="0 0 240 150" style={{ width: '100%', height: '100%' }}>
+          <path d="M 28 124 A 92 92 0 0 1 212 124" fill="none" stroke="rgba(148,163,184,0.16)" strokeWidth="18" strokeLinecap="round" />
+          <path d="M 28 124 A 92 92 0 0 1 212 124" fill="none" stroke={accent} strokeWidth="18" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference - (ratio * circumference)} />
+        </svg>
+        <div style={styles.gaugeCenter}>
+          <div style={styles.gaugeValue}>{safeCurrent}</div>
+          <div style={styles.gaugeStatus}>{inverse ? `${safeCurrent} pendentes` : `${Math.round(ratio * 100)}% da meta`}</div>
+        </div>
+      </div>
+      <div style={styles.metricGrid}>
+        <div style={styles.metricBox}><div style={styles.metricLabel}>{currentLabel}</div><div style={{ ...styles.metricValue, color: accent }}>{safeCurrent}</div></div>
+        <div style={styles.metricBox}><div style={styles.metricLabel}>{targetLabel}</div><div style={styles.metricValue}>{safeTarget}</div></div>
+      </div>
+      <div style={styles.gaugeHelper}>{helper}</div>
+    </div>
+  );
+}
+
 function AlertaUrgente({ faltas, onClose, onNavigate }) {
   if (!faltas.length) return null;
   return (
-    <div style={{
-      position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
-      width: '360px', background: 'var(--bg-card)',
-      border: `1px solid ${colors.danger}50`,
-      borderLeft: `4px solid ${colors.danger}`,
-      borderRadius: '16px', boxShadow: '0 16px 48px rgba(0,0,0,0.35)',
-      animation: 'slideInRight 0.35s cubic-bezier(0.22,1,0.36,1)',
-    }}>
-      <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-        <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: `${colors.danger}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Bell size={16} color={colors.danger} />
+    <div style={styles.alertBox}>
+      <div style={styles.alertHeader}>
+        <div style={styles.alertIcon}><Bell size={16} color={colors.danger} /></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 900, fontSize: 13, color: colors.danger }}>Falta urgente sem cobertura</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{faltas.length} ocorrencia{faltas.length > 1 ? 's' : ''} com inicio em menos de 48h</div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: '900', fontSize: '13px', color: colors.danger }}>
-            ⚠️ Falta urgente sem cobertura
+        <button type="button" onClick={onClose} style={styles.iconGhost}><X size={15} /></button>
+      </div>
+      <div style={{ padding: '0 16px', display: 'grid', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
+        {faltas.map((falta) => (
+          <div key={falta.id} style={styles.alertItem}>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>{falta.storeName}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{falta.attendantName} - comeca em <strong style={{ color: colors.danger }}>{horasAte(falta.startDate) <= 24 ? `${horasAte(falta.startDate)}h` : 'menos de 48h'}</strong></div>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            {faltas.length} ocorrência{faltas.length > 1 ? 's' : ''} com início em menos de 48h
-          </div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0, padding: '2px' }}>
-          <X size={15} />
-        </button>
+        ))}
       </div>
-
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto' }}>
-        {faltas.map((f) => {
-          const horas = horasAte(f.startDate);
-          return (
-            <div key={f.id} style={{ padding: '10px 12px', borderRadius: '10px', background: `${colors.danger}08`, border: `1px solid ${colors.danger}20` }}>
-              <div style={{ fontWeight: '900', fontSize: '13px', color: 'var(--text-main)' }}>{f.storeName}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                {f.attendantName} · começa em <strong style={{ color: colors.danger }}>{horas <= 24 ? `${horas}h` : 'menos de 48h'}</strong>
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: '800', color: colors.danger, marginTop: '4px' }}>
-                Loja pode ficar fechada sem cobertura!
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ padding: 16 }}>
+        <button type="button" onClick={onNavigate} style={styles.alertCta}>Ir para Gestao de Faltas <ArrowRight size={14} /></button>
       </div>
-
-      <div style={{ padding: '12px 16px 14px' }}>
-        <button
-          onClick={onNavigate}
-          style={{ width: '100%', padding: '10px', borderRadius: '10px', border: 'none', background: colors.danger, color: '#fff', fontWeight: '900', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-        >
-          Ir para Gestão de Faltas <ArrowRight size={14} />
-        </button>
-      </div>
-      <style>{`@keyframes slideInRight { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }`}</style>
     </div>
   );
 }
 
-// ── Card de falta — visual GestaoView ───────────────────────
 function FaltaCard({ falta, floaters, onNavigate, onCoverageChange }) {
-  const dates     = getDatesInRange(falta.startDate, falta.endDate);
-  const hasPending = dates.some(d => !falta.coverageMap?.[d]);
-  const horas     = horasAte(falta.startDate);
-  const urgente   = hasPending && horas > 0 && horas <= 48;
-
+  const dates = getDatesInRange(falta.startDate, falta.endDate);
+  const hasPending = dates.some((date) => !falta.coverageMap?.[date]);
+  const urgent = hasPending && horasAte(falta.startDate) > 0 && horasAte(falta.startDate) <= 48;
   return (
-    <div
-      onClick={onNavigate}
-      style={{
-        background: 'var(--bg-card)',
-        border: `1px solid ${urgente ? `${colors.danger}50` : 'var(--border)'}`,
-        borderLeft: `4px solid ${urgente ? colors.danger : hasPending ? colors.warning : colors.success}`,
-        borderRadius: '20px', padding: '20px',
-        display: 'flex', flexDirection: 'column', gap: '14px',
-        boxShadow: urgente ? `0 0 0 2px ${colors.danger}18, var(--shadow-sm)` : 'var(--shadow-sm)',
-        cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ''; }}
-    >
-      {/* Cabeçalho */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div onClick={onNavigate} style={styles.faltaCard(urgent, hasPending)}>
+      <div style={styles.faltaHeader}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '10px', fontWeight: '900', color: colors.danger, background: `${colors.danger}15`, padding: '4px 10px', borderRadius: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              FALTA
-            </span>
-            <span style={{ fontWeight: '900', color: 'var(--text-main)', fontSize: '15px' }}>{falta.storeName}</span>
-            {urgente && (
-              <span style={{ fontSize: '10px', fontWeight: '900', color: '#fff', background: colors.danger, padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Bell size={9} /> URGENTE
-              </span>
-            )}
+          <div style={styles.faltaTitleRow}>
+            <span style={styles.badgeDanger}>Falta</span>
+            <strong style={{ fontSize: 15 }}>{falta.storeName}</strong>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '6px 0 2px 0' }}>
-            <strong style={{ color: 'var(--text-main)' }}>{falta.attendantName}</strong>
-            {falta.reason ? ` · ${falta.reason}` : ''}
-          </p>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
-            {new Date(falta.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}
-            {falta.startDate !== falta.endDate && ` até ${new Date(falta.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}`}
-          </p>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>{falta.attendantName}{falta.reason ? ` - ${falta.reason}` : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{formatDate(falta.startDate, { day: '2-digit', month: '2-digit' })}{falta.startDate !== falta.endDate ? ` ate ${formatDate(falta.endDate, { day: '2-digit', month: '2-digit' })}` : ''}</div>
         </div>
-        <div>
-          {hasPending
-            ? <AlertCircle size={16} color={urgente ? colors.danger : colors.warning} />
-            : <CheckCircle size={16} color={colors.success} />}
-        </div>
+        {hasPending ? <AlertCircle size={16} color={urgent ? colors.danger : colors.warning} /> : <CheckCircle size={16} color={colors.success} />}
       </div>
-
-      {/* Banner de loja fechada */}
-      {urgente && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', borderRadius: '10px', background: `${colors.danger}10`, border: `1px solid ${colors.danger}30`, fontSize: '12px', fontWeight: '800', color: colors.danger }}>
-          <AlertCircle size={13} />
-          A loja <strong style={{ marginLeft: '4px' }}>{falta.storeName}</strong>&nbsp;pode ficar fechada — cobertura não designada!
-        </div>
-      )}
-
-      {/* Grid de dias com select */}
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--bg-app)', borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border)' }}
-      >
-        {dates.map(date => {
-          const assignedId = falta.coverageMap?.[date];
-          const isClosed   = assignedId === 'loja_fechada';
-          const dateObj    = new Date(date + 'T12:00:00');
-          const dayName    = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
-          return (
-            <div key={date} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-              <div style={{ width: '80px', flexShrink: 0, display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <span style={{ fontWeight: '900', color: 'var(--text-main)' }}>
-                  {String(dateObj.getDate()).padStart(2, '0')}/{String(dateObj.getMonth() + 1).padStart(2, '0')}
-                </span>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '700' }}>{dayName}</span>
-              </div>
-              <select
-                value={assignedId || ''}
-                onChange={e => onCoverageChange(falta.id, date, e.target.value, falta.coverageMap)}
-                style={{
-                  flex: 1, padding: '7px 10px', borderRadius: '9px',
-                  border: !assignedId ? `1px solid ${colors.warning}` : isClosed ? `1px solid ${colors.danger}40` : `1px solid ${colors.success}40`,
-                  background: !assignedId ? `${colors.warning}15` : isClosed ? `${colors.danger}12` : `${colors.success}12`,
-                  color: !assignedId ? '#b45309' : isClosed ? colors.danger : colors.success,
-                  fontWeight: '800', fontSize: '12px', outline: 'none', cursor: 'pointer',
-                }}
-              >
-                <option value="">⚠️ Pendente — Quem cobre?</option>
-                <option value="loja_fechada">🚫 LOJA FECHADA</option>
-                {floaters.map(f => (
-                  <option key={f.id} value={f.id}>{f.name?.split(' ')[0] || f.name} ({f.cityId || 'Volante'})</option>
-                ))}
-              </select>
-            </div>
-          );
-        })}
+      <div style={styles.coverageBox}>
+        {dates.map((date) => (
+          <div key={date} style={styles.coverageRow}>
+            <div style={{ width: 84, fontWeight: 800 }}>{formatDate(date, { day: '2-digit', month: '2-digit' })}</div>
+            <select value={falta.coverageMap?.[date] || ''} onChange={(event) => onCoverageChange(falta.id, date, event.target.value, falta.coverageMap)} style={styles.coverageSelect(falta.coverageMap?.[date])}>
+              <option value="">Pendente - Quem cobre?</option>
+              <option value="loja_fechada">LOJA FECHADA</option>
+              {floaters.map((floater) => <option key={floater.id} value={floater.id}>{floater.name?.split(' ')[0] || floater.name}</option>)}
+            </select>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ── Componente principal ──────────────────────────────────────
+function FeedCard({ title, subtitle, icon: Icon, accent, items, emptyText, onOpen, actionLabel, renderItem }) {
+  return (
+    <div style={styles.panel}>
+      <div style={styles.feedHeader}>
+        <div>
+          <div style={styles.feedTitle}><Icon size={15} color={accent} />{title}</div>
+          <div style={styles.feedSubtitle}>{subtitle}</div>
+        </div>
+        {actionLabel ? <button type="button" onClick={onOpen} style={styles.actionBtn(accent)}>{actionLabel}</button> : null}
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.length ? items.map(renderItem) : <div style={styles.emptyBox}><CheckCircle2 size={20} color={accent} /><span>{emptyText}</span></div>}
+      </div>
+    </div>
+  );
+}
+
+function ShortcutCard({ title, icon: Icon, color, onClick }) {
+  return <div onClick={onClick} className="shortcut-card" style={styles.shortcutCard}><div style={styles.shortcutIcon(color)}><Icon size={20} /></div><h4 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>{title}</h4></div>;
+}
+
 export default function DashboardCoordenador({ userData, setActiveView }) {
-  const [loading, setLoading]           = useState(false);
-  const [stats, setStats]               = useState({ cidades: 0, supervisores: 0, vendasMes: 0, metaVendas: 0, alertasRh: 0 });
-  const [rhPendentes, setRhPendentes]   = useState([]);
-  const [faltas, setFaltas]             = useState([]);
-  const [floaters, setFloaters]         = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState(() => createEmptyCoordinatorDashboardPayload(monthKeyNow()));
   const [alertaDismissed, setAlertaDismissed] = useState(false);
-  const [rotinas, setRotinas]           = useState([
-    { id: 1, title: 'Conferência de Vendas', desc: 'Validar contratos lançados ontem',        done: false },
-    { id: 2, title: 'Ponto Tangerino',       desc: 'Validar atrasos da equipe',                done: false },
-    { id: 3, title: 'Alinhamento Matinal',   desc: 'Check-in rápido com os gerentes de loja', done: false },
+  const [rotinas, setRotinas] = useState([
+    { id: 1, title: 'Conferencia de vendas', desc: 'Validar contratos lancados ontem', done: false },
+    { id: 2, title: 'Ponto Tangerino', desc: 'Validar atrasos da equipe', done: false },
+    { id: 3, title: 'Alinhamento matinal', desc: 'Check-in rapido com os gerentes de loja', done: false },
   ]);
 
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      const hoje        = new Date();
-      const dataHojeStr = hoje.toISOString().split('T')[0];
-      const mesAtual    = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-
-      const [citySnap, userSnap] = await Promise.all([
-        getDocs(collection(db, 'cities')),
-        getDocs(collection(db, 'users')),
-      ]);
-
-      const cMap = Object.fromEntries(citySnap.docs.map(d => [d.id, d.data()]));
-      const uMap = Object.fromEntries(userSnap.docs.map(d => [d.id, d.data()]));
-
-      const supervisores  = userSnap.docs.filter(d => String(d.data().role).toLowerCase().includes('superv'));
-      const floatersList  = userSnap.docs.filter(d => d.data().role === 'attendant').map(d => ({ id: d.id, ...d.data() }));
-      setFloaters(floatersList);
-
-      // 1. Vendas em Lojas
-      let vendas = 0;
-      let metaVendas = 0;
-      try {
-        const salesScope = await loadMonthlySalesScope({ scope: 'global', monthKey: mesAtual });
-        vendas = salesScope.salesCount || 0;
-        metaVendas = salesScope.totals?.goalSales || 0;
-      } catch (e) { console.warn('Aviso Leads:', e); }
-
-      // 2. RH Pendentes
-      let rhData = [];
-      try {
-        const rhSnap = await getDocs(query(collection(db, 'rh_requests'), where('status', '==', 'Pendente')));
-        rhData = rhSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      } catch (e) { console.warn('Aviso RH:', e); }
-
-      // 3. Faltas ativas e futuras
-      let faltasData = [];
-      try {
-        const faltasSnap = await getDocs(query(collection(db, 'absences'), where('endDate', '>=', dataHojeStr)));
-        faltasData = faltasSnap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(f => f.type !== 'ferias')
-          .map(f => ({
-            ...f,
-            attendantName: uMap[f.attendantId]?.name || f.attendantName || 'Colaborador',
-            storeName:     cMap[f.storeId]?.name     || f.storeName     || f.storeId || 'Loja',
-          }))
-          .sort((a, b) => a.startDate.localeCompare(b.startDate));
-      } catch (e) { console.warn('Aviso Faltas:', e); }
-
-      setStats({ cidades: citySnap.size, supervisores: supervisores.length, vendasMes: vendas, metaVendas, alertasRh: rhData.length });
-      setRhPendentes(rhData);
-      setFaltas(faltasData);
-    } catch (err) {
-      console.error('Erro ao carregar KPIs:', err);
+      const payload = await loadCoordinatorDashboardData({ userData, monthKey: monthKeyNow() });
+      setData(payload);
+    } catch (error) {
+      console.error('Erro ao carregar dashboard da coordenadora:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, []);
+  }, [userData]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
-  useEffect(() => { setAlertaDismissed(false); }, [faltas]);
+  useEffect(() => { setAlertaDismissed(false); }, [data.absences?.faltas]);
+
+  const stats = useMemo(() => ({
+    vendasMes: Number(data.sales?.totals?.p || 0),
+    metaVendas: Number(data.sales?.totals?.goalP || 0),
+    migracoesMes: Number(data.sales?.totals?.m || 0),
+    svasMes: Number(data.sales?.totals?.ss || 0),
+    metaSva: Number(data.sales?.totals?.goalS || 0),
+    alertasRh: (data.peopleOps?.rhPendentes?.length || 0) + (data.peopleOps?.absencePendentes?.length || 0),
+  }), [data]);
+
+  const faltas = data.absences?.faltas || [];
+  const floaters = data.absences?.floaters || [];
+  const coveragePendentes = data.peopleOps?.coveragePendentes || [];
+  const bankHours = data.peopleOps?.bankHoursSummary || {};
+  const faltasUrgentes = faltas.filter((falta) => horasAte(falta.startDate) > 0 && horasAte(falta.startDate) <= 48 && getDatesInRange(falta.startDate, falta.endDate).some((date) => !falta.coverageMap?.[date]));
 
   const handleCoverageChange = async (absenceId, date, floaterId, currentMap) => {
     try {
-      const newMap = { ...currentMap, [date]: floaterId };
-      await updateDoc(doc(db, 'absences', absenceId), { coverageMap: newMap });
-      setFaltas(prev => prev.map(f => f.id === absenceId ? { ...f, coverageMap: newMap } : f));
+      await updateDoc(doc(db, 'absences', absenceId), { coverageMap: { ...currentMap, [date]: floaterId } });
       window.showToast?.('Cobertura atualizada.', 'success');
-    } catch (e) {
-      window.showToast?.('Erro ao salvar cobertura: ' + e.message, 'error');
+      await carregarDados();
+    } catch (error) {
+      window.showToast?.(`Erro ao salvar cobertura: ${error.message}`, 'error');
     }
   };
 
-  const dataAtual    = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const metaGlobal   = stats.metaVendas > 0 ? stats.metaVendas : (stats.cidades > 0 ? stats.cidades * 30 : 500);
-  const percentualMeta = Math.min(Math.round((stats.vendasMes / metaGlobal) * 100), 100);
-
-  const toggleRotina = id => setRotinas(prev => prev.map(r => r.id === id ? { ...r, done: !r.done } : r));
-
-  // Faltas urgentes: início em < 48h e sem cobertura em algum dia
-  const faltasUrgentes = faltas.filter(f => {
-    const h = horasAte(f.startDate);
-    if (h <= 0 || h > 48) return false;
-    return getDatesInRange(f.startDate, f.endDate).some(d => !f.coverageMap?.[d]);
-  });
-
   return (
-    <div className="animated-view" style={{ paddingBottom: '40px', width: '100%' }}>
-
-      {/* Notificação flutuante */}
-      {!alertaDismissed && faltasUrgentes.length > 0 && (
-        <AlertaUrgente
-          faltas={faltasUrgentes}
-          onClose={() => setAlertaDismissed(true)}
-          onNavigate={() => { setAlertaDismissed(true); setActiveView('faltas'); }}
-        />
-      )}
-
-      {/* Cabeçalho hero */}
-      <div style={styles.heroBanner}>
-        <div style={styles.heroContent}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', opacity: 0.9 }}>
-            <Calendar size={16} />
-            <span style={{ fontSize: '13px', fontWeight: '600', textTransform: 'capitalize' }}>{dataAtual}</span>
-          </div>
-          <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 5px 0', letterSpacing: '-0.02em' }}>
-            Olá, {userData?.name?.split(' ')[0] || 'Gestora'}! 👋
-          </h1>
-          <p style={{ fontSize: '15px', margin: 0, opacity: 0.9 }}>Visão Master da Operação Oquei Telecom</p>
+    <div className="animated-view" style={{ paddingBottom: 40, width: '100%' }}>
+      {!alertaDismissed && faltasUrgentes.length > 0 ? <AlertaUrgente faltas={faltasUrgentes} onClose={() => setAlertaDismissed(true)} onNavigate={() => setActiveView('faltas')} /> : null}
+      <div style={styles.hero}>
+        <div>
+          <div style={styles.heroDate}><Calendar size={16} />{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <h1 style={styles.heroTitle}>Ola, {userData?.name?.split(' ')[0] || 'Coordenadora'}!</h1>
+          <p style={styles.heroText}>Visao executiva da operacao Oquei Telecom com foco em vendas, pessoas, cobertura e agenda critica do grupo.</p>
         </div>
-        <button onClick={carregarDados} style={styles.heroRefreshBtn} title="Atualizar Dashboard">
-          <RefreshCw size={20} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-        </button>
+        <button type="button" onClick={carregarDados} style={styles.refreshBtn}><RefreshCw size={20} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /></button>
+      </div>
+      <div style={styles.grid4}>
+        <GaugeCard title="Venda de planos" subtitle="Total das lojas fisicas contra a meta comercial consolidada" current={stats.vendasMes} target={stats.metaVendas} accent={colors.success} icon={TrendingUp} currentLabel="Vendidos" targetLabel="Meta planos" helper="Leitura oficial da performance comercial das lojas fisicas neste mes." />
+        <GaugeCard title="Migracoes realizadas" subtitle="Volume mensal de mudancas de plano efetivamente concluido" current={stats.migracoesMes} target={Math.max(stats.migracoesMes, 1)} accent={colors.warning} icon={Activity} currentLabel="Realizadas" targetLabel="Base atual" helper="Painel rapido do fluxo de migracoes ja convertidas no periodo." />
+        <GaugeCard title="SVA vendidos" subtitle="Servicos adicionais vendidos frente a meta mensal total" current={stats.svasMes} target={stats.metaSva} accent={colors.purple} icon={Zap} currentLabel="Vendidos" targetLabel="Meta SVA" helper="Acompanhe a aderencia do time ao objetivo de servicos agregados." />
+        <GaugeCard title="Avisos RH pendentes" subtitle="Itens que ainda precisam de decisao ou encaminhamento da coordenacao" current={stats.alertasRh} target={Math.max(6, stats.alertasRh || 0)} accent={stats.alertasRh > 0 ? colors.danger : colors.info} icon={ShieldAlert} currentLabel="Pendencias" targetLabel="Faixa critica" inverse helper="Quanto mais proximo de zero, mais limpa esta a operacao de RH." />
+      </div>
+      <div style={{ marginBottom: 40 }}>
+        <SectionHeader icon={UserCheck} title="Faltas e Escala" subtitle="Monitoramento das ausencias em aberto, coberturas e risco operacional por loja." actionLabel="Ver todas" onAction={() => setActiveView('faltas')} color={colors.primary} />
+        {faltas.length === 0 ? <div style={styles.goodState}><CheckCircle2 size={30} style={{ opacity: 0.6 }} /><strong>Cobertura completa</strong><span>Nenhuma falta registrada para os proximos dias.</span></div> : <div style={styles.faltasGrid}>{faltas.map((falta) => <FaltaCard key={falta.id} falta={falta} floaters={floaters} onNavigate={() => setActiveView('faltas')} onCoverageChange={handleCoverageChange} />)}</div>}
       </div>
 
-      {/* KPIs */}
-      <div style={styles.kpiGrid}>
-        <MetricCard title="Vendas em Lojas" value={stats.vendasMes}    sub="Contratos via atendentes"  color={colors.success} icon={TrendingUp} />
-        <MetricCard title="Lojas Ativas"     value={stats.cidades}      sub="Unidades na Rede"           color={colors.primary} icon={Store} />
-        <MetricCard title="Gestores"         value={stats.supervisores} sub="Supervisores Ativos"        color={colors.purple}  icon={UserPlus} />
-        <MetricCard title="Avisos RH"        value={stats.alertasRh}    sub="Pendentes de Ação"          color={stats.alertasRh > 0 ? colors.danger : colors.warning} icon={ShieldAlert} />
-      </div>
-
-      {/* Pacing */}
-      <div style={styles.progressSection}>
-        <div style={styles.progressHeader}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Target size={20} color={colors.primary} /> Pacing de Vendas em Lojas
-          </h3>
-          <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)' }}>
-            {stats.vendasMes} / <span style={{ color: 'var(--text-main)' }}>{metaGlobal} Meta</span>
-          </span>
-        </div>
-        <div style={styles.progressBarBg}>
-          <div style={{ ...styles.progressBarFill, width: `${percentualMeta}%`, background: percentualMeta >= 100 ? colors.success : colors.primary }} />
-        </div>
-        <p style={{ margin: '10px 0 0 0', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textAlign: 'right' }}>
-          {percentualMeta}% do objetivo alcançado
-        </p>
-      </div>
-
-      {/* Gestão Diária: RH + Rotinas */}
-      <div style={styles.dailyManagementGrid}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* RH */}
-          <div style={styles.cardPanel}>
-            <h3 style={styles.cardHeaderTitle}><FileText size={18} color={colors.primary} /> SOLICITAÇÕES DE RH</h3>
-            {rhPendentes.length === 0 ? (
-              <div style={styles.emptyStateBox}>
-                <FileCheck size={24} color="var(--border)" style={{ marginBottom: '10px' }} />
-                <span>A caixa de entrada de RH está vazia. Excelente trabalho!</span>
-              </div>
-            ) : (
-              <div style={styles.listContainer}>
-                {rhPendentes.slice(0, 3).map((rh, i) => (
-                  <div key={i} style={styles.listItem}>
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)' }}>{rh.attendantName || 'Colaborador'}</strong>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{rh.type} • Aguardando aprovação</span>
-                    </div>
-                    <button onClick={() => setActiveView('rh_requests')} style={styles.btnAcaoList}>Analisar</button>
-                  </div>
-                ))}
-                {rhPendentes.length > 3 && (
-                  <div style={{ fontSize: '11px', textAlign: 'center', color: 'var(--text-brand)', cursor: 'pointer', marginTop: '10px' }} onClick={() => setActiveView('rh_requests')}>
-                    Ver mais {rhPendentes.length - 3} pedidos...
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Rotinas */}
-          <div style={styles.cardPanel}>
-            <h3 style={{ ...styles.cardHeaderTitle, marginBottom: '20px' }}><ListChecks size={18} color={colors.warning} /> ROTINAS OPERACIONAIS</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {rotinas.map(rotina => (
-                <div key={rotina.id} onClick={() => toggleRotina(rotina.id)}
-                  style={{ ...styles.routineCheckItem, background: rotina.done ? 'var(--bg-app)' : 'var(--bg-card)', opacity: rotina.done ? 0.6 : 1 }}>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '6px', border: `2px solid ${rotina.done ? colors.success : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: rotina.done ? colors.success : 'transparent' }}>
-                    {rotina.done && <CheckCircle2 size={14} color="white" />}
-                  </div>
-                  <div>
-                    <strong style={{ display: 'block', fontSize: '14px', color: 'var(--text-main)', textDecoration: rotina.done ? 'line-through' : 'none' }}>{rotina.title}</strong>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{rotina.desc}</span>
-                  </div>
-                </div>
-              ))}
+      <div style={{ marginBottom: 40 }}>
+        <SectionHeader icon={TrendingUp} title="Inteligencia Comercial" subtitle="Leitura resumida do Painel Vendas global com evolucao, projeção e desempenho das lojas." actionLabel="Abrir Painel Vendas" onAction={() => setActiveView('vendas')} color={colors.success} />
+        <div style={styles.grid3}>
+          <div style={styles.panel}>
+            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><TrendingUp size={15} color={colors.success} />Evolucao mensal</div><div style={styles.feedSubtitle}>Ultimos 6 meses de vendas de planos.</div></div></div>
+            <div style={{ padding: '10px 0', height: 110, background: 'linear-gradient(180deg, rgba(16,185,129,0.06), rgba(16,185,129,0.01))', borderRadius: 16, border: '1px solid rgba(16,185,129,0.12)' }}>
+              <svg viewBox="0 0 280 88" style={{ width: '100%', height: '100%' }}>
+                <path d={sparkPath((data.sales?.evolution || []).map((item) => Number(item.sales || 0)))} fill="none" stroke={colors.success} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
+            <div style={styles.evolutionLabels}>{(data.sales?.evolution || []).map((item) => <div key={item.monthKey}><span>{item.label}</span><strong>{item.sales}</strong></div>)}</div>
+            <div style={styles.summaryBox}><div><span style={styles.summaryLabel}>Projecao</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.projP)}</strong></div><div style={{ textAlign: 'right' }}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.goalP)}</strong></div></div>
           </div>
-        </div>
-        {/* Segunda coluna disponível para expansão futura */}
-        <div />
-      </div>
-
-      {/* Faltas e Escala — estilo GestaoView */}
-      <div style={{ marginBottom: '40px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-          <h3 style={{ ...styles.sectionHeaderShortcut, marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
-            <UserCheck size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-            Faltas e Escala
-          </h3>
-          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', fontSize: '11px', fontWeight: '800' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: colors.danger }}>
-              <AlertCircle size={12} /> Urgente
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: colors.warning }}>
-              <AlertCircle size={12} /> Sem cobertura
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: colors.success }}>
-              <CheckCircle size={12} /> Coberta
-            </span>
-            <button onClick={() => setActiveView('faltas')}
-              style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${colors.primary}30`, background: `${colors.primary}10`, color: colors.primary, fontWeight: '900', fontSize: '12px', cursor: 'pointer' }}>
-              Ver todas →
-            </button>
+          <div style={styles.panel}>
+            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><Target size={15} color={colors.primary} />Projecao e ritmo</div><div style={styles.feedSubtitle}>Comparativo entre fechado, meta e projeção do mês.</div></div></div>
+            <div style={styles.kpiRow}><div style={styles.kpiBox}><span style={styles.summaryLabel}>Fechado</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.p)}</strong></div><div style={styles.kpiBox}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.goalP)}</strong></div></div>
+            <div style={styles.progressBg}><div style={styles.progressFill(Math.min(100, ((Number(data.sales?.totals?.projP || 0) / Math.max(Number(data.sales?.totals?.goalP || 1), 1)) * 100)), Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.primary)} /></div>
+            <div style={styles.progressLegend}><span>Projecao: {formatNumber(data.sales?.totals?.projP)}</span><span style={{ color: Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.danger }}>{Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? 'Acima do pacing' : 'Pede aceleracao'}</span></div>
+            <div style={styles.clusterWrap}>{(data.sales?.clusterSummary || []).slice(0, 3).map((item) => <div key={item.clusterId} style={styles.clusterChip}><span>{item.clusterId}</span><strong>{Math.round((item.score || 0) * 100)}%</strong></div>)}</div>
           </div>
-        </div>
-        <div style={{ borderBottom: '2px solid var(--border)', marginBottom: '20px' }} />
-
-        {faltas.length === 0 ? (
-          <div style={{ ...styles.emptyStateBox, padding: '40px', background: `${colors.success}08`, border: `1px dashed ${colors.success}40`, color: colors.success }}>
-            <CheckCircle2 size={32} style={{ marginBottom: '10px', opacity: 0.6 }} />
-            <strong style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>Cobertura Completa</strong>
-            <span style={{ fontSize: '12px' }}>Nenhuma falta registrada para os próximos dias.</span>
+          <div style={styles.panel}>
+            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><Flame size={15} color={colors.warning} />Melhores e piores lojas</div><div style={styles.feedSubtitle}>Desempenho frente a meta de planos.</div></div><button type="button" onClick={() => setActiveView('vendas')} style={styles.actionBtn(colors.warning)}>Abrir</button></div>
+            <div style={styles.rankSection}><div><div style={styles.rankTitle(colors.success)}>Melhores</div>{(data.sales?.topStores || []).slice(0, 3).map((item) => <div key={`top-${item.city}`} style={styles.rankItem}><div><strong>{item.city}</strong><span>Meta {formatNumber(item.metaPlanos)}</span></div><div><strong>{formatNumber(item.salesPlanos)}</strong><span style={{ color: colors.success }}>{Math.round((item.score || 0) * 100)}%</span></div></div>)}</div><div><div style={styles.rankTitle(colors.danger)}>Piores</div>{(data.sales?.bottomStores || []).slice(0, 3).map((item) => <div key={`bottom-${item.city}`} style={styles.rankItem}><div><strong>{item.city}</strong><span>Meta {formatNumber(item.metaPlanos)}</span></div><div><strong>{formatNumber(item.salesPlanos)}</strong><span style={{ color: colors.danger }}>{Math.round((item.score || 0) * 100)}%</span></div></div>)}</div></div>
           </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
-            {faltas.map(f => (
-              <FaltaCard
-                key={f.id}
-                falta={f}
-                floaters={floaters}
-                onNavigate={() => setActiveView('faltas')}
-                onCoverageChange={handleCoverageChange}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Atalhos — Inteligência */}
-      <div style={{ marginBottom: '40px' }}>
-        <h3 style={styles.sectionHeaderShortcut}>Sistemas de Inteligência</h3>
-        <div style={styles.shortcutGrid}>
-          <ShortcutCard title="HubOquei Radar"    icon={Zap}        color={colors.info}    onClick={() => setActiveView('hub_oquei')} />
-          <ShortcutCard title="Laboratório Churn" icon={Activity}   color={colors.purple}  onClick={() => setActiveView('churn')} />
-          <ShortcutCard title="Sala de Guerra"    icon={Flame}      color={colors.danger}  onClick={() => setActiveView('war_room')} />
-          <ShortcutCard title="Painel de Vendas"  icon={TrendingUp} color={colors.success} onClick={() => setActiveView('vendas')} />
         </div>
       </div>
 
-      {/* Atalhos — Administração */}
-      <div>
-        <h3 style={styles.sectionHeaderShortcut}>Administração e Estrutura</h3>
-        <div style={styles.shortcutGrid}>
-          <ShortcutCard title="Gestão de Estrutura" icon={MapPin}    color={colors.primary} onClick={() => setActiveView('estrutura')} />
-          <ShortcutCard title="Gestão de Equipe"    icon={UserPlus}  color={colors.primary} onClick={() => setActiveView('admin_supervisores')} />
-          <ShortcutCard title="Aprovações de RH"    icon={FileCheck} color={colors.warning} onClick={() => setActiveView('rh_requests')} />
-          <ShortcutCard title="Comunicados"          icon={Megaphone} color={colors.primary} onClick={() => setActiveView('comunicados')} />
+      <div style={{ marginBottom: 40 }}>
+        <SectionHeader icon={ShieldAlert} title="Operacao de Pessoas" subtitle="Resumo das filas operacionais, cobertura em risco e sinais criticos de banco de horas." actionLabel="Abrir RH" onAction={() => setActiveView('rh_requests')} color={colors.warning} />
+        <div style={styles.grid4Compact}>
+          <div style={styles.signalCard}><FileText size={18} color={colors.primary} /><div><div style={styles.signalTitle}>Solicitacoes RH</div><strong style={styles.signalValue}>{formatNumber(data.peopleOps?.rhPendentes?.length)}</strong><span style={styles.signalSubtitle}>Pedidos aguardando decisao</span></div></div>
+          <div style={styles.signalCard}><AlertCircle size={18} color={colors.warning} /><div><div style={styles.signalTitle}>Ausencias pendentes</div><strong style={styles.signalValue}>{formatNumber(data.peopleOps?.absencePendentes?.length)}</strong><span style={styles.signalSubtitle}>Pedidos operacionais em fila</span></div></div>
+          <div style={styles.signalCard}><UserCheck size={18} color={colors.danger} /><div><div style={styles.signalTitle}>Cobertura pendente</div><strong style={styles.signalValue}>{formatNumber(coveragePendentes.length)}</strong><span style={styles.signalSubtitle}>Lojas sem substituicao confirmada</span></div></div>
+          <div style={styles.signalCard}><ShieldAlert size={18} color={colors.purple} /><div><div style={styles.signalTitle}>Risco POQ</div><strong style={styles.signalValue}>{formatNumber((bankHours.riskPoq || 0) + (bankHours.lostPoq || 0))}</strong><span style={styles.signalSubtitle}>Em alerta ou perda de POQ</span></div></div>
+        </div>
+        <div style={styles.panel}>
+          <div style={styles.feedHeader}><div><div style={styles.feedTitle}><ShieldAlert size={15} color={colors.purple} />Banco de horas e POQ</div><div style={styles.feedSubtitle}>Resumo executivo do risco de saldo critico e bonificacao.</div></div><button type="button" onClick={() => setActiveView('banco_horas')} style={styles.actionBtn(colors.purple)}>Abrir Banco de Horas</button></div>
+          <div style={styles.grid4Compact}>
+            <div style={styles.kpiBox}><span style={styles.summaryLabel}>Base monitorada</span><strong style={styles.summaryBig}>{formatNumber(bankHours.totalAttendants)}</strong><span style={styles.summaryHint}>Atendentes ativos</span></div>
+            <div style={styles.kpiBox}><span style={styles.summaryLabel}>Saldo critico</span><strong style={{ ...styles.summaryBig, color: colors.warning }}>{formatNumber(bankHours.criticalBalance)}</strong><span style={styles.summaryHint}>Abs acima de 20h</span></div>
+            <div style={styles.kpiBox}><span style={styles.summaryLabel}>Em risco de POQ</span><strong style={{ ...styles.summaryBig, color: colors.warning }}>{formatNumber(bankHours.riskPoq)}</strong><span style={styles.summaryHint}>Faixa de alerta</span></div>
+            <div style={styles.kpiBox}><span style={styles.summaryLabel}>Sem POQ</span><strong style={{ ...styles.summaryBig, color: colors.danger }}>{formatNumber(bankHours.lostPoq)}</strong><span style={styles.summaryHint}>Perda consumada</span></div>
+          </div>
         </div>
       </div>
 
-      <style>{`
-        @keyframes fadeInView  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes spin        { to { transform: rotate(360deg); } }
-        .animated-view         { animation: fadeInView 0.4s ease forwards; }
-        .shortcut-card:hover   { transform: translateY(-4px); box-shadow: 0 12px 25px rgba(0,0,0,0.06); border-color: var(--text-brand) !important; }
-      `}</style>
+      <div style={{ marginBottom: 40 }}>
+        <SectionHeader icon={Calendar} title="Agenda e Eventos" subtitle="Compromissos da coordenacao, pipeline de patrocinios e proximas acoes do Japa." color={colors.info} />
+        <div style={styles.grid3}>
+          <FeedCard title="Proximos eventos" subtitle="Agenda executiva pessoal da coordenadora" icon={Calendar} accent={colors.primary} items={data.agenda?.upcomingEvents || []} emptyText="Nenhum compromisso futuro cadastrado." onOpen={() => setActiveView('reunioes')} actionLabel="Abrir agenda" renderItem={(item) => <div key={item.id} style={styles.feedItem}><div style={styles.feedItemTop}><strong>{item.title || 'Compromisso'}</strong><span>{formatDateTime(item.date, item.time)}</span></div><div style={styles.feedMeta}><MapPin size={12} />{item.location || (item.type === 'reuniao' ? 'Reuniao' : 'Compromisso')}</div></div>} />
+          <FeedCard title="Parcerias e patrocinio" subtitle="Solicitacoes pendentes e eventos aprovados em destaque" icon={HeartHandshake} accent={colors.purple} items={data.partnerships?.highlighted || []} emptyText="Nenhum patrocinio pendente ou aprovado em destaque." onOpen={() => setActiveView('patrocinio')} actionLabel="Abrir patrocinio" renderItem={(item) => <div key={item.id} style={styles.feedItem}><div style={styles.feedItemTop}><strong>{item.eventName || item.title || 'Solicitacao'}</strong><span style={styles.statusBadge(item.displayStatus === 'Aprovado' ? colors.success : colors.warning)}>{item.displayStatus}</span></div><div style={styles.feedMeta}><Calendar size={12} />{item.dateTime ? formatDate(item.dateTime) : 'Sem data'} • {item.city || item.location || 'Sem cidade'}</div></div>} />
+          <FeedCard title="Agenda do Japa" subtitle="Cronograma das proximas acoes de marketing em campo" icon={Megaphone} accent={colors.warning} items={data.japa?.upcomingActions || []} emptyText="Nenhuma acao futura cadastrada para o Japa." onOpen={() => setActiveView('japa')} actionLabel="Abrir agenda Japa" renderItem={(item) => <div key={item.id} style={styles.feedItem}><div style={styles.feedItemTop}><strong>{item.activity || item.title || 'Acao comercial'}</strong><span>{formatDateTime(item.date, item.time)}</span></div><div style={styles.feedMeta}><MapPin size={12} />{item.city || 'Sem cidade'} {item.location ? `- ${item.location}` : ''}</div></div>} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 40 }}>
+        <SectionHeader icon={ListChecks} title="Fila Imediata" subtitle="Itens prontos para triagem rapida da coordenacao no inicio do dia." color={colors.primary} />
+        <div style={styles.grid3}>
+          <div style={styles.panel}>{(data.peopleOps?.rhPendentes || []).length === 0 ? <div style={styles.emptyBox}><FileCheck size={20} color={colors.primary} /><span>A caixa de entrada de RH esta vazia.</span></div> : <div style={{ display: 'grid', gap: 10 }}><div style={styles.feedTitle}><FileText size={15} color={colors.primary} />Solicitacoes de RH</div>{(data.peopleOps?.rhPendentes || []).slice(0, 3).map((rh) => <div key={rh.id} style={styles.listItem}><div><strong>{rh.attendantName || 'Colaborador'}</strong><span>{rh.type} - aguardando aprovacao</span></div><button type="button" onClick={() => setActiveView('rh_requests')} style={styles.smallBtn}>Analisar</button></div>)}</div>}</div>
+          <div style={styles.panel}>{coveragePendentes.length === 0 ? <div style={styles.emptyBox}><CheckCircle2 size={20} color={colors.success} /><span>Nenhuma cobertura pendente em aberto.</span></div> : <div style={{ display: 'grid', gap: 10 }}><div style={styles.feedTitle}><AlertCircle size={15} color={colors.warning} />Coberturas criticas</div>{coveragePendentes.slice(0, 3).map((item) => <div key={item.id} style={styles.listItem}><div><strong>{item.storeName || item.cityName || 'Loja'}</strong><span>{item.attendantName || 'Colaborador'} - {formatDate(item.startDate)}</span></div><button type="button" onClick={() => setActiveView('faltas')} style={styles.smallBtn}>Cobrir</button></div>)}</div>}</div>
+          <div style={styles.panel}><div style={styles.feedTitle}><ListChecks size={15} color={colors.warning} />Rotinas operacionais</div><div style={{ display: 'grid', gap: 12, marginTop: 14 }}>{rotinas.map((rotina) => <div key={rotina.id} onClick={() => setRotinas((current) => current.map((item) => item.id === rotina.id ? { ...item, done: !item.done } : item))} style={styles.routineItem(rotina.done)}><div style={styles.routineCheck(rotina.done)}>{rotina.done ? <CheckCircle2 size={14} color="#fff" /> : null}</div><div><strong style={{ textDecoration: rotina.done ? 'line-through' : 'none' }}>{rotina.title}</strong><span>{rotina.desc}</span></div></div>)}</div></div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 40 }}><h3 style={styles.blockLabel}>Sistemas de Inteligencia</h3><div style={styles.shortcutGrid}><ShortcutCard title="HubOquei Radar" icon={Zap} color={colors.info} onClick={() => setActiveView('hub_oquei')} /><ShortcutCard title="Laboratorio Churn" icon={Activity} color={colors.purple} onClick={() => setActiveView('churn')} /><ShortcutCard title="Sala de Guerra" icon={Flame} color={colors.danger} onClick={() => setActiveView('war_room')} /><ShortcutCard title="Painel de Vendas" icon={TrendingUp} color={colors.success} onClick={() => setActiveView('vendas')} /></div></div>
+      <div><h3 style={styles.blockLabel}>Administracao e Estrutura</h3><div style={styles.shortcutGrid}><ShortcutCard title="Gestao de Estrutura" icon={MapPin} color={colors.primary} onClick={() => setActiveView('estrutura')} /><ShortcutCard title="Gestao de Equipe" icon={UserPlus} color={colors.primary} onClick={() => setActiveView('admin_supervisores')} /><ShortcutCard title="Aprovacoes de RH" icon={FileCheck} color={colors.warning} onClick={() => setActiveView('rh_requests')} /><ShortcutCard title="Comunicados" icon={Megaphone} color={colors.primary} onClick={() => setActiveView('comunicados')} /></div></div>
+      <style>{`@keyframes fadeInView{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}.animated-view{animation:fadeInView .4s ease forwards}.shortcut-card:hover{transform:translateY(-4px);box-shadow:0 12px 25px rgba(0,0,0,.06);border-color:var(--text-brand)!important}`}</style>
     </div>
   );
 }
 
-// ── Sub-componentes ───────────────────────────────────────────
-const MetricCard = ({ title, value, sub, color, icon: Icon }) => (
-  <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border)', borderTop: `4px solid ${color}`, boxShadow: 'var(--shadow-sm)', position: 'relative', overflow: 'hidden' }}>
-    <div style={{ position: 'absolute', top: '-15px', right: '-15px', opacity: 0.05, transform: 'rotate(-15deg)' }}>
-      <Icon size={100} color={color} />
-    </div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px', position: 'relative', zIndex: 2 }}>
-      <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
-      <div style={{ background: `${color}15`, padding: '8px', borderRadius: '10px' }}><Icon size={18} color={color} /></div>
-    </div>
-    <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--text-main)', lineHeight: 1, position: 'relative', zIndex: 2 }}>{value}</div>
-    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', fontWeight: '600', position: 'relative', zIndex: 2 }}>{sub}</div>
-  </div>
-);
-
-const ShortcutCard = ({ title, icon: Icon, color, onClick }) => (
-  <div onClick={onClick} className="shortcut-card" style={styles.shortcutCard}>
-    <div style={{ padding: '12px', borderRadius: '12px', background: `${color}15`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <Icon size={20} />
-    </div>
-    <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0 }}>{title}</h4>
-  </div>
-);
-
-// ── Estilos ───────────────────────────────────────────────────
 const styles = {
-  heroBanner:       { background: `linear-gradient(135deg, ${colors.primary} 0%, #1e40af 100%)`, borderRadius: '24px', padding: '35px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', color: '#ffffff', marginBottom: '30px', boxShadow: '0 10px 30px rgba(37,99,235,0.2)' },
-  heroContent:      { flex: 1 },
-  heroRefreshBtn:   { background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', padding: '12px', borderRadius: '14px', color: '#ffffff', cursor: 'pointer', backdropFilter: 'blur(10px)' },
-  kpiGrid:          { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' },
-  progressSection:  { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '20px', padding: '25px', marginBottom: '30px', boxShadow: 'var(--shadow-sm)' },
-  progressHeader:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  progressBarBg:    { height: '12px', background: 'var(--bg-app)', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border)' },
-  progressBarFill:  { height: '100%', transition: 'width 1s cubic-bezier(0.22,1,0.36,1)' },
-  dailyManagementGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '40px' },
-  cardPanel:        { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '20px', padding: '25px', boxShadow: 'var(--shadow-sm)' },
-  cardHeaderTitle:  { margin: '0 0 20px 0', fontSize: '13px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.05em' },
-  emptyStateBox:    { padding: '30px 20px', background: 'var(--bg-app)', border: '1px dashed var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' },
-  listContainer:    { display: 'flex', flexDirection: 'column', gap: '10px' },
-  listItem:         { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 15px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '12px' },
-  btnAcaoList:      { background: 'white', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' },
-  routineCheckItem: { display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' },
-  sectionHeaderShortcut: { fontSize: '14px', fontWeight: '900', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', borderBottom: '2px solid var(--border)', paddingBottom: '10px' },
-  shortcutGrid:     { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' },
-  shortcutCard:     { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '15px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' },
+  hero: { background: `linear-gradient(135deg, ${colors.primary} 0%, #1e3a8a 50%, #0f172a 100%)`, borderRadius: 28, padding: '36px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', color: '#fff', marginBottom: 30, boxShadow: '0 18px 38px rgba(15,23,42,.22)' },
+  heroDate: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 13, fontWeight: 700, textTransform: 'capitalize', opacity: .9 },
+  heroTitle: { fontSize: 34, fontWeight: 900, margin: '0 0 8px 0', letterSpacing: '-.03em' },
+  heroText: { fontSize: 15, margin: 0, opacity: .88, maxWidth: 760, lineHeight: 1.7 },
+  refreshBtn: { background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.18)', padding: 12, borderRadius: 14, color: '#fff', cursor: 'pointer' },
+  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, marginBottom: 30 },
+  grid4Compact: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 },
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20 },
+  gaugeCard: { position: 'relative', overflow: 'hidden', background: 'linear-gradient(145deg, rgba(15,23,42,.98), rgba(30,41,59,.95))', border: '1px solid rgba(148,163,184,.18)', borderRadius: 24, padding: 22, boxShadow: '0 24px 48px rgba(15,23,42,.18)', minHeight: 340, display: 'grid', gap: 18 },
+  gaugeGlow: (accent) => ({ position: 'absolute', inset: 'auto -20% -28% auto', width: 180, height: 180, borderRadius: 999, background: `${accent}20`, filter: 'blur(40px)' }),
+  gaugeHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 },
+  gaugeEyebrow: { fontSize: 11, fontWeight: 900, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.64)' },
+  gaugeSubtitle: { marginTop: 8, fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,.78)', maxWidth: 240 },
+  gaugeIcon: (accent) => ({ width: 42, height: 42, borderRadius: 14, display: 'grid', placeItems: 'center', background: `${accent}16`, border: `1px solid ${accent}35` }),
+  gaugeSvgWrap: { position: 'relative', width: '100%', height: 160 },
+  gaugeCenter: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', paddingTop: 28, textAlign: 'center' },
+  gaugeValue: { fontSize: 38, lineHeight: 1, fontWeight: 900, color: '#fff', letterSpacing: '-.05em' },
+  gaugeStatus: { marginTop: 8, fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,.68)', textTransform: 'uppercase', letterSpacing: '.08em' },
+  metricGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 },
+  metricBox: { padding: 14, borderRadius: 16, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)' },
+  metricLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 900, color: 'rgba(255,255,255,.56)' },
+  metricValue: { marginTop: 8, fontSize: 24, lineHeight: 1, fontWeight: 900, color: '#fff' },
+  gaugeHelper: { fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,.7)' },
+  sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  sectionTitle: { display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, color: 'var(--text-main)', letterSpacing: '.06em', textTransform: 'uppercase' },
+  sectionSubtitle: { margin: '8px 0 0 0', fontSize: 13, lineHeight: 1.7, color: 'var(--text-muted)', maxWidth: 760 },
+  actionBtn: (color) => ({ padding: '10px 14px', borderRadius: 12, border: `1px solid ${color}26`, background: `${color}10`, color, fontWeight: 900, fontSize: 12, cursor: 'pointer' }),
+  panel: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 22, padding: 22, boxShadow: 'var(--shadow-sm)' },
+  goodState: { padding: 40, background: `${colors.success}08`, border: `1px dashed ${colors.success}40`, borderRadius: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, textAlign: 'center', color: colors.success },
+  faltasGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 },
+  faltaCard: (urgent, pending) => ({ background: 'var(--bg-card)', border: `1px solid ${urgent ? `${colors.danger}50` : 'var(--border)'}`, borderLeft: `4px solid ${urgent ? colors.danger : pending ? colors.warning : colors.success}`, borderRadius: 20, padding: 20, display: 'grid', gap: 14, boxShadow: urgent ? `0 0 0 2px ${colors.danger}18, var(--shadow-sm)` : 'var(--shadow-sm)', cursor: 'pointer' }),
+  faltaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  faltaTitleRow: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  badgeDanger: { fontSize: 10, fontWeight: 900, color: colors.danger, background: `${colors.danger}15`, padding: '4px 10px', borderRadius: 8, textTransform: 'uppercase', letterSpacing: '.05em' },
+  coverageBox: { background: 'var(--bg-app)', borderRadius: 12, padding: 12, display: 'grid', gap: 8, border: '1px solid var(--border)' },
+  coverageRow: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 },
+  coverageSelect: (assigned) => ({ flex: 1, padding: '7px 10px', borderRadius: 9, border: !assigned ? `1px solid ${colors.warning}` : `1px solid ${colors.success}40`, background: !assigned ? `${colors.warning}15` : `${colors.success}12`, color: !assigned ? '#b45309' : colors.success, fontWeight: 800, fontSize: 12, outline: 'none' }),
+  feedHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 },
+  feedTitle: { display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 900, color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '.06em' },
+  feedSubtitle: { marginTop: 8, fontSize: 12, lineHeight: 1.7, color: 'var(--text-muted)' },
+  evolutionLabels: { display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: 8, fontSize: 11, color: 'var(--text-muted)' },
+  summaryBox: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 18, background: 'var(--bg-app)', border: '1px solid var(--border)' },
+  summaryLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 900, color: 'var(--text-muted)' },
+  summaryValue: { display: 'block', marginTop: 8, fontSize: 28, lineHeight: 1, fontWeight: 900, color: 'var(--text-main)' },
+  summaryBig: { display: 'block', marginTop: 8, fontSize: 30, lineHeight: 1, fontWeight: 900, color: 'var(--text-main)' },
+  summaryHint: { display: 'block', marginTop: 6, fontSize: 12, color: 'var(--text-muted)' },
+  kpiRow: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 },
+  kpiBox: { padding: 16, borderRadius: 18, background: 'var(--bg-app)', border: '1px solid var(--border)' },
+  progressBg: { height: 12, width: '100%', background: 'rgba(148,163,184,.16)', borderRadius: 999, overflow: 'hidden' },
+  progressFill: (width, color) => ({ height: '100%', width: `${width}%`, background: color, borderRadius: 999 }),
+  progressLegend: { display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--text-muted)' },
+  clusterWrap: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  clusterChip: { padding: '10px 12px', borderRadius: 14, background: 'rgba(15,23,42,.04)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 },
+  rankSection: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 },
+  rankTitle: (color) => ({ fontSize: 12, fontWeight: 900, color, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.06em' }),
+  rankItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, background: 'var(--bg-app)', border: '1px solid var(--border)', marginBottom: 10 },
+  signalCard: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: 18, boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'flex-start', gap: 14 },
+  signalTitle: { fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 900, color: 'var(--text-muted)' },
+  signalValue: { display: 'block', marginTop: 6, fontSize: 28, lineHeight: 1, fontWeight: 900 },
+  signalSubtitle: { display: 'block', marginTop: 8, fontSize: 12, lineHeight: 1.6, color: 'var(--text-muted)' },
+  feedItem: { padding: '14px 16px', borderRadius: 16, background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'grid', gap: 8 },
+  feedItemTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 11, fontWeight: 800, color: 'var(--text-muted)' },
+  feedMeta: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' },
+  statusBadge: (color) => ({ padding: '6px 8px', borderRadius: 999, fontSize: 10, fontWeight: 900, color, background: `${color}12`, border: `1px solid ${color}24` }),
+  emptyBox: { minHeight: 150, borderRadius: 18, border: '1px dashed var(--border)', background: 'var(--bg-app)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 20, color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' },
+  listItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 15px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 12 },
+  smallBtn: { background: '#fff', border: '1px solid var(--border)', color: 'var(--text-brand)', padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' },
+  routineItem: (done) => ({ display: 'flex', alignItems: 'center', gap: 15, padding: 15, border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer', background: done ? 'var(--bg-app)' : 'var(--bg-card)', opacity: done ? .6 : 1 }),
+  routineCheck: (done) => ({ width: 20, height: 20, borderRadius: 6, border: `2px solid ${done ? colors.success : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: done ? colors.success : 'transparent', flexShrink: 0 }),
+  blockLabel: { fontSize: 14, fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 20, borderBottom: '2px solid var(--border)', paddingBottom: 10 },
+  shortcutGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 15 },
+  shortcutCard: { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 15, display: 'flex', alignItems: 'center', gap: 15, cursor: 'pointer', transition: 'all .2s ease', boxShadow: 'var(--shadow-sm)' },
+  shortcutIcon: (color) => ({ padding: 12, borderRadius: 12, background: `${color}15`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+  alertBox: { position: 'fixed', bottom: 24, right: 24, zIndex: 9999, width: 360, background: 'var(--bg-card)', border: `1px solid ${colors.danger}50`, borderLeft: `4px solid ${colors.danger}`, borderRadius: 16, boxShadow: '0 16px 48px rgba(0,0,0,.35)', animation: 'slideInRight .35s cubic-bezier(.22,1,.36,1)' },
+  alertHeader: { padding: '14px 16px 10px', display: 'flex', alignItems: 'flex-start', gap: 10 },
+  alertIcon: { width: 34, height: 34, borderRadius: 10, background: `${colors.danger}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  iconGhost: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 },
+  alertItem: { padding: '10px 12px', borderRadius: 10, background: `${colors.danger}08`, border: `1px solid ${colors.danger}20` },
+  alertCta: { width: '100%', padding: 10, borderRadius: 10, border: 'none', background: colors.danger, color: '#fff', fontWeight: 900, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
 };

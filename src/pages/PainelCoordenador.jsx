@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { signOut as authSignOut } from 'firebase/auth';
 
 import { auth } from '../firebase';
@@ -6,40 +6,42 @@ import LayoutGlobal from '../components/LayoutGlobal';
 import { Empty, Page, Spinner } from '../components/ui';
 import { useModuleNav } from '../hooks/useModuleNav';
 import { usePanelAccess } from '../hooks/usePanelAccess';
+import { lazyWithRetry } from '../lib/lazyWithRetry';
 import { PANEL_KEYS } from '../lib/moduleCatalog';
 import { getCachedUserPreferences } from '../services/userSettings';
 
 const lazyNamed = (importFn, name) =>
-  lazy(() => importFn().then((module) => ({ default: module[name] })));
+  lazyWithRetry(() => importFn().then((module) => ({ default: module[name] })), `named_${name}`);
 
-const DashboardCoordenador = lazy(() => import('./DashboardCoordenador'));
+const DashboardCoordenador = lazyWithRetry(() => import('./DashboardCoordenador'), 'dashboard_coordenador');
 const GestaoSupervisores = lazyNamed(() => import('./GestaoColaboradores'), 'GestaoSupervisores');
 const GestaoAtendentes = lazyNamed(() => import('./GestaoColaboradores'), 'GestaoAtendentes');
-const GestaoEstrutura = lazy(() => import('./GestaoEstrutura'));
-const GestaoProdutos = lazy(() => import('./GestaoProdutos'));
-const GestaoMetas = lazy(() => import('./GestaoMetas'));
-const ApuracaoResultados = lazy(() => import('./ApuracaoResultados'));
-const HubCrescimento = lazy(() => import('./HubCrescimento'));
-const LojasOquei = lazy(() => import('./LojasOquei'));
-const FaltasSupervisor = lazy(() => import('./FaltasSupervisor/index.jsx'));
-const RhSupervisor = lazy(() => import('./RhSupervisor'));
-const DesencaixeSupervisor = lazy(() => import('./DesencaixeSupervisor'));
-const Comunicados = lazy(() => import('./Comunicados'));
-const Wallboard = lazy(() => import('./Wallboard'));
-const HubOquei = lazy(() => import('./HubOquei'));
-const LaboratorioChurn = lazy(() => import('./LaboratorioChurn'));
-const OqueiInsights = lazy(() => import('../OqueiInsights'));
-const PainelVendas = lazy(() => import('./PainelVendas'));
-const SalaDeGuerra = lazy(() => import('./SalaDeGuerra'));
-const BancoHorasSupervisor = lazy(() => import('./BancoHorasSupervisor'));
-const AgendaSupervisor = lazy(() => import('./AgendaSupervisor'));
-const PatrocinioSupervisor = lazy(() => import('./PatrocinioSupervisor'));
-const SolicitarCampanha = lazy(() => import('./SolicitarCampanha'));
-const JapaSupervisor = lazy(() => import('./JapaSupervisor'));
-const LinksUteis = lazy(() => import('./LinksUteis'));
-const Configuracoes = lazy(() => import('./Configuracoes'));
-const CatalogoRoteadores = lazy(() => import('./CatalogoRoteadores'));
-const Desempenho = lazy(() => import('./Desempenho'));
+const GestaoEstrutura = lazyWithRetry(() => import('./GestaoEstrutura'), 'gestao_estrutura_coord');
+const GestaoProdutos = lazyWithRetry(() => import('./GestaoProdutos'), 'gestao_produtos_coord');
+const GestaoMetas = lazyWithRetry(() => import('./GestaoMetas'), 'gestao_metas_coord');
+const ApuracaoResultados = lazyWithRetry(() => import('./ApuracaoResultados'), 'apuracao_resultados_coord');
+const HubCrescimento = lazyWithRetry(() => import('./HubCrescimento'), 'hub_crescimento_coord');
+const LojasOquei = lazyWithRetry(() => import('./LojasOquei'), 'lojas_oquei_coord');
+const FaltasSupervisor = lazyWithRetry(() => import('./FaltasSupervisor/index.jsx'), 'faltas_coord');
+const RhSupervisor = lazyWithRetry(() => import('./RhSupervisor'), 'rh_coord');
+const DesencaixeSupervisor = lazyWithRetry(() => import('./DesencaixeSupervisor'), 'desencaixe_coord');
+const Comunicados = lazyWithRetry(() => import('./Comunicados'), 'comunicados_coord');
+const Wallboard = lazyWithRetry(() => import('./Wallboard'), 'wallboard_coord');
+const HubOquei = lazyWithRetry(() => import('./HubOquei'), 'hub_oquei_coord');
+const LaboratorioChurn = lazyWithRetry(() => import('./LaboratorioChurn'), 'churn_coord');
+const OqueiInsights = lazyWithRetry(() => import('../OqueiInsights'), 'insights_coord');
+const PainelVendas = lazyWithRetry(() => import('./PainelVendas'), 'vendas_coord');
+const SalaDeGuerra = lazyWithRetry(() => import('./SalaDeGuerra'), 'guerra_coord');
+const BancoHorasSupervisor = lazyWithRetry(() => import('./BancoHorasSupervisor'), 'banco_horas_coord');
+const AgendaSupervisor = lazyWithRetry(() => import('./AgendaSupervisor'), 'agenda_coord');
+const PatrocinioSupervisor = lazyWithRetry(() => import('./PatrocinioSupervisor'), 'patrocinio_coord');
+const SolicitarCampanha = lazyWithRetry(() => import('./SolicitarCampanha'), 'campanha_coord');
+const JapaSupervisor = lazyWithRetry(() => import('./JapaSupervisor'), 'japa_coord');
+const LinksUteis = lazyWithRetry(() => import('./LinksUteis'), 'links_coord');
+const Configuracoes = lazyWithRetry(() => import('./Configuracoes'), 'config_coord');
+const CatalogoRoteadores = lazyWithRetry(() => import('./CatalogoRoteadores'), 'roteadores_coord');
+const Desempenho = lazyWithRetry(() => import('./Desempenho'), 'desempenho_coord');
+const Devolucoes = lazyWithRetry(() => import('./Devolucoes'), 'devolucoes_coord');
 
 const ModuleFallback = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -131,6 +133,8 @@ export default function PainelCoordenador({ userData }) {
         );
       case 'roteadores':
         return <CatalogoRoteadores userData={userData} />;
+      case 'devolucoes':
+        return <Devolucoes userData={userData} />;
       default:
         return <DashboardCoordenador userData={userData} setActiveView={setActiveView} />;
     }

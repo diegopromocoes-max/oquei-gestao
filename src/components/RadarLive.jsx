@@ -1,11 +1,48 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
-import { Activity, AlertCircle, CheckCircle2, Info, LogOut, MapPin, PartyPopper, Trophy, TrendingUp, X } from 'lucide-react';
+import { Activity, CheckCircle2, Info, MapPin, PartyPopper, Trophy, TrendingUp, User, X } from 'lucide-react';
 
 import { db } from '../firebase';
 import { normalizeRole } from '../lib/roleUtils';
 import { colors } from './ui';
+
+function formatStoreLabel(action = {}) {
+  const source = action.cityName || action.storeName || action.cityId || action.storeId || '';
+  if (!source) return 'Loja nao informada';
+
+  return String(source)
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value.toDate();
+  if (typeof value?.seconds === 'number') return new Date(value.seconds * 1000);
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatLastUpdate(value) {
+  const parsed = parseDateValue(value);
+  if (!parsed) return 'Sem horario';
+
+  return parsed.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function RadarLive({ isOpen, onClose, userData }) {
   const [recentActions, setRecentActions] = useState([]);
@@ -54,7 +91,7 @@ export default function RadarLive({ isOpen, onClose, userData }) {
             fireConfetti(latestAction.isMetaBatida);
             setCelebration({
               name: latestAction.attendantName?.split(' ')[0],
-              city: latestAction.cityId,
+              city: formatStoreLabel(latestAction),
               product: latestAction.productName,
               isMeta: latestAction.isMetaBatida,
             });
@@ -118,9 +155,26 @@ export default function RadarLive({ isOpen, onClose, userData }) {
                   <div style={{ fontSize: '10px', color: 'var(--text-brand)', fontWeight: 'bold', marginBottom: '4px' }}>
                     {String(action.status || '').toUpperCase()}
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{action.customerName}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    {action.cityId} · {action.productName}
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                    {action.customerName || 'Lead sem nome'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', display: 'grid', gap: '5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={12} />
+                      <span>{formatStoreLabel(action)}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <User size={12} />
+                      <span>{action.attendantName || 'Atendente nao informado'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle2 size={12} />
+                      <span>{action.productName || 'Produto nao informado'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Info size={12} />
+                      <span>Ultima atualizacao: {formatLastUpdate(action.lastUpdate || action.updatedAt || action.createdAt)}</span>
+                    </div>
                   </div>
                 </div>
               ))}

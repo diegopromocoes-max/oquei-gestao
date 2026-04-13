@@ -18,6 +18,12 @@ const SECTORS = [
   'Empresas', 'TI', 'Diretoria', 'Analista'
 ];
 
+const OPERATION_ROLE_OPTIONS = [
+  { value: 'store_attendant', label: 'Atendente de Loja' },
+  { value: 'backoffice', label: 'Backoffice' },
+  { value: 'floater', label: 'Floater / Cobertura' },
+];
+
 const createEmptyCollaboratorForm = () => ({
   name: '',
   email: '',
@@ -34,6 +40,7 @@ const createEmptyCollaboratorForm = () => ({
   hireDate: '',
   employmentStatus: 'ativo',
   scheduleLabel: '',
+  operationRole: 'store_attendant',
   notes: '',
 });
 
@@ -53,6 +60,7 @@ const buildCollaboratorForm = (user = {}) => ({
   hireDate: user.hireDate || '',
   employmentStatus: user.employmentStatus || 'ativo',
   scheduleLabel: user.scheduleLabel || '',
+  operationRole: user.operationRole || 'store_attendant',
   notes: user.notes || '',
 });
 
@@ -257,12 +265,15 @@ export const GestaoAtendentes = () => {
     try {
       const isGrowth = form.role === 'growth_team';
       const finalCityId = isGrowth ? 'global' : form.city;
+      const selectedCity = cidades.find((city) => city.id === form.city);
       const finalSector = isGrowth ? form.sector : null;
       const payload = {
         name: form.name,
         email: form.email,
         role: form.role,
         cityId: finalCityId,
+        cityName: isGrowth ? '' : (selectedCity?.name || ''),
+        clusterId: isGrowth ? 'global' : (selectedCity?.clusterId || ''),
         sector: finalSector,
         photo: form.photo,
         employeeCode: form.employeeCode || '',
@@ -273,6 +284,7 @@ export const GestaoAtendentes = () => {
         hireDate: form.hireDate || '',
         employmentStatus: form.employmentStatus || '',
         scheduleLabel: form.scheduleLabel || '',
+        operationRole: isGrowth ? '' : form.operationRole,
         notes: form.notes || '',
         updatedAt: serverTimestamp(),
       };
@@ -395,6 +407,11 @@ export const GestaoAtendentes = () => {
                 <><MapPin size={14} color={colors.primary} /> <strong>{att.cityId}</strong></>
               )}
             </p>
+            {att.role !== 'growth_team' && (
+              <p style={{ ...local.userMeta, fontSize: '12px', marginTop: '8px' }}>
+                <Shield size={14} color={colors.info} /> <strong>{OPERATION_ROLE_OPTIONS.find((option) => option.value === att.operationRole)?.label || 'Atendente de Loja'}</strong>
+              </p>
+            )}
             
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button onClick={() => { setEditingUser(att); setForm(buildCollaboratorForm(att)); setIsModalOpen(true); }} style={{ ...global.btnSecondary, flex: 1, fontWeight: '800', borderRadius: '10px' }}>Editar Perfil</button>
@@ -500,13 +517,23 @@ export const GestaoAtendentes = () => {
                     </select>
                   </div>
                   {form.role === 'attendant' ? (
-                    <div style={local.fieldGroupFull}>
-                      <label style={local.label}>Cidade / Loja</label>
-                      <select style={global.select} value={form.city} onChange={e=>setForm({...form, city:e.target.value})} required>
-                        <option value="">Selecione a cidade/loja...</option>
-                        {cidades.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    </div>
+                    <>
+                      <div style={local.fieldGroupFull}>
+                        <label style={local.label}>Cidade / Loja</label>
+                        <select style={global.select} value={form.city} onChange={e=>setForm({...form, city:e.target.value})} required>
+                          <option value="">Selecione a cidade/loja...</option>
+                          {cidades.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                      <div style={local.fieldGroupFull}>
+                        <label style={local.label}>Perfil Operacional</label>
+                        <select style={global.select} value={form.operationRole} onChange={e=>setForm({...form, operationRole:e.target.value})}>
+                          {OPERATION_ROLE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
                   ) : (
                     <div style={local.fieldGroupFull}>
                       <label style={local.label}>Setor de Atuacao</label>

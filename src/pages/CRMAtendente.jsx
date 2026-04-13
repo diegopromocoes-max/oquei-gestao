@@ -14,6 +14,7 @@ import {
   MapPinned,
   Megaphone,
   PlusCircle,
+  Router,
   Share2,
   Users,
   Wallet,
@@ -38,6 +39,8 @@ import LinksUteis from './LinksUteis';
 import PainelVendasAtendente from './PainelVendasAtendente';
 import Configuracoes from './Configuracoes';
 import MeuMapaLeads from './MeuMapaLeads';
+import Devolucoes from './Devolucoes';
+import CatalogoRoteadores from './CatalogoRoteadores';
 import { usePanelAccess } from '../hooks/usePanelAccess';
 import { PANEL_KEYS } from '../lib/moduleCatalog';
 import { getCachedUserPreferences } from '../services/userSettings';
@@ -235,6 +238,8 @@ export default function CRMAtendente({ userData }) {
     { id: 'rh', label: 'Solicitações RH', icon: FileCheck, section: 'Ferramentas', color: '#f59e0b' },
     { id: 'colinhas', label: 'Colinhas', icon: BookMarked, section: 'Ferramentas', color: '#8b5cf6' },
     { id: 'desencaixe', label: 'Caixa da Loja', icon: Wallet, section: 'Ferramentas', color: '#10b981' },
+    { id: 'roteadores', label: 'Catálogo Roteadores', icon: Router, section: 'Ferramentas', color: '#06b6d4' },
+    { id: 'devolucoes', label: 'Devoluções', icon: FileCheck, section: 'Ferramentas', color: '#059669' },
     { id: 'manual', label: 'Manual', icon: BookOpen, section: 'Ferramentas', color: '#06b6d4' },
     { id: 'japa', label: 'Ações do Japa', icon: Share2, section: 'Consulta & Escala', color: '#f59e0b' },
     { id: 'escala', label: 'Escala da Rede', icon: CalendarDays, section: 'Consulta & Escala', color: '#2563eb' },
@@ -497,6 +502,8 @@ export default function CRMAtendente({ userData }) {
       case 'rh': return <RhAtendente userData={userData} />;
       case 'colinhas': return <ColinhasAtendente userData={userData} />;
       case 'desencaixe': return <DesencaixeAtendente userData={userData} />;
+      case 'roteadores': return <CatalogoRoteadores userData={userData} />;
+      case 'devolucoes': return <Devolucoes userData={userData} />;
       case 'manual': return <ManualAtendente userData={userData} />;
       case 'escala': return <EscalaAtendenteView />;
       case 'japa':

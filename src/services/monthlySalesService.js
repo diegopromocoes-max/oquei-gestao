@@ -15,6 +15,11 @@ function normalizeText(value = '') {
     .toLowerCase();
 }
 
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function normalizeRoleKey(value = '') {
   return normalizeText(value).replace(/[\s_-]+/g, '');
 }

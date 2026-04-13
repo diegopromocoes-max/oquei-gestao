@@ -1,16 +1,71 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, MapPin, Navigation, Search } from 'lucide-react';
+import { CheckCircle2, Crosshair, MapPin, Navigation, Search } from 'lucide-react';
 
 import { Btn, Card, InfoBox, Modal, colors, styles as uiStyles } from './ui';
 import { addProfessionalTileLayer, createLeafletPinIcon, loadLeafletAssets, reverseGeocode, searchAddress } from '../lib/openStreetMap';
+import {
+  LEAD_GEO_STATUS,
+  buildLeadAddressLabel,
+  hasValidLeadCoordinates,
+  normalizeLeadGeoStatus,
+  parseLeadCoordinateInput,
+} from '../lib/leadGeo';
 
 const DEFAULT_CENTER = { lat: -20.8113, lng: -49.3758 };
 
 function pickInitialCenter(location) {
-  if (location?.geoLat && location?.geoLng) {
+  if (hasValidLeadCoordinates(location)) {
     return { lat: Number(location.geoLat), lng: Number(location.geoLng) };
   }
   return DEFAULT_CENTER;
+}
+
+function buildSearchSeed(value = {}) {
+  return [value.logradouro, value.numero, value.bairro, value.geoFormattedAddress]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function getStatusMeta(status, hasCoordinates) {
+  switch (status) {
+    case LEAD_GEO_STATUS.SEARCH_CANDIDATE:
+      return {
+        label: 'Local encontrado, aguardando confirmacao',
+        color: colors.warning,
+        type: 'warning',
+        description: 'Confira o ponto no mapa antes de usar. A busca por endereco pode retornar local incorreto.',
+      };
+    case LEAD_GEO_STATUS.SEARCH_CONFIRMED:
+      return {
+        label: 'Ponto confirmado pela busca',
+        color: colors.success,
+        type: 'success',
+        description: 'O ponto sugerido foi revisado e confirmado pelo atendente.',
+      };
+    case LEAD_GEO_STATUS.MAP_CLICKED:
+      return {
+        label: 'Ponto confirmado manualmente no mapa',
+        color: colors.success,
+        type: 'success',
+        description: 'A coordenada atual veio de clique ou arraste manual do pino.',
+      };
+    case LEAD_GEO_STATUS.COORDINATES_PASTED:
+      return {
+        label: 'Ponto confirmado por coordenadas coladas',
+        color: colors.success,
+        type: 'success',
+        description: 'A coordenada atual foi informada manualmente em formato decimal.',
+      };
+    default:
+      return {
+        label: hasCoordinates ? 'Coordenada pendente de confirmacao' : 'Nenhum ponto confirmado ainda',
+        color: colors.warning,
+        type: 'info',
+        description: hasCoordinates
+          ? 'Existe uma coordenada carregada, mas ela ainda precisa ser confirmada.'
+          : 'Busque um endereco, clique no mapa ou cole as coordenadas para definir o ponto do lead.',
+      };
+  }
 }
 
 export default function LeadAddressMapModal({
@@ -28,43 +83,54 @@ export default function LeadAddressMapModal({
   const [mapsReady, setMapsReady] = useState(false);
   const [error, setError] = useState('');
   const [searchValue, setSearchValue] = useState('');
-  const [resolvedAddress, setResolvedAddress] = useState(initialValue?.geoFormattedAddress || '');
+  const [coordinateInput, setCoordinateInput] = useState('');
+  const [previewAddress, setPreviewAddress] = useState('');
   const [selectedLocation, setSelectedLocation] = useState(() => ({
     ...pickInitialCenter(initialValue),
     ...initialValue,
+    geoStatus: normalizeLeadGeoStatus(initialValue?.geoStatus),
   }));
 
-  const previewAddress = useMemo(() => {
-    const parts = [
-      selectedLocation.logradouro,
-      selectedLocation.numero,
-      selectedLocation.bairro,
-      cityName,
-    ].filter(Boolean);
-    return resolvedAddress || parts.join(', ');
-  }, [cityName, resolvedAddress, selectedLocation.bairro, selectedLocation.logradouro, selectedLocation.numero]);
+  const hasCoordinates = hasValidLeadCoordinates(selectedLocation);
+  const statusMeta = useMemo(
+    () => getStatusMeta(normalizeLeadGeoStatus(selectedLocation?.geoStatus), hasCoordinates),
+    [hasCoordinates, selectedLocation?.geoStatus],
+  );
+  const canUseCurrentPoint =
+    hasCoordinates &&
+    [
+      LEAD_GEO_STATUS.SEARCH_CONFIRMED,
+      LEAD_GEO_STATUS.MAP_CLICKED,
+      LEAD_GEO_STATUS.COORDINATES_PASTED,
+    ].includes(normalizeLeadGeoStatus(selectedLocation?.geoStatus));
 
-  const syncLocationFromReverse = async (lat, lng) => {
-    const result = await reverseGeocode(lat, lng, {
-      cityName,
-      bairro: selectedLocation.bairro,
-      logradouro: selectedLocation.logradouro,
-      numero: selectedLocation.numero,
-    });
-    setResolvedAddress(result.formattedAddress || result.display_name || '');
-    setSelectedLocation((current) => ({
-      ...current,
-      geoLat: lat,
-      geoLng: lng,
-      geoFormattedAddress: result.formattedAddress || result.display_name || '',
-      geoStatus: 'resolved',
-      logradouro: result.logradouro || current.logradouro || '',
-      numero: result.numero || current.numero || '',
-      bairro: result.bairro || current.bairro || '',
-    }));
+  const updateMarkerAppearance = (status) => {
+    if (!markerRef.current) return;
+    const isPending = [LEAD_GEO_STATUS.PENDING, LEAD_GEO_STATUS.SEARCH_CANDIDATE].includes(normalizeLeadGeoStatus(status));
+    markerRef.current.setIcon(createLeafletPinIcon(isPending ? colors.warning : colors.success));
   };
 
-  const placeMarker = async (lat, lng) => {
+  const syncPreviewFromReverse = async (lat, lng, fallbackPatch = {}) => {
+    try {
+      const result = await reverseGeocode(lat, lng, {
+        cityName,
+        bairro: fallbackPatch.bairro || selectedLocation.bairro,
+        logradouro: fallbackPatch.logradouro || selectedLocation.logradouro,
+        numero: fallbackPatch.numero || selectedLocation.numero,
+      });
+      setPreviewAddress(result.formattedAddress || result.display_name || '');
+      setSelectedLocation((current) => ({
+        ...current,
+        logradouro: result.logradouro || fallbackPatch.logradouro || current.logradouro || '',
+        numero: result.numero || fallbackPatch.numero || current.numero || '',
+        bairro: result.bairro || fallbackPatch.bairro || current.bairro || '',
+      }));
+    } catch {
+      setPreviewAddress('');
+    }
+  };
+
+  const placeMarker = async ({ lat, lng, status, patch = {}, previewText = '', enrichWithReverse = false }) => {
     const L = window.L;
     if (!L || !mapInstanceRef.current) {
       throw new Error('Mapa ainda nao carregado.');
@@ -74,22 +140,44 @@ export default function LeadAddressMapModal({
     if (!markerRef.current) {
       markerRef.current = L.marker(markerPosition, {
         draggable: true,
-        icon: createLeafletPinIcon(colors.primary),
+        icon: createLeafletPinIcon(colors.success),
       }).addTo(mapInstanceRef.current);
       markerRef.current.on('dragend', async (event) => {
         const markerLatLng = event.target.getLatLng();
         try {
-          await syncLocationFromReverse(markerLatLng.lat, markerLatLng.lng);
+          setError('');
+          await placeMarker({
+            lat: markerLatLng.lat,
+            lng: markerLatLng.lng,
+            status: LEAD_GEO_STATUS.MAP_CLICKED,
+            patch: {},
+            previewText: '',
+            enrichWithReverse: true,
+          });
         } catch (serviceError) {
-          setError(serviceError.message || 'Nao foi possivel atualizar o endereco do pino.');
+          setError(serviceError.message || 'Nao foi possivel atualizar a posicao do pino.');
         }
       });
     } else {
       markerRef.current.setLatLng(markerPosition);
     }
 
+    updateMarkerAppearance(status);
     mapInstanceRef.current.setView(markerPosition, Math.max(mapInstanceRef.current.getZoom(), 17));
-    await syncLocationFromReverse(lat, lng);
+
+    setSelectedLocation((current) => ({
+      ...current,
+      ...patch,
+      geoLat: lat,
+      geoLng: lng,
+      geoStatus: status,
+      geoFormattedAddress: patch.geoFormattedAddress ?? current.geoFormattedAddress ?? '',
+    }));
+    setPreviewAddress(previewText);
+
+    if (enrichWithReverse) {
+      await syncPreviewFromReverse(lat, lng, patch);
+    }
   };
 
   const handleSearch = async () => {
@@ -108,15 +196,60 @@ export default function LeadAddressMapModal({
       });
       const firstResult = results[0];
       if (!firstResult) {
-        throw new Error('Endereco nao encontrado. Tente refinar a busca.');
+        throw new Error('Endereco nao encontrado. Clique manualmente no mapa ou cole as coordenadas.');
       }
 
-      await placeMarker(firstResult.lat, firstResult.lng);
+      await placeMarker({
+        lat: Number(firstResult.lat),
+        lng: Number(firstResult.lng),
+        status: LEAD_GEO_STATUS.SEARCH_CANDIDATE,
+        patch: {
+          logradouro: firstResult.logradouro || selectedLocation.logradouro || '',
+          numero: firstResult.numero || selectedLocation.numero || '',
+          bairro: firstResult.bairro || selectedLocation.bairro || '',
+          geoFormattedAddress: '',
+        },
+        previewText: firstResult.formattedAddress || firstResult.display_name || '',
+        enrichWithReverse: false,
+      });
     } catch (serviceError) {
       setError(serviceError.message || 'Nao foi possivel localizar este endereco.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasteCoordinates = async () => {
+    const parsed = parseLeadCoordinateInput(coordinateInput);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+
+    setError('');
+    try {
+      await placeMarker({
+        lat: parsed.lat,
+        lng: parsed.lng,
+        status: LEAD_GEO_STATUS.COORDINATES_PASTED,
+        patch: {
+          geoFormattedAddress: '',
+        },
+        previewText: '',
+        enrichWithReverse: true,
+      });
+    } catch (serviceError) {
+      setError(serviceError.message || 'Nao foi possivel posicionar essas coordenadas.');
+    }
+  };
+
+  const handleConfirmSearchPoint = () => {
+    if (!hasCoordinates) return;
+    setSelectedLocation((current) => ({
+      ...current,
+      geoStatus: LEAD_GEO_STATUS.SEARCH_CONFIRMED,
+    }));
+    updateMarkerAppearance(LEAD_GEO_STATUS.SEARCH_CONFIRMED);
   };
 
   useEffect(() => {
@@ -138,7 +271,7 @@ export default function LeadAddressMapModal({
         const initialCenter = pickInitialCenter(initialValue);
         mapInstanceRef.current = L.map(mapRef.current, {
           center: [initialCenter.lat, initialCenter.lng],
-          zoom: initialValue?.geoLat ? 17 : 13,
+          zoom: hasValidLeadCoordinates(initialValue) ? 17 : 13,
           zoomControl: true,
         });
 
@@ -148,14 +281,34 @@ export default function LeadAddressMapModal({
 
         mapInstanceRef.current.on('click', async (event) => {
           try {
-            await placeMarker(event.latlng.lat, event.latlng.lng);
+            setError('');
+            await placeMarker({
+              lat: event.latlng.lat,
+              lng: event.latlng.lng,
+              status: LEAD_GEO_STATUS.MAP_CLICKED,
+              patch: { geoFormattedAddress: '' },
+              previewText: '',
+              enrichWithReverse: true,
+            });
           } catch (serviceError) {
             setError(serviceError.message || 'Nao foi possivel posicionar o pino.');
           }
         });
 
-        if (initialValue?.geoLat && initialValue?.geoLng) {
-          placeMarker(Number(initialValue.geoLat), Number(initialValue.geoLng)).catch((serviceError) => {
+        if (hasValidLeadCoordinates(initialValue)) {
+          placeMarker({
+            lat: Number(initialValue.geoLat),
+            lng: Number(initialValue.geoLng),
+            status: normalizeLeadGeoStatus(initialValue?.geoStatus),
+            patch: {
+              logradouro: initialValue.logradouro || '',
+              numero: initialValue.numero || '',
+              bairro: initialValue.bairro || '',
+              geoFormattedAddress: initialValue.geoFormattedAddress || '',
+            },
+            previewText: initialValue.geoFormattedAddress || buildLeadAddressLabel(initialValue),
+            enrichWithReverse: false,
+          }).catch((serviceError) => {
             setError(serviceError.message || 'Nao foi possivel restaurar o local inicial.');
           });
         }
@@ -186,11 +339,13 @@ export default function LeadAddressMapModal({
 
   useEffect(() => {
     if (!open) return;
-    setSearchValue(initialValue?.geoFormattedAddress || '');
-    setResolvedAddress(initialValue?.geoFormattedAddress || '');
+    setSearchValue(buildSearchSeed(initialValue));
+    setCoordinateInput('');
+    setPreviewAddress(initialValue?.geoFormattedAddress || '');
     setSelectedLocation({
       ...pickInitialCenter(initialValue),
       ...initialValue,
+      geoStatus: normalizeLeadGeoStatus(initialValue?.geoStatus),
     });
   }, [initialValue, open]);
 
@@ -199,7 +354,7 @@ export default function LeadAddressMapModal({
       <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
       <Btn
         onClick={() => onConfirm?.(selectedLocation)}
-        disabled={!selectedLocation?.geoLat || !selectedLocation?.geoLng}
+        disabled={!canUseCurrentPoint}
       >
         Usar este local
       </Btn>
@@ -226,12 +381,12 @@ export default function LeadAddressMapModal({
               </div>
             </div>
             <div style={{ color: colors.primary, fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Crosshair size={16} /> OpenStreetMap com ajuste livre do pino
+              <Crosshair size={16} /> Leaflet tradicional com confirmacao manual do ponto
             </div>
           </div>
         </Card>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(300px, 0.8fr)', gap: '18px' }}>
           <div style={{ display: 'grid', gap: '14px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div style={{ position: 'relative', flex: 1 }}>
@@ -254,7 +409,7 @@ export default function LeadAddressMapModal({
                 minHeight: '420px',
                 borderRadius: '20px',
                 border: '1px solid var(--border)',
-                background: '#020617',
+                background: '#e5e7eb',
                 overflow: 'hidden',
                 position: 'relative',
               }}
@@ -266,15 +421,77 @@ export default function LeadAddressMapModal({
                 </div>
               )}
             </div>
+
+            <InfoBox type="info">
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <span>Se a busca errar, clique no mapa, arraste o pino ou cole as coordenadas.</span>
+                <span>O ponto so deve ser usado depois de confirmado pelo atendente.</span>
+              </div>
+            </InfoBox>
           </div>
 
           <div style={{ display: 'grid', gap: '14px' }}>
-            <Card title="Previa do endereco" size="sm">
-              <div style={{ display: 'grid', gap: '14px' }}>
+            <InfoBox type={statusMeta.type}>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <strong>{statusMeta.label}</strong>
+                <span>{statusMeta.description}</span>
+              </div>
+            </InfoBox>
+
+            {hasCoordinates && [LEAD_GEO_STATUS.PENDING, LEAD_GEO_STATUS.SEARCH_CANDIDATE].includes(normalizeLeadGeoStatus(selectedLocation?.geoStatus)) ? (
+              <Btn
+                variant="success"
+                onClick={handleConfirmSearchPoint}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                <CheckCircle2 size={16} /> Confirmar este ponto
+              </Btn>
+            ) : null}
+
+            <Card title="Coordenadas" size="sm">
+              <div style={{ display: 'grid', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Latitude</span>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>
+                    {hasCoordinates ? Number(selectedLocation.geoLat).toFixed(6) : '-'}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Longitude</span>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>
+                    {hasCoordinates ? Number(selectedLocation.geoLng).toFixed(6) : '-'}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Origem do ponto</span>
+                  <strong style={{ color: statusMeta.color, fontSize: '12px' }}>{statusMeta.label}</strong>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Colar coordenadas" size="sm">
+              <div style={{ display: 'grid', gap: '12px' }}>
+                <input
+                  value={coordinateInput}
+                  onChange={(event) => setCoordinateInput(event.target.value)}
+                  placeholder="-20.8113, -49.3758"
+                  style={uiStyles.input}
+                />
+                <Btn variant="secondary" onClick={handlePasteCoordinates}>
+                  <MapPin size={15} /> Usar coordenadas coladas
+                </Btn>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Formatos aceitos: `lat, lng`, `lat lng` ou `lat;lng`, sempre com ponto decimal.
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Endereco comercial" size="sm">
+              <div style={{ display: 'grid', gap: '10px' }}>
                 <div>
-                  <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Endereco resolvido</div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Resumo</div>
                   <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.6 }}>
-                    {previewAddress || 'Busque um endereco ou clique no mapa para preencher automaticamente.'}
+                    {previewAddress || buildLeadAddressLabel(selectedLocation) || 'Clique no mapa para preencher as coordenadas do lead.'}
                   </div>
                 </div>
 
@@ -294,30 +511,6 @@ export default function LeadAddressMapModal({
                 </div>
               </div>
             </Card>
-
-            <Card title="Coordenadas" size="sm">
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Latitude</span>
-                  <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>
-                    {selectedLocation.geoLat ? Number(selectedLocation.geoLat).toFixed(6) : '-'}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Longitude</span>
-                  <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>
-                    {selectedLocation.geoLng ? Number(selectedLocation.geoLng).toFixed(6) : '-'}
-                  </strong>
-                </div>
-              </div>
-            </Card>
-
-            <InfoBox type="info">
-              <div style={{ display: 'grid', gap: '6px' }}>
-                <span>Digite um endereco para a previa aparecer.</span>
-                <span>Depois disso, ajuste o pino no mapa para garantir que o ponto final ficou correto.</span>
-              </div>
-            </InfoBox>
 
             {error && <InfoBox type="danger">{error}</InfoBox>}
           </div>

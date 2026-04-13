@@ -18,6 +18,7 @@ import {
 
 import LeadAddressMapModal from '../components/LeadAddressMapModal';
 import { Btn, Card, InfoBox, Modal, colors, styles as uiStyles } from '../components/ui';
+import { LEAD_GEO_STATUS, normalizeLeadGeoStatus } from '../lib/leadGeo';
 import { getCategories, getCities, getProducts } from '../services/catalog';
 import { listGrowthActionsForCity } from '../services/atendenteDashboardService';
 import { createLead, listAttendantLeadOptions } from '../services/leads';
@@ -534,11 +535,11 @@ export default function NovoLead({ userData, onNavigate }) {
           </div>
         </div>
 
-        <InfoBox type={form.geoLat && form.geoLng ? 'success' : 'info'}>
-          {form.geoLat && form.geoLng
-            ? 'Local confirmado no mapa. Coordenadas prontas para o modulo Meu mapa de Leads.'
-            : 'Se voce preencher o endereco manualmente, o lead podera ser geocodificado depois e aparecera no mapa assim que as coordenadas forem resolvidas.'}
-        </InfoBox>
+              <InfoBox type={form.geoLat && form.geoLng ? 'success' : 'info'}>
+                {form.geoLat && form.geoLng
+                  ? 'Local confirmado no mapa. Se voce alterar o endereco depois, sera preciso definir o ponto novamente.'
+                  : 'Use o mapa para confirmar o ponto do lead. A busca por endereco e apenas um apoio visual.'}
+              </InfoBox>
       </Card>
     </div>
   );
@@ -845,7 +846,9 @@ export default function NovoLead({ userData, onNavigate }) {
                 value: [form.logradouro, form.numero, form.bairro].filter(Boolean).join(', ') || 'Nao informado',
                 icon: <MapPin size={16} />,
                 accent: colors.info,
-                helper: form.geoLat && form.geoLng ? 'Coordenadas prontas para o mapa' : 'Endereco ainda sem ponto confirmado',
+                helper: form.geoLat && form.geoLng
+                  ? `Coordenadas confirmadas (${normalizeLeadGeoStatus(form.geoStatus)})`
+                  : 'Endereco ainda sem ponto confirmado',
               },
               {
                 label: 'Status de entrada',
@@ -994,16 +997,16 @@ export default function NovoLead({ userData, onNavigate }) {
         cityName={selectedCity?.name || selectedCity?.nome || userData?.cityName || ''}
         initialValue={form}
         onConfirm={(location) => {
-          setForm((current) => ({
-            ...current,
-            logradouro: location.logradouro || current.logradouro || '',
-            numero: location.numero || current.numero || '',
-            bairro: location.bairro || current.bairro || '',
-            geoLat: location.geoLat || null,
-            geoLng: location.geoLng || null,
-            geoFormattedAddress: location.geoFormattedAddress || '',
-            geoStatus: location.geoStatus || 'resolved',
-          }));
+            setForm((current) => ({
+              ...current,
+              logradouro: location.logradouro || current.logradouro || '',
+              numero: location.numero || current.numero || '',
+              bairro: location.bairro || current.bairro || '',
+              geoLat: location.geoLat ?? null,
+              geoLng: location.geoLng ?? null,
+              geoFormattedAddress: location.geoFormattedAddress || '',
+              geoStatus: normalizeLeadGeoStatus(location.geoStatus || LEAD_GEO_STATUS.PENDING),
+            }));
           setMapOpen(false);
         }}
       />

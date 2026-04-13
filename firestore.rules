@@ -5,10 +5,74 @@ service cloud.firestore {
     // ── Funções Auxiliares ──────────────────────────────────────────────────
     function isAuth() { return request.auth != null; }
     function userData() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    
+    function userClusterId() { return userData().clusterId; }
+    function userStoreId() { return userData().cityId; }
+    function hasCluster(clusterId) { return clusterId != null && clusterId != ''; }
+    function sameCluster(clusterId) { return hasCluster(clusterId) && clusterId == userClusterId(); }
+    function storeCluster(storeId) {
+      return storeId != null && exists(/databases/$(database)/documents/cities/$(storeId))
+        ? get(/databases/$(database)/documents/cities/$(storeId)).data.clusterId
+        : null;
+    }
+    function sameClusterByStore(storeId) {
+      return storeCluster(storeId) != null && storeCluster(storeId) == userClusterId();
+    }
+    function employeeCluster(employeeId) {
+      return employeeId != null && exists(/databases/$(database)/documents/users/$(employeeId))
+        ? get(/databases/$(database)/documents/users/$(employeeId)).data.clusterId
+        : null;
+    }
+    function requestOwnerId(data) {
+      return data.attendantId != null && data.attendantId != ''
+        ? data.attendantId
+        : (
+          data.employeeId != null && data.employeeId != ''
+            ? data.employeeId
+            : data.targetId
+        );
+    }
+    function sameClusterByEmployee(employeeId) {
+      return employeeCluster(employeeId) != null && employeeCluster(employeeId) == userClusterId();
+    }
+    function canAccessClusterDoc(data) {
+      return isCoordinator()
+        || (
+          isSupervisor()
+          && (
+            sameCluster(data.clusterId)
+            || sameClusterByStore(data.storeId)
+            || sameClusterByStore(data.cityId)
+            || data.supervisorUid == request.auth.uid
+            || data.supervisorId == request.auth.uid
+            || sameClusterByEmployee(data.attendantId)
+            || sameClusterByEmployee(data.employeeId)
+            || sameClusterByEmployee(data.targetId)
+          )
+        );
+    }
+    function canAccessIncomingClusterDoc() {
+      return isCoordinator()
+        || (
+          isSupervisor()
+          && (
+            sameCluster(request.resource.data.clusterId)
+            || sameClusterByStore(request.resource.data.storeId)
+            || sameClusterByStore(request.resource.data.cityId)
+            || request.resource.data.supervisorUid == request.auth.uid
+            || request.resource.data.supervisorId == request.auth.uid
+            || sameClusterByEmployee(request.resource.data.attendantId)
+            || sameClusterByEmployee(request.resource.data.employeeId)
+            || sameClusterByEmployee(request.resource.data.targetId)
+          )
+        );
+    }
+    function isOwnPendingRequest(data) {
+      return isAuth() && requestOwnerId(data) == request.auth.uid && data.status == 'Pendente';
+    }
+
     function isCoordinator() { 
       let r = userData().role;
-      return r == 'coordinator' || r == 'coordenador' || r == 'master' || r == 'diretor';
+      return r == 'coordinator' || r == 'coordenador' || r == 'coordenadora' || r == 'master' || r == 'diretor';
     }
     function isSupervisor() { return userData().role == 'supervisor'; }
     function isGrowth() { 
@@ -19,7 +83,7 @@ service cloud.firestore {
     function isGrowthOrAbove() { return isCoordinator() || isGrowth() || isSupervisor(); }
     function isSuperOrAbove()  { return isCoordinator() || isSupervisor(); }
     function isOwnLead(data) { return isAuth() && data.attendantId == request.auth.uid; }
-    function isOwnRhRequest(data) { return isAuth() && data.attendantId == request.auth.uid; }
+    function isOwnRhRequest(data) { return isAuth() && requestOwnerId(data) == request.auth.uid; }
     function isAttendantMessageTarget(data) {
       return isAttendant()
         && (data.to == 'all' || data.to == request.auth.uid || data.to == userData().cityId);
@@ -47,6 +111,38 @@ service cloud.firestore {
             )
           )
         );
+    }
+    function isOwnEquipmentReturn(data) {
+      return isAttendant() && data.attendant.uid == request.auth.uid;
+    }
+    function canReadEquipmentReturn(data) {
+      return isCoordinator()
+        || (
+          isSupervisor()
+          && (
+            (
+              userData().clusterId != null
+              && data.attendant.clusterId == userData().clusterId
+            )
+            || (
+              userData().cityId != null
+              && data.attendant.storeId == userData().cityId
+            )
+          )
+        )
+        || isOwnEquipmentReturn(data);
+    }
+    function isColinhaOwner(data) {
+      return isAuth() && data.authorId == request.auth.uid;
+    }
+    function isColinhaSharedWithCurrentUser(data) {
+      return isAuth() && (
+        data.isShared == true
+        || (
+          data.sharedWith is list
+          && request.auth.uid in data.sharedWith
+        )
+      );
     }
 
     // ── 1. Usuários ──────────────────────────────────────────────────────────
@@ -170,28 +266,81 @@ service cloud.firestore {
     match /churn_reasons/{id}          { allow read: if isAuth(); allow write: if isAuth() && isGrowthOrAbove(); }
 
     // ── 8. RH e Administrativo ────────────────────────────────────────────────
+    match /absence_requests/{id} {
+      allow read: if isAuth() && (canAccessClusterDoc(resource.data) || isOwnRhRequest(resource.data));
+      allow create: if isAuth() && (
+        canAccessIncomingClusterDoc()
+        || (
+          isAttendant()
+          && request.resource.data.attendantId == request.auth.uid
+          && (
+            request.resource.data.storeId == userStoreId()
+            || request.resource.data.cityId == userStoreId()
+            || sameCluster(request.resource.data.clusterId)
+            || sameClusterByStore(request.resource.data.storeId)
+            || sameClusterByStore(request.resource.data.cityId)
+          )
+        )
+      );
+      allow update: if isAuth() && (
+        canAccessClusterDoc(resource.data)
+        || (
+          isOwnPendingRequest(resource.data)
+          && request.resource.data.attendantId == request.auth.uid
+          && request.resource.data.status == 'Pendente'
+          && request.resource.data.storeId == resource.data.storeId
+        )
+      );
+      allow delete: if isAuth() && (isCoordinator() || isOwnPendingRequest(resource.data));
+    }
+
     // absences: faltas e atestados
-    match /absences/{id}               { allow read, write: if isAuth() && isSuperOrAbove(); }
+    match /absences/{id} {
+      allow read: if isAuth() && canAccessClusterDoc(resource.data);
+      allow create, update: if isAuth() && canAccessIncomingClusterDoc();
+      allow delete: if isAuth() && canAccessClusterDoc(resource.data);
+    }
     
     // rh_requests: pedidos de RH (Dashboard, PainelCoordenador, PainelSupervisor)
     match /rh_requests/{id} {
-      allow read: if isAuth() && (isSuperOrAbove() || isOwnRhRequest(resource.data));
+      allow read: if isAuth() && (canAccessClusterDoc(resource.data) || isOwnRhRequest(resource.data));
       allow create: if isAuth() && (
-        isSuperOrAbove()
-        || request.resource.data.attendantId == request.auth.uid
-      );
-      allow update: if isAuth() && (
-        isSuperOrAbove()
+        canAccessIncomingClusterDoc()
         || (
-          isOwnRhRequest(resource.data)
+          isAttendant()
           && request.resource.data.attendantId == request.auth.uid
+          && (
+            request.resource.data.storeId == userStoreId()
+            || request.resource.data.cityId == userStoreId()
+            || sameCluster(request.resource.data.clusterId)
+            || sameClusterByStore(request.resource.data.storeId)
+            || sameClusterByStore(request.resource.data.cityId)
+          )
         )
       );
-      allow delete: if isAuth() && (isCoordinator() || isOwnRhRequest(resource.data));
+      allow update: if isAuth() && (
+        canAccessClusterDoc(resource.data)
+        || (
+          isOwnPendingRequest(resource.data)
+          && request.resource.data.attendantId == request.auth.uid
+          && request.resource.data.status == 'Pendente'
+        )
+      );
+      allow delete: if isAuth() && (isCoordinator() || isOwnPendingRequest(resource.data));
+    }
+
+    match /shift_assignments/{id} {
+      allow read: if isAuth() && canAccessClusterDoc(resource.data);
+      allow create, update: if isAuth() && canAccessIncomingClusterDoc();
+      allow delete: if isAuth() && canAccessClusterDoc(resource.data);
     }
 
     // holidays: feriados (SalaDeGuerra, BancoHoras)
-    match /holidays/{id}               { allow read: if isAuth(); allow write: if isAuth() && isCoordinator(); }
+    match /holidays/{id} {
+      allow read: if isAuth();
+      allow create, update: if isAuth() && canAccessIncomingClusterDoc();
+      allow delete: if isAuth() && canAccessClusterDoc(resource.data);
+    }
 
     // bank_hours: banco de horas
     match /bank_hours/{id} {
@@ -321,7 +470,30 @@ service cloud.firestore {
 
     // ── 9. Conteúdo e Comunicação ─────────────────────────────────────────────
     match /comunicados/{id}            { allow read: if isAuth(); allow write: if isAuth() && isSuperOrAbove(); }
-    match /colinhas/{id}               { allow read: if isAuth(); allow write: if isAuth() && (isAttendant() || isSuperOrAbove()); }
+    match /colinhas/{id} {
+      allow read: if isAuth() && (
+        isColinhaOwner(resource.data)
+        || isColinhaSharedWithCurrentUser(resource.data)
+      );
+      allow create: if isAuth()
+        && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuth()
+        && isColinhaOwner(resource.data)
+        && request.resource.data.authorId == request.auth.uid;
+      allow delete: if isAuth() && isColinhaOwner(resource.data);
+    }
+    match /artifacts/{appId}/public/data/colinhas/{id} {
+      allow read: if isAuth() && (
+        isColinhaOwner(resource.data)
+        || isColinhaSharedWithCurrentUser(resource.data)
+      );
+      allow create: if isAuth()
+        && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuth()
+        && isColinhaOwner(resource.data)
+        && request.resource.data.authorId == request.auth.uid;
+      allow delete: if isAuth() && isColinhaOwner(resource.data);
+    }
     match /messages/{id} {
       allow read: if isAuth() && (isGrowthOrAbove() || isAttendantMessageTarget(resource.data));
       allow write: if isAuth() && isGrowthOrAbove();
@@ -332,6 +504,17 @@ service cloud.firestore {
     match /artifacts/{id}              { allow read: if isAuth(); allow write: if isAuth() && isSuperOrAbove(); }
 
     // ── 10. Ferramentas e Links ───────────────────────────────────────────────
+    match /equipment_returns/{id} {
+      allow read: if isAuth() && canReadEquipmentReturn(resource.data);
+      allow create: if isAuth()
+        && isAttendant()
+        && request.resource.data.attendant.uid == request.auth.uid;
+      allow update: if isAuth()
+        && isOwnEquipmentReturn(resource.data)
+        && request.resource.data.attendant.uid == request.auth.uid;
+      allow delete: if isAuth() && isOwnEquipmentReturn(resource.data);
+    }
+    match /equipment_return_types/{id}  { allow read: if isAuth(); allow write: if isAuth() && isSuperOrAbove(); }
     match /router_catalog/{id}         { allow read, write: if isAuth(); }
     match /useful_links/{id}           { allow read, write: if isAuth(); }
     match /essential_sheets/{id}       { allow read, write: if isAuth(); }
@@ -421,7 +604,8 @@ service cloud.firestore {
 
     match /absence_calendar_public/{id} {
       allow read: if isAuth();
-      allow write: if isAuth() && isSuperOrAbove();
+      allow create, update: if isAuth() && canAccessIncomingClusterDoc();
+      allow delete: if isAuth() && canAccessClusterDoc(resource.data);
     }
 
     // Bancos de fornecedores e categorias do Desencaixe

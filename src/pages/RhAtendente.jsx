@@ -1,283 +1,478 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   CalendarDays,
-  CheckCircle,
-  Clock,
+  Clock3,
   FileCheck,
   FileText,
   History,
-  Loader2,
   Send,
+  ShieldCheck,
+  Stethoscope,
   UploadCloud,
-  XCircle,
 } from 'lucide-react';
 
-import { styles as global, colors } from '../styles/globalStyles';
-import { createRhRequest, listMyRhRequests } from '../services/atendenteRhService';
+import {
+  Badge,
+  Btn,
+  Card,
+  InfoBox,
+  Input,
+  Page,
+  Select,
+  Textarea,
+  colors,
+  styles as uiStyles,
+} from '../components/ui';
+import {
+  createGeneralRhRequest,
+  listMyRhRequests,
+} from '../services/atendenteRhService';
+import {
+  createAbsenceRequest,
+  listMyAbsenceRequests,
+} from '../services/absenceRequests';
 
-const REQUEST_TYPES = {
-  falta_futura: { id: 'falta_futura', label: 'Falta Futura', icon: AlertTriangle, color: '#ea580c', bg: '#ea580c15', desc: 'Avisar ausencia programada.' },
-  atestado: { id: 'atestado', label: 'Enviar Atestado', icon: FileCheck, color: '#10b981', bg: '#10b98115', desc: 'Anexar comprovacao medica.' },
-  folga: { id: 'folga', label: 'Solicitar Folga', icon: CalendarDays, color: '#3b82f6', bg: '#3b82f615', desc: 'Pedir folga compensatoria.' },
-  correcao_ponto: { id: 'correcao_ponto', label: 'Revisao de Ponto', icon: Clock, color: '#f59e0b', bg: '#f59e0b15', desc: 'Contestar saldo de horas.' },
-  outros: { id: 'outros', label: 'Solicitacao Avulsa', icon: FileText, color: '#8b5cf6', bg: '#8b5cf615', desc: 'Outros assuntos de RH.' },
-};
+const ABSENCE_OPTIONS = [
+  { value: 'falta', label: 'Falta Programada', icon: AlertTriangle, accent: colors.warning },
+  { value: 'atestado', label: 'Atestado', icon: Stethoscope, accent: colors.success },
+];
 
-function InlineAlert({ children }) {
+const RH_OPTIONS = [
+  { value: 'folga', label: 'Folga', icon: CalendarDays, accent: colors.primary },
+  { value: 'correcao_ponto', label: 'Correcao de ponto', icon: Clock3, accent: colors.warning },
+  { value: 'outros', label: 'Outros assuntos', icon: FileText, accent: colors.purple },
+];
+
+function initialRangeForm() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    startDate: today,
+    endDate: today,
+    allDay: true,
+    startTime: '',
+    endTime: '',
+    justification: '',
+  };
+}
+
+function StatusBadge({ status }) {
+  if (status === 'Aprovado') return <Badge status="ativo">Aprovado</Badge>;
+  if (status === 'Rejeitado') return <Badge cor="danger">Rejeitado</Badge>;
+  return <Badge cor="warning">Pendente</Badge>;
+}
+
+function RequestHistoryCard({ item }) {
   return (
-    <div style={{ background: 'var(--bg-danger-light)', border: '1px solid var(--border-danger)', color: '#b45309', borderRadius: '14px', padding: '14px 16px', marginBottom: '16px', fontSize: '13px' }}>
-      {children}
+    <div
+      style={{
+        padding: '16px',
+        borderRadius: '14px',
+        border: '1px solid var(--border)',
+        background: 'var(--bg-app)',
+        display: 'grid',
+        gap: '10px',
+      }}
+    >
+      <div style={{ ...uiStyles.rowBetween, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontWeight: 900, color: 'var(--text-main)' }}>{item.label}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            {item.startDate ? new Date(`${item.startDate}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem data'}
+            {item.endDate && item.endDate !== item.startDate
+              ? ` ate ${new Date(`${item.endDate}T12:00:00`).toLocaleDateString('pt-BR')}`
+              : ''}
+          </div>
+        </div>
+        <StatusBadge status={item.status} />
+      </div>
+      <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+        {item.justification || item.description || 'Sem observacoes adicionais.'}
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <Badge cor={item.kind === 'absence' ? 'danger' : 'info'}>
+          {item.kind === 'absence' ? 'Ausencia operacional' : 'RH geral'}
+        </Badge>
+        {item.type && <Badge cor="neutral">{item.type}</Badge>}
+        {item.fileName && <Badge cor="primary">Anexo: {item.fileName}</Badge>}
+      </div>
+      {item.decisionReason && (
+        <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(15,23,42,0.04)', fontSize: '12px', color: 'var(--text-main)' }}>
+          <strong>Retorno da lideranca:</strong> {item.decisionReason}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function RhAtendente({ userData }) {
-  const [activeTab, setActiveTab] = useState('nova');
+  const [activeTab, setActiveTab] = useState('absence');
   const [loading, setLoading] = useState(false);
-  const [historyList, setHistoryList] = useState([]);
-  const [selectedType, setSelectedType] = useState(null);
-  const [fileName, setFileName] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
   const [loadError, setLoadError] = useState('');
-  const [submitError, setSubmitError] = useState('');
-  const [form, setForm] = useState({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    allDay: true,
-    startTime: '',
-    endTime: '',
-    description: '',
-  });
 
-  useEffect(() => {
-    if (activeTab === 'historico' && userData?.uid) {
-      fetchHistory();
-    }
-  }, [activeTab, userData?.uid]);
+  const [absenceType, setAbsenceType] = useState('falta');
+  const [absenceForm, setAbsenceForm] = useState(initialRangeForm);
+  const [absenceFileName, setAbsenceFileName] = useState('');
 
-  const fetchHistory = async () => {
-    setLoading(true);
+  const [rhType, setRhType] = useState('folga');
+  const [rhForm, setRhForm] = useState(initialRangeForm);
+
+  const absenceMeta = useMemo(
+    () => ABSENCE_OPTIONS.find((option) => option.value === absenceType) || ABSENCE_OPTIONS[0],
+    [absenceType]
+  );
+  const rhMeta = useMemo(
+    () => RH_OPTIONS.find((option) => option.value === rhType) || RH_OPTIONS[0],
+    [rhType]
+  );
+
+  const loadHistory = async () => {
+    if (!userData?.uid) return;
+    setHistoryLoading(true);
     setLoadError('');
     try {
-      const list = await listMyRhRequests(userData?.uid);
-      setHistoryList(list);
+      const [absenceHistory, rhHistory] = await Promise.all([
+        listMyAbsenceRequests(userData.uid),
+        listMyRhRequests(userData.uid),
+      ]);
+
+      const combined = [
+        ...absenceHistory.map((item) => ({
+          ...item,
+          kind: 'absence',
+          label: item.type === 'atestado' ? 'Atestado' : 'Ausencia operacional',
+        })),
+        ...rhHistory.map((item) => ({
+          ...item,
+          kind: 'rh',
+          label: item.type === 'falta_futura'
+            ? 'Falta futura'
+            : item.type === 'atestado'
+              ? 'Atestado'
+              : item.type === 'folga'
+            ? 'Folga'
+            : item.type === 'correcao_ponto'
+              ? 'Correcao de ponto'
+              : 'Solicitacao de RH',
+        })),
+      ].sort((left, right) => (right.updatedAt?.seconds || right.createdAt?.seconds || 0) - (left.updatedAt?.seconds || left.createdAt?.seconds || 0));
+
+      setHistoryItems(combined);
     } catch (error) {
-      setHistoryList([]);
-      setLoadError(error?.code === 'permission-denied' ? 'Sem permissao para consultar o historico de RH.' : 'Nao foi possivel carregar seu historico de solicitacoes.');
+      setHistoryItems([]);
+      setLoadError(
+        error?.code === 'permission-denied'
+          ? 'Sem permissao para consultar seu historico.'
+          : 'Nao foi possivel carregar o historico de solicitacoes.'
+      );
     }
-    setLoading(false);
+    setHistoryLoading(false);
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setSubmitError('');
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadHistory();
+    }
+  }, [activeTab]);
 
-    if (!form.description.trim()) {
-      window.showToast?.('Descreva o motivo da solicitacao.', 'error');
+  const submitAbsenceRequest = async (event) => {
+    event.preventDefault();
+    if (!absenceForm.justification.trim()) {
+      window.showToast?.('Explique o motivo da ausencia.', 'error');
       return;
     }
-
-    if (selectedType === 'atestado' && !fileName) {
-      window.showToast?.('Anexe a foto ou nome do atestado.', 'error');
+    if (absenceType === 'atestado' && !absenceFileName) {
+      window.showToast?.('Anexe ao menos o nome do atestado.', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      await createRhRequest({
-        type: selectedType,
+      await createAbsenceRequest({
+        type: absenceType,
         attendantId: userData?.uid,
         attendantName: userData?.name || 'Atendente',
-        storeId: userData?.cityId || 'Geral',
+        storeId: userData?.cityId || '',
+        storeName: userData?.cityName || userData?.storeName || userData?.cityId || 'Loja',
         clusterId: userData?.clusterId || '',
-        description: form.description,
-        status: 'Pendente',
-        fileName: fileName || '',
-        startDate: form.startDate,
-        endDate: form.endDate || form.startDate,
-        allDay: form.allDay,
-        startTime: form.allDay ? '' : form.startTime,
-        endTime: form.allDay ? '' : form.endTime,
+        supervisorUid: userData?.supervisorUid || '',
+        startDate: absenceForm.startDate,
+        endDate: absenceForm.endDate || absenceForm.startDate,
+        allDay: absenceForm.allDay,
+        startTime: absenceForm.allDay ? '' : absenceForm.startTime,
+        endTime: absenceForm.allDay ? '' : absenceForm.endTime,
+        justification: absenceForm.justification,
+        fileName: absenceFileName || '',
       });
 
-      window.showToast?.('Solicitacao enviada com sucesso!', 'success');
-      setSelectedType(null);
-      setFileName(null);
-      setForm({
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0],
-        allDay: true,
-        startTime: '',
-        endTime: '',
-        description: '',
-      });
-      setActiveTab('historico');
-      await fetchHistory();
+      window.showToast?.('Solicitacao de ausencia enviada.', 'success');
+      setAbsenceForm(initialRangeForm());
+      setAbsenceFileName('');
+      setActiveTab('history');
+      await loadHistory();
     } catch (error) {
-      const message = error?.code === 'permission-denied' ? 'Sem permissao para abrir solicitacoes de RH.' : 'Nao foi possivel enviar sua solicitacao.';
-      setSubmitError(message);
-      window.showToast?.(message, 'error');
+      window.showToast?.(
+        error?.code === 'permission-denied'
+          ? 'Sem permissao para abrir solicitacoes operacionais.'
+          : 'Nao foi possivel enviar a solicitacao de ausencia.',
+        'error'
+      );
     }
     setLoading(false);
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      Aprovado: { bg: '#10b98115', color: '#10b981', icon: <CheckCircle size={12} /> },
-      Rejeitado: { bg: '#ef444415', color: '#ef4444', icon: <XCircle size={12} /> },
-      Pendente: { bg: '#f59e0b15', color: '#f59e0b', icon: <Clock size={12} /> },
-    };
-    const current = styles[status] || styles.Pendente;
+  const submitRhRequest = async (event) => {
+    event.preventDefault();
+    if (!rhForm.justification.trim()) {
+      window.showToast?.('Explique a necessidade do pedido.', 'error');
+      return;
+    }
 
-    return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', background: current.bg, color: current.color, padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' }}>
-        {current.icon} {status || 'Pendente'}
-      </span>
-    );
+    setLoading(true);
+    try {
+      await createGeneralRhRequest({
+        type: rhType,
+        attendantId: userData?.uid,
+        attendantName: userData?.name || 'Atendente',
+        storeId: userData?.cityId || '',
+        storeName: userData?.cityName || userData?.storeName || userData?.cityId || 'Loja',
+        clusterId: userData?.clusterId || '',
+        supervisorUid: userData?.supervisorUid || '',
+        startDate: rhForm.startDate,
+        endDate: rhForm.endDate || rhForm.startDate,
+        allDay: rhForm.allDay,
+        startTime: rhForm.allDay ? '' : rhForm.startTime,
+        endTime: rhForm.allDay ? '' : rhForm.endTime,
+        description: rhForm.justification,
+      });
+
+      window.showToast?.('Solicitacao de RH enviada.', 'success');
+      setRhForm(initialRangeForm());
+      setActiveTab('history');
+      await loadHistory();
+    } catch (error) {
+      window.showToast?.(
+        error?.code === 'permission-denied'
+          ? 'Sem permissao para abrir solicitacoes de RH.'
+          : 'Nao foi possivel enviar sua solicitacao.',
+        'error'
+      );
+    }
+    setLoading(false);
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out', maxWidth: '850px', margin: '0 auto', width: '100%' }}>
-      <div style={global.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ ...global.iconHeader, background: colors?.primary || '#2563eb' }}>
-            <FileCheck size={28} color="white" />
-          </div>
-          <div>
-            <h1 style={global.title}>RH & Departamento Pessoal</h1>
-            <p style={global.subtitle}>Agora o atendente envia tudo por solicitacao oficial em `rh_requests`.</p>
-          </div>
+    <Page
+      title="Solicitacoes de RH"
+      subtitle="Ausencias operacionais e pedidos gerais agora seguem trilhas separadas."
+      actions={(
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <Btn variant={activeTab === 'absence' ? 'primary' : 'secondary'} onClick={() => setActiveTab('absence')}>
+            <AlertTriangle size={16} /> Ausencia / Atestado
+          </Btn>
+          <Btn variant={activeTab === 'rh' ? 'primary' : 'secondary'} onClick={() => setActiveTab('rh')}>
+            <ShieldCheck size={16} /> RH Geral
+          </Btn>
+          <Btn variant={activeTab === 'history' ? 'primary' : 'secondary'} onClick={() => setActiveTab('history')}>
+            <History size={16} /> Historico
+          </Btn>
         </div>
-      </div>
+      )}
+    >
+      {activeTab === 'absence' && (
+        <Card
+          title={absenceMeta.label}
+          subtitle="Use esta trilha para faltas programadas e envio de atestado."
+          accent={absenceMeta.accent}
+        >
+          <form onSubmit={submitAbsenceRequest} style={uiStyles.form}>
+            <div style={uiStyles.formRow}>
+              <Select
+                label="Tipo"
+                value={absenceType}
+                onChange={(event) => setAbsenceType(event.target.value)}
+                options={ABSENCE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+              <Input
+                label="Data inicial"
+                type="date"
+                value={absenceForm.startDate}
+                onChange={(event) => setAbsenceForm((current) => ({ ...current, startDate: event.target.value }))}
+                required
+              />
+              <Input
+                label="Data final"
+                type="date"
+                value={absenceForm.endDate}
+                min={absenceForm.startDate}
+                onChange={(event) => setAbsenceForm((current) => ({ ...current, endDate: event.target.value }))}
+                required
+              />
+            </div>
 
-      <div style={local.tabsContainer}>
-        <button onClick={() => { setActiveTab('nova'); setSelectedType(null); }} style={activeTab === 'nova' ? local.tabActive : local.tab}>
-          <FileText size={18} /> Nova Solicitacao
-        </button>
-        <button onClick={() => setActiveTab('historico')} style={activeTab === 'historico' ? local.tabActive : local.tab}>
-          <History size={18} /> Meu Historico
-        </button>
-      </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <input
+                type="checkbox"
+                checked={absenceForm.allDay}
+                onChange={(event) => setAbsenceForm((current) => ({ ...current, allDay: event.target.checked }))}
+              />
+              Solicitar dia inteiro
+            </label>
 
-      <div style={{ ...global.card, padding: '30px', borderRadius: '24px' }}>
-        {loadError && <InlineAlert>{loadError}</InlineAlert>}
-        {submitError && <InlineAlert>{submitError}</InlineAlert>}
+            {!absenceForm.allDay && (
+              <div style={uiStyles.formRow}>
+                <Input
+                  label="Hora inicial"
+                  type="time"
+                  value={absenceForm.startTime}
+                  onChange={(event) => setAbsenceForm((current) => ({ ...current, startTime: event.target.value }))}
+                  required
+                />
+                <Input
+                  label="Hora final"
+                  type="time"
+                  value={absenceForm.endTime}
+                  onChange={(event) => setAbsenceForm((current) => ({ ...current, endTime: event.target.value }))}
+                  required
+                />
+              </div>
+            )}
 
-        {activeTab === 'nova' && !selectedType && (
-          <div style={{ animation: 'fadeInUp 0.3s' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-main)' }}>Selecione o tipo de pedido:</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-              {Object.values(REQUEST_TYPES).map((type) => (
-                <button key={type.id} onClick={() => setSelectedType(type.id)} style={local.actionCard}>
-                  <div style={{ background: type.bg, padding: '12px', borderRadius: '12px', color: type.color, marginBottom: '15px' }}>
-                    <type.icon size={24} />
-                  </div>
-                  <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 5px 0' }}>{type.label}</h4>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>{type.desc}</p>
-                </button>
+            <Textarea
+              label="Justificativa"
+              value={absenceForm.justification}
+              onChange={(event) => setAbsenceForm((current) => ({ ...current, justification: event.target.value }))}
+              placeholder="Explique o motivo e qualquer detalhe importante para a operacao."
+              required
+            />
+
+            <label
+              style={{
+                border: `1px dashed ${absenceType === 'atestado' ? colors.success : 'var(--border)'}`,
+                borderRadius: '14px',
+                padding: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                background: 'var(--bg-app)',
+              }}
+            >
+              <input
+                type="file"
+                style={{ display: 'none' }}
+                onChange={(event) => setAbsenceFileName(event.target.files?.[0]?.name || '')}
+              />
+              <UploadCloud size={20} color={absenceType === 'atestado' ? colors.success : colors.neutral} />
+              <div style={{ display: 'grid', gap: '4px' }}>
+                <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                  {absenceFileName || 'Anexar comprovante'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Obrigatorio para atestado. O sistema armazena apenas o nome do arquivo neste fluxo.
+                </div>
+              </div>
+            </label>
+
+            <Btn type="submit" loading={loading} style={{ alignSelf: 'flex-start' }}>
+              <Send size={16} /> Enviar ausencia
+            </Btn>
+          </form>
+        </Card>
+      )}
+
+      {activeTab === 'rh' && (
+        <Card
+          title={rhMeta.label}
+          subtitle="Pedidos administrativos e de departamento pessoal."
+          accent={rhMeta.accent}
+        >
+          <form onSubmit={submitRhRequest} style={uiStyles.form}>
+            <div style={uiStyles.formRow}>
+              <Select
+                label="Tipo"
+                value={rhType}
+                onChange={(event) => setRhType(event.target.value)}
+                options={RH_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+              <Input
+                label="Data inicial"
+                type="date"
+                value={rhForm.startDate}
+                onChange={(event) => setRhForm((current) => ({ ...current, startDate: event.target.value }))}
+                required
+              />
+              <Input
+                label="Data final"
+                type="date"
+                value={rhForm.endDate}
+                min={rhForm.startDate}
+                onChange={(event) => setRhForm((current) => ({ ...current, endDate: event.target.value }))}
+                required
+              />
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <input
+                type="checkbox"
+                checked={rhForm.allDay}
+                onChange={(event) => setRhForm((current) => ({ ...current, allDay: event.target.checked }))}
+              />
+              Solicitar dia inteiro
+            </label>
+
+            {!rhForm.allDay && (
+              <div style={uiStyles.formRow}>
+                <Input
+                  label="Hora inicial"
+                  type="time"
+                  value={rhForm.startTime}
+                  onChange={(event) => setRhForm((current) => ({ ...current, startTime: event.target.value }))}
+                />
+                <Input
+                  label="Hora final"
+                  type="time"
+                  value={rhForm.endTime}
+                  onChange={(event) => setRhForm((current) => ({ ...current, endTime: event.target.value }))}
+                />
+              </div>
+            )}
+
+            <Textarea
+              label="Descricao"
+              value={rhForm.justification}
+              onChange={(event) => setRhForm((current) => ({ ...current, justification: event.target.value }))}
+              placeholder="Descreva a necessidade, prazo ou contexto do pedido."
+              required
+            />
+
+            <Btn type="submit" loading={loading} style={{ alignSelf: 'flex-start' }}>
+              <Send size={16} /> Enviar pedido de RH
+            </Btn>
+          </form>
+        </Card>
+      )}
+
+      {activeTab === 'history' && (
+        <Card title="Historico de solicitacoes" subtitle="Acompanhe aprovacoes, recusas e observacoes da lideranca.">
+          {loadError && <InfoBox type="danger">{loadError}</InfoBox>}
+          {historyLoading ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>Carregando historico...</div>
+          ) : historyItems.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              Nenhuma solicitacao encontrada ate o momento.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '14px' }}>
+              {historyItems.map((item) => (
+                <RequestHistoryCard key={`${item.kind}_${item.id}`} item={item} />
               ))}
             </div>
-          </div>
-        )}
-
-        {activeTab === 'nova' && selectedType && (
-          <div style={{ animation: 'fadeInUp 0.3s' }}>
-            <button onClick={() => setSelectedType(null)} style={{ ...global.btnSecondary, width: 'auto', marginBottom: '20px', padding: '8px 15px' }}>
-              <ArrowLeft size={16} /> Voltar
-            </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '30px', padding: '20px', background: 'var(--bg-app)', borderRadius: '16px' }}>
-              <div style={{ background: REQUEST_TYPES[selectedType].bg, padding: '12px', borderRadius: '12px', color: REQUEST_TYPES[selectedType].color }}>
-                {React.createElement(REQUEST_TYPES[selectedType].icon, { size: 24 })}
-              </div>
-              <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>{REQUEST_TYPES[selectedType].label}</h2>
-            </div>
-
-            <form onSubmit={handleSubmit} style={global.form}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                <div style={global.field}>
-                  <label style={global.label}>Data Inicial</label>
-                  <input type="date" style={global.input} value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} />
-                </div>
-                <div style={global.field}>
-                  <label style={global.label}>Data Final (opcional)</label>
-                  <input type="date" style={global.input} value={form.endDate} min={form.startDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
-                <input type="checkbox" id="allDay" checked={form.allDay} onChange={(event) => setForm({ ...form, allDay: event.target.checked })} />
-                <label htmlFor="allDay" style={{ fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Solicitacao de dia inteiro</label>
-              </div>
-
-              {!form.allDay && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  <div style={global.field}>
-                    <label style={global.label}>Hora Inicio</label>
-                    <input type="time" style={global.input} onChange={(event) => setForm({ ...form, startTime: event.target.value })} />
-                  </div>
-                  <div style={global.field}>
-                    <label style={global.label}>Hora Fim</label>
-                    <input type="time" style={global.input} onChange={(event) => setForm({ ...form, endTime: event.target.value })} />
-                  </div>
-                </div>
-              )}
-
-              <div style={global.field}>
-                <label style={global.label}>Justificativa / Descricao</label>
-                <textarea style={{ ...global.input, height: '100px', paddingTop: '12px' }} placeholder="Explique os detalhes..." value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-              </div>
-
-              <div style={global.field}>
-                <label style={global.label}>Anexar Comprovante (obrigatorio para atestado)</label>
-                <label style={{ ...local.uploadBox, borderColor: fileName ? '#10b981' : 'var(--border)' }}>
-                  <input type="file" style={{ display: 'none' }} onChange={(event) => setFileName(event.target.files[0]?.name || null)} />
-                  <UploadCloud size={24} color={fileName ? '#10b981' : 'var(--text-muted)'} />
-                  <span style={{ fontSize: '13px', marginTop: '10px', color: fileName ? '#10b981' : 'var(--text-muted)' }}>
-                    {fileName || 'Clique para anexar arquivo ou foto'}
-                  </span>
-                </label>
-              </div>
-
-              <button type="submit" disabled={loading} style={{ ...global.btnPrimary, background: 'var(--text-brand)', marginTop: '10px' }}>
-                {loading ? <Loader2 className="animate-spin" /> : 'Enviar Solicitacao Oficial'} <Send size={18} />
-              </button>
-            </form>
-          </div>
-        )}
-
-        {activeTab === 'historico' && (
-          <div style={{ animation: 'fadeInUp 0.3s', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Carregando historico...</div>
-            ) : historyList.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Nenhuma solicitacao encontrada.</div>
-            ) : (
-              historyList.map((request) => (
-                <div key={request.id} style={{ padding: '20px', border: '1px solid var(--border)', borderRadius: '16px', background: 'var(--bg-app)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 'bold' }}>{REQUEST_TYPES[request.type]?.label || 'Solicitacao'}</h4>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{request.startDate ? new Date(request.startDate).toLocaleDateString('pt-BR') : 'Sem data'}</span>
-                    </div>
-                    {getStatusBadge(request.status)}
-                  </div>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-main)', opacity: 0.8 }}>{request.description}</p>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </Card>
+      )}
+    </Page>
   );
 }
-
-const local = {
-  tabsContainer: { display: 'flex', gap: '20px', borderBottom: '1px solid var(--border)', marginBottom: '30px' },
-  tab: { padding: '12px 5px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid transparent' },
-  tabActive: { padding: '12px 5px', background: 'none', border: 'none', color: 'var(--text-brand)', cursor: 'pointer', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid var(--text-brand)' },
-  actionCard: { background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '20px', padding: '25px', cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' },
-  uploadBox: { border: '2px dashed var(--border)', borderRadius: '15px', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
-};
