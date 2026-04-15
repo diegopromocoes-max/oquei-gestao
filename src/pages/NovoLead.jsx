@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  CalendarDays,
   CheckCircle2,
-  ChevronRight,
+  CreditCard,
   Home,
   Loader2,
+  Mail,
   MapPin,
   Phone,
   PlusCircle,
   Search,
   ShieldAlert,
+  Store,
   Tag,
   User,
   Users,
@@ -17,6 +20,9 @@ import {
 } from 'lucide-react';
 
 import LeadAddressMapModal from '../components/LeadAddressMapModal';
+import LeadChoiceGrid from '../components/leadCapture/LeadChoiceGrid';
+import LeadDraftSummary from '../components/leadCapture/LeadDraftSummary';
+import LeadFlowProgress from '../components/leadCapture/LeadFlowProgress';
 import { Btn, Card, InfoBox, Modal, colors, styles as uiStyles } from '../components/ui';
 import { LEAD_GEO_STATUS, normalizeLeadGeoStatus } from '../lib/leadGeo';
 import { getCategories, getCities, getProducts } from '../services/catalog';
@@ -30,29 +36,43 @@ import {
   NEW_LEAD_DISCARD_REASON_VALUE,
 } from '../services/leadDiscardReasonsService';
 
-const STATUS_OPTIONS = ['Em negociacao', 'Contratado', 'Instalado', 'Descartado'];
-const STEP_CONFIG = [
+const FLOW_ORDER = ['context', 'origin', 'offer', 'client'];
+
+const STATUS_OPTIONS = [
   {
-    id: 1,
-    title: 'Cliente e localizacao',
-    subtitle: 'Dados principais e endereco',
-    Icon: User,
-    accent: colors.primary,
-  },
-  {
-    id: 2,
-    title: 'Origem e produto',
-    subtitle: 'Canal, indicacao e oferta',
-    Icon: Tag,
+    value: 'Em negociacao',
+    label: 'Em negociacao',
+    helper: 'Lead entra em acompanhamento comercial.',
     accent: colors.warning,
+    Icon: Tag,
   },
   {
-    id: 3,
-    title: 'Revisao e envio',
-    subtitle: 'Status inicial e resumo final',
+    value: 'Contratado',
+    label: 'Contratado',
+    helper: 'Venda fechada aguardando evolucao operacional.',
+    accent: colors.primary,
     Icon: CheckCircle2,
-    accent: colors.success,
   },
+  {
+    value: 'Instalado',
+    label: 'Instalado',
+    helper: 'Venda concluida com entrega ja realizada.',
+    accent: colors.success,
+    Icon: Zap,
+  },
+  {
+    value: 'Descartado',
+    label: 'Descartado',
+    helper: 'Lead sai do funil com motivo registrado.',
+    accent: colors.danger,
+    Icon: ShieldAlert,
+  },
+];
+
+const OPTIONAL_CLIENT_FIELDS = [
+  { key: 'tel', label: 'Adicionar telefone', Icon: Phone },
+  { key: 'email', label: 'Adicionar email', Icon: Mail },
+  { key: 'cpf', label: 'Adicionar CPF', Icon: CreditCard },
 ];
 
 function buildEmptyForm(userData) {
@@ -98,8 +118,100 @@ function formatPhone(value) {
   return next.slice(0, 15);
 }
 
+function formatDateLabel(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))
+    ? String(value).split('-').reverse().join('/')
+    : '--/--/----';
+}
+
+function buildOriginHelper(origin = {}) {
+  if (origin?.systemKey === 'indicacao') return 'Abre mini fluxo para vincular quem indicou.';
+  if (origin?.systemKey === 'acao_crescimento') return 'Conecta o lead a uma acao do Hub.';
+  if (origin?.systemKey === 'acao_parceria') return 'Relaciona o lead a um parceiro ou evento.';
+  return 'Canal de entrada para leitura comercial futura.';
+}
+
+function sectionCardStyle(active, accent) {
+  return {
+    borderRadius: '26px',
+    border: `1px solid ${active ? accent : 'rgba(148,163,184,0.18)'}`,
+    background: active
+      ? `linear-gradient(180deg, ${accent}0f, rgba(255,255,255,0.96))`
+      : 'var(--bg-card)',
+    boxShadow: active ? `0 18px 40px ${accent}15` : 'var(--shadow-sm)',
+    overflow: 'hidden',
+  };
+}
+
+function FieldLabel({ children }) {
+  return (
+    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      {children}
+    </label>
+  );
+}
+
+function SectionShell({
+  id,
+  title,
+  helper,
+  accent,
+  active,
+  state,
+  summary,
+  onSelect,
+  children,
+  warning,
+}) {
+  const stateLabel = state === 'complete' ? 'Concluido' : state === 'optional' ? 'Opcional' : active ? 'Em foco' : 'Pendente';
+  const stateColor = state === 'complete' ? colors.success : state === 'optional' ? colors.warning : active ? accent : 'var(--text-muted)';
+
+  return (
+    <div id={`lead-flow-${id}`}>
+      <Card size="lg" style={sectionCardStyle(active, accent)}>
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <button
+            type="button"
+            onClick={() => onSelect?.(id)}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '16px',
+              alignItems: 'flex-start',
+              width: '100%',
+              textAlign: 'left',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '6px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: 900, color: stateColor, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <span style={{ width: '9px', height: '9px', borderRadius: '999px', background: stateColor }} />
+                {stateLabel}
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>{title}</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: '680px' }}>{helper}</div>
+            </div>
+
+            {!active ? (
+              <div style={{ maxWidth: '320px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6, textAlign: 'right' }}>
+                {summary}
+              </div>
+            ) : null}
+          </button>
+
+          {warning ? <InfoBox type="warning">{warning}</InfoBox> : null}
+
+          {active ? children : null}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function NovoLead({ userData, onNavigate }) {
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [cities, setCities] = useState([]);
@@ -124,11 +236,22 @@ export default function NovoLead({ userData, onNavigate }) {
   const [growthActionsError, setGrowthActionsError] = useState('');
   const [discardReasonError, setDiscardReasonError] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState('context');
+  const [showSubmitErrors, setShowSubmitErrors] = useState(false);
+  const [optionalFieldsOpen, setOptionalFieldsOpen] = useState({
+    tel: false,
+    email: false,
+    cpf: false,
+  });
+  const [manualAddressOpen, setManualAddressOpen] = useState(false);
   const [form, setForm] = useState(() => buildEmptyForm(userData));
 
   useEffect(() => {
     setForm(buildEmptyForm(userData));
-    setStep(1);
+    setActiveSection('context');
+    setShowSubmitErrors(false);
+    setManualAddressOpen(false);
+    setOptionalFieldsOpen({ tel: false, email: false, cpf: false });
   }, [userData]);
 
   useEffect(() => {
@@ -181,7 +304,6 @@ export default function NovoLead({ userData, onNavigate }) {
         .includes(search),
     );
   }, [myLeadSearch, myLeads]);
-  const currentStepTitle = ['Cliente e localizacao', 'Origem e produto', 'Revisao e envio'][step - 1];
   const selectedCity = useMemo(
     () => cities.find((city) => city.id === form.cidade || city.cityId === form.cidade) || null,
     [cities, form.cidade],
@@ -194,6 +316,201 @@ export default function NovoLead({ userData, onNavigate }) {
     () => products.find((product) => product.id === form.produto) || null,
     [products, form.produto],
   );
+
+  const scrollToSection = (sectionId) => {
+    setActiveSection(sectionId);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`lead-flow-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const contextIssues = useMemo(() => {
+    const issues = [];
+    if (!form.cidade) issues.push('Selecione a loja/cidade do lead.');
+    return issues;
+  }, [form.cidade]);
+
+  const originIssues = useMemo(() => {
+    const issues = [];
+    if (!form.originCatalogId) issues.push('Escolha a origem do lead.');
+    if (selectedOrigin?.systemKey === 'acao_parceria' && !form.originSourceId) {
+      issues.push('Selecione o evento ou acao parceira.');
+    }
+    if (selectedOrigin?.systemKey === 'acao_crescimento' && !form.originSourceId) {
+      issues.push('Selecione a acao do Hub.');
+    }
+    if (selectedOrigin?.systemKey === 'indicacao' && !String(form.indicationName || '').trim()) {
+      issues.push('Informe quem indicou esse lead.');
+    }
+    return issues;
+  }, [form.indicationName, form.originCatalogId, form.originSourceId, selectedOrigin?.systemKey]);
+
+  const offerIssues = useMemo(() => {
+    const issues = [];
+    if (!form.categoria) issues.push('Selecione a categoria.');
+    if (!form.produto) issues.push('Selecione o produto principal.');
+    if (!form.status) issues.push('Defina o status inicial.');
+    if (form.status === 'Descartado' && !String(form.discardMotive || '').trim()) {
+      issues.push('Escolha o motivo do descarte.');
+    }
+    return issues;
+  }, [form.categoria, form.discardMotive, form.produto, form.status]);
+
+  const contextComplete = contextIssues.length === 0;
+  const originComplete = Boolean(form.originCatalogId) && originIssues.length === 0;
+  const offerComplete = offerIssues.length === 0;
+  const clientTouched = Boolean(
+    form.nome
+    || form.tel
+    || form.email
+    || form.cpf
+    || form.logradouro
+    || form.numero
+    || form.bairro
+    || form.geoLat
+    || form.geoLng
+  );
+  const readyToSave = contextComplete && originComplete && offerComplete;
+  const missingEssentials = [...contextIssues, ...originIssues, ...offerIssues];
+
+  const flowSections = [
+    {
+      id: 'context',
+      title: 'Contexto',
+      helper: 'Data do lead e loja responsavel pela captura.',
+      Icon: Store,
+      accent: colors.primary,
+      state: contextComplete ? 'complete' : 'pending',
+    },
+    {
+      id: 'origin',
+      title: 'Origem',
+      helper: 'Canal de entrada e variacoes condicionais do fluxo.',
+      Icon: Tag,
+      accent: colors.warning,
+      state: originComplete ? 'complete' : 'pending',
+    },
+    {
+      id: 'offer',
+      title: 'Oferta',
+      helper: 'Categoria, produto e status inicial do lead.',
+      Icon: Zap,
+      accent: colors.success,
+      state: offerComplete ? 'complete' : 'pending',
+    },
+    {
+      id: 'client',
+      title: 'Cliente e localizacao',
+      helper: 'Dados opcionais, endereco e ponto confirmado no mapa.',
+      Icon: User,
+      accent: colors.info,
+      state: clientTouched ? 'complete' : 'optional',
+    },
+  ];
+
+  const summaryItems = [
+    {
+      id: 'summary-customer',
+      sectionId: 'client',
+      kind: 'customer',
+      label: 'Cliente',
+      value: form.nome || 'Lead sem nome definido ainda',
+      helper: form.tel || 'Dados pessoais seguem opcionais neste momento.',
+      accent: colors.primary,
+    },
+    {
+      id: 'summary-city',
+      sectionId: 'context',
+      kind: 'city',
+      label: 'Loja / cidade',
+      value: selectedCity?.name || selectedCity?.nome || 'Nao definida',
+      helper: `Data do lead: ${formatDateLabel(form.date)}`,
+      accent: colors.success,
+    },
+    {
+      id: 'summary-origin',
+      sectionId: 'origin',
+      kind: 'origin',
+      label: 'Origem',
+      value: form.originName || 'Origem pendente',
+      helper: selectedOrigin?.systemKey === 'indicacao'
+        ? `Indicacao: ${form.indicationName || 'Pendente'}`
+        : form.originSourceName || 'Canal principal do lead',
+      accent: colors.warning,
+    },
+    {
+      id: 'summary-product',
+      sectionId: 'offer',
+      kind: 'product',
+      label: 'Oferta',
+      value: selectedProduct?.name || 'Produto pendente',
+      helper: selectedCategory?.name || 'Categoria ainda nao definida',
+      accent: colors.purple,
+    },
+    {
+      id: 'summary-status',
+      sectionId: 'offer',
+      kind: 'status',
+      label: 'Status de entrada',
+      value: form.status || 'Nao definido',
+      helper: form.status === 'Descartado' ? `Motivo: ${form.discardMotive || 'Pendente'}` : 'Lead segue ativo no funil comercial.',
+      accent: form.status === 'Descartado' ? colors.danger : colors.info,
+    },
+    {
+      id: 'summary-location',
+      sectionId: 'client',
+      kind: 'location',
+      label: 'Localizacao',
+      value: form.geoLat && form.geoLng
+        ? 'Ponto confirmado no mapa'
+        : [form.logradouro, form.numero, form.bairro].filter(Boolean).join(', ') || 'Endereco ainda nao informado',
+      helper: form.geoLat && form.geoLng
+        ? `Coordenadas confirmadas (${normalizeLeadGeoStatus(form.geoStatus)})`
+        : 'Use o mapa livre para marcar o ponto com mais precisao.',
+      accent: colors.info,
+    },
+  ];
+
+  const selectedOriginCards = useMemo(
+    () => origins.map((origin) => ({
+      value: origin.id,
+      label: origin.name,
+      helper: buildOriginHelper(origin),
+      accent: origin.systemKey === 'indicacao'
+        ? colors.success
+        : origin.systemKey === 'acao_parceria'
+          ? colors.warning
+          : origin.systemKey === 'acao_crescimento'
+            ? colors.info
+            : colors.primary,
+      Icon: origin.systemKey === 'indicacao' ? Users : origin.systemKey === 'acao_parceria' ? Tag : origin.systemKey === 'acao_crescimento' ? Zap : Home,
+    })),
+    [origins],
+  );
+
+  const categoryCards = useMemo(
+    () => categories.map((category) => ({
+      value: category.id,
+      label: category.name,
+      helper: 'Agrupa os produtos disponiveis para este lead.',
+      accent: colors.primary,
+      Icon: Tag,
+    })),
+    [categories],
+  );
+
+  const productCards = useMemo(
+    () => filteredProducts.map((product) => ({
+      value: product.id,
+      label: product.name,
+      helper: selectedCategory?.name || 'Produto principal do lead.',
+      accent: colors.success,
+      Icon: Zap,
+    })),
+    [filteredProducts, selectedCategory?.name],
+  );
+
+  const hiddenClientFieldCount = OPTIONAL_CLIENT_FIELDS.filter((field) => !optionalFieldsOpen[field.key] && !form[field.key]).length;
 
   useEffect(() => {
     if (!selectedOrigin) return;
@@ -267,27 +584,29 @@ export default function NovoLead({ userData, onNavigate }) {
     indicationLeadId: null,
   });
 
+  const advanceToNextRequiredSection = (currentSectionId) => {
+    const currentIndex = FLOW_ORDER.indexOf(currentSectionId);
+    const nextSectionId = FLOW_ORDER[currentIndex + 1];
+    if (nextSectionId) {
+      scrollToSection(nextSectionId);
+    }
+  };
+
   const handleFieldChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const handleStatusChange = (value) => {
-    setForm((current) => ({
-      ...current,
-      status: value,
-      ...(value === 'Descartado' ? {} : { discardMotive: '', fidelityMonth: '' }),
-    }));
-    if (value !== 'Descartado') {
-      setShowNewDiscardReasonCreator(false);
-      setDiscardReasonError('');
-    }
+  const openClientField = (fieldKey) => {
+    setOptionalFieldsOpen((current) => ({ ...current, [fieldKey]: true }));
   };
 
   const handlePhoneChange = (event) => {
+    openClientField('tel');
     setForm((current) => ({ ...current, tel: formatPhone(event.target.value) }));
   };
 
   const handleAddressFieldChange = (field, value) => {
+    setManualAddressOpen(true);
     setForm((current) => ({
       ...current,
       [field]: value,
@@ -305,6 +624,7 @@ export default function NovoLead({ userData, onNavigate }) {
     }
 
     const origin = origins.find((item) => item.id === value);
+    const requiresExtra = ['indicacao', 'acao_parceria', 'acao_crescimento'].includes(origin?.systemKey);
     setShowNewOriginCreator(false);
     setOriginsError('');
 
@@ -316,6 +636,10 @@ export default function NovoLead({ userData, onNavigate }) {
       ...(origin?.systemKey === 'indicacao' ? {} : resetIndicationSelection()),
       ...(origin?.systemKey === 'acao_parceria' || origin?.systemKey === 'acao_crescimento' ? {} : resetSourceSelection()),
     }));
+
+    if (!requiresExtra) {
+      advanceToNextRequiredSection('origin');
+    }
   };
 
   const handleCreateOrigin = async () => {
@@ -341,6 +665,7 @@ export default function NovoLead({ userData, onNavigate }) {
       setShowNewOriginCreator(false);
       setOriginsError('');
       window.showToast?.('Nova origem criada com sucesso.', 'success');
+      advanceToNextRequiredSection('origin');
     } catch (error) {
       console.error('Erro ao criar origem:', error);
       setOriginsError(error.message || 'Nao foi possivel criar a nova origem.');
@@ -370,6 +695,7 @@ export default function NovoLead({ userData, onNavigate }) {
       setShowNewDiscardReasonCreator(false);
       setDiscardReasonError('');
       window.showToast?.('Novo motivo de descarte salvo.', 'success');
+      advanceToNextRequiredSection('offer');
     } catch (error) {
       console.error('Erro ao criar motivo de descarte:', error);
       setDiscardReasonError(error.message || 'Nao foi possivel criar o novo motivo.');
@@ -395,64 +721,58 @@ export default function NovoLead({ userData, onNavigate }) {
     }
   };
 
-  const validateStepOne = () => {
-    if (!form.cidade) {
-      window.showToast?.('Selecione a loja/cidade do lead.', 'error');
+  const handleCategoryChange = (value) => {
+    setForm((current) => ({
+      ...current,
+      categoria: value,
+      produto: '',
+    }));
+  };
+
+  const handleProductChange = (value) => {
+    setForm((current) => ({
+      ...current,
+      produto: value,
+    }));
+  };
+
+  const handleStatusChange = (value) => {
+    setForm((current) => ({
+      ...current,
+      status: value,
+      ...(value === 'Descartado' ? {} : { discardMotive: '', fidelityMonth: '' }),
+    }));
+    if (value !== 'Descartado') {
+      setShowNewDiscardReasonCreator(false);
+      setDiscardReasonError('');
+    }
+    if (value !== 'Descartado' && form.categoria && form.produto) {
+      advanceToNextRequiredSection('offer');
+    }
+  };
+
+  const validateAndFocusFirstInvalidSection = () => {
+    if (!contextComplete) {
+      scrollToSection('context');
+      return false;
+    }
+    if (!originComplete) {
+      scrollToSection('origin');
+      return false;
+    }
+    if (!offerComplete) {
+      scrollToSection('offer');
       return false;
     }
     return true;
-  };
-
-  const validateStepTwo = () => {
-    if (!form.originCatalogId) {
-      window.showToast?.('Selecione a origem do lead.', 'error');
-      return false;
-    }
-    if (selectedOrigin?.systemKey === 'acao_parceria' && !form.originSourceId) {
-      window.showToast?.('Selecione o evento ou acao parceira.', 'error');
-      return false;
-    }
-    if (selectedOrigin?.systemKey === 'acao_crescimento' && !form.originSourceId) {
-      window.showToast?.('Selecione a acao do Hub.', 'error');
-      return false;
-    }
-    if (selectedOrigin?.systemKey === 'indicacao' && !String(form.indicationName || '').trim()) {
-      window.showToast?.('Informe quem indicou esse lead.', 'error');
-      return false;
-    }
-    if (!form.categoria || !form.produto) {
-      window.showToast?.('Selecione categoria e produto.', 'error');
-      return false;
-    }
-    return true;
-  };
-
-  const handleNext = () => {
-    if (step === 1 && !validateStepOne()) return;
-    if (step === 2 && !validateStepTwo()) return;
-    setStep((current) => Math.min(3, current + 1));
-  };
-
-  const handleStepSelect = (targetStep) => {
-    if (targetStep === step) return;
-    if (targetStep < step) {
-      setStep(targetStep);
-      return;
-    }
-    if (targetStep === 2 && validateStepOne()) {
-      setStep(2);
-      return;
-    }
-    if (targetStep === 3 && validateStepOne() && validateStepTwo()) {
-      setStep(3);
-    }
   };
 
   const handleSubmit = async (event) => {
     event?.preventDefault();
-    if (!validateStepOne() || !validateStepTwo()) return;
-    if (form.status === 'Descartado' && !String(form.discardMotive || '').trim()) {
-      window.showToast?.('Defina o motivo do descarte antes de salvar.', 'error');
+    setShowSubmitErrors(true);
+
+    if (!validateAndFocusFirstInvalidSection()) {
+      window.showToast?.('Complete os dados essenciais para registrar o lead.', 'warning');
       return;
     }
 
@@ -461,7 +781,10 @@ export default function NovoLead({ userData, onNavigate }) {
       await createLead(form, userData, selectedCity, selectedCategory, selectedProduct);
       window.showToast?.('Lead criado com sucesso.', 'success');
       setForm(buildEmptyForm(userData));
-      setStep(1);
+      setActiveSection('context');
+      setShowSubmitErrors(false);
+      setManualAddressOpen(false);
+      setOptionalFieldsOpen({ tel: false, email: false, cpf: false });
       onNavigate?.('clientes');
     } catch (error) {
       console.error('Erro ao criar lead:', error);
@@ -471,94 +794,87 @@ export default function NovoLead({ userData, onNavigate }) {
     }
   };
 
-  const renderStepOne = () => (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <Card title="Dados basicos" subtitle="Os dados pessoais podem ser preenchidos agora ou depois.">
-        <div style={{ ...uiStyles.formRow, marginBottom: '16px' }}>
+  const renderContextBlock = () => (
+    <SectionShell
+      id="context"
+      title="Contexto"
+      helper="Comece pelo minimo necessario para posicionar o lead no tempo e na loja correta."
+      accent={colors.primary}
+      active={activeSection === 'context'}
+      state={contextComplete ? 'complete' : 'pending'}
+      summary={selectedCity?.name || selectedCity?.nome ? `${selectedCity?.name || selectedCity?.nome} • ${formatDateLabel(form.date)}` : 'Selecione a loja e confirme a data do lead.'}
+      onSelect={scrollToSection}
+      warning={showSubmitErrors && contextIssues.length ? contextIssues[0] : ''}
+    >
+      <div style={{ display: 'grid', gap: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
           <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Nome</label>
-            <input value={form.nome} onChange={(event) => handleFieldChange('nome', event.target.value)} placeholder="Nome do cliente" style={uiStyles.input} />
+            <FieldLabel>Data do lead</FieldLabel>
+            <div style={{ position: 'relative' }}>
+              <CalendarDays size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="date"
+                value={form.date}
+                onChange={(event) => handleFieldChange('date', event.target.value)}
+                style={{ ...uiStyles.input, paddingLeft: '38px' }}
+              />
+            </div>
           </div>
+
           <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Telefone</label>
-            <input value={form.tel} onChange={handlePhoneChange} placeholder="(00) 00000-0000" style={uiStyles.input} />
-          </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Email</label>
-            <input value={form.email} onChange={(event) => handleFieldChange('email', event.target.value)} placeholder="cliente@exemplo.com" style={uiStyles.input} />
-          </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>CPF</label>
-            <input value={form.cpf} onChange={(event) => handleFieldChange('cpf', event.target.value)} placeholder="000.000.000-00" style={uiStyles.input} />
+            <FieldLabel>Loja / cidade</FieldLabel>
+            <div style={{ position: 'relative' }}>
+              <Store size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', zIndex: 1 }} />
+              <select
+                value={form.cidade}
+                onChange={(event) => {
+                  handleFieldChange('cidade', event.target.value);
+                  if (event.target.value) {
+                    advanceToNextRequiredSection('context');
+                  }
+                }}
+                style={{ ...uiStyles.select, paddingLeft: '38px' }}
+              >
+                <option value="">Selecione a cidade</option>
+                {cities.map((city) => (
+                  <option key={city.id || city.cityId} value={city.id || city.cityId}>
+                    {city.name || city.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div style={{ ...uiStyles.formRow, marginBottom: '16px' }}>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Data do lead</label>
-            <input type="date" value={form.date} onChange={(event) => handleFieldChange('date', event.target.value)} style={uiStyles.input} />
-          </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Loja / Cidade</label>
-            <select value={form.cidade} onChange={(event) => handleFieldChange('cidade', event.target.value)} style={uiStyles.select}>
-              <option value="">Selecione a cidade</option>
-              {cities.map((city) => (
-                <option key={city.id || city.cityId} value={city.id || city.cityId}>
-                  {city.name || city.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </Card>
-
-      <Card
-        title="Endereco do lead"
-        subtitle="Voce pode preencher manualmente ou localizar no mapa livre."
-        actions={<Btn onClick={() => setMapOpen(true)}><MapPin size={15} /> Selecionar no mapa</Btn>}
-        style={{
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.04), rgba(6,182,212,0.04))',
-        }}
-      >
-        <div style={{ ...uiStyles.formRow, marginBottom: '16px' }}>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Logradouro</label>
-            <input value={form.logradouro} onChange={(event) => handleAddressFieldChange('logradouro', event.target.value)} placeholder="Rua / Avenida" style={uiStyles.input} />
-          </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Numero</label>
-            <input value={form.numero} onChange={(event) => handleAddressFieldChange('numero', event.target.value)} placeholder="123" style={uiStyles.input} />
-          </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bairro</label>
-            <input value={form.bairro} onChange={(event) => handleAddressFieldChange('bairro', event.target.value)} placeholder="Centro" style={uiStyles.input} />
-          </div>
-        </div>
-
-              <InfoBox type={form.geoLat && form.geoLng ? 'success' : 'info'}>
-                {form.geoLat && form.geoLng
-                  ? 'Local confirmado no mapa. Se voce alterar o endereco depois, sera preciso definir o ponto novamente.'
-                  : 'Use o mapa para confirmar o ponto do lead. A busca por endereco e apenas um apoio visual.'}
-              </InfoBox>
-      </Card>
-    </div>
+        <InfoBox type="info">
+          A loja e a data destravam o restante da captura. Assim que a cidade estiver definida, o fluxo ja pode seguir para a origem do lead.
+        </InfoBox>
+      </div>
+    </SectionShell>
   );
 
-  const renderOriginSelector = () => (
-    <Card title="Canal de entrada / origem" subtitle="A origem ajuda a identificar o que esta convertendo melhor.">
-      <div style={{ display: 'grid', gap: '16px' }}>
-        <div style={{ display: 'grid', gap: '6px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Origem do lead</label>
-          <select value={form.originCatalogId} onChange={(event) => handleOriginChange(event.target.value)} style={uiStyles.select}>
-            <option value="">Selecione a origem</option>
-            {origins.map((origin) => (
-              <option key={origin.id} value={origin.id}>{origin.name}</option>
-            ))}
-            <option value={NEW_LEAD_ORIGIN_VALUE}>Nova Origem</option>
-          </select>
+  const renderOriginBlock = () => (
+    <SectionShell
+      id="origin"
+      title="Origem"
+      helper="Escolha o canal principal de entrada. Se a origem exigir detalhe adicional, o fluxo abre isso logo abaixo."
+      accent={colors.warning}
+      active={activeSection === 'origin'}
+      state={originComplete ? 'complete' : 'pending'}
+      summary={form.originName ? `${form.originName}${form.originSourceName ? ` • ${form.originSourceName}` : ''}` : 'Defina de onde esse lead chegou.'}
+      onSelect={scrollToSection}
+      warning={showSubmitErrors && originIssues.length ? originIssues[0] : ''}
+    >
+      <div style={{ display: 'grid', gap: '18px' }}>
+        <LeadChoiceGrid options={selectedOriginCards} value={form.originCatalogId} onChange={handleOriginChange} />
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <Btn variant="secondary" onClick={() => setShowNewOriginCreator((current) => !current)}>
+            <PlusCircle size={15} /> {showNewOriginCreator ? 'Ocultar nova origem' : 'Criar nova origem'}
+          </Btn>
         </div>
 
-        {showNewOriginCreator && (
+        {showNewOriginCreator ? (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               value={newOriginName}
@@ -568,212 +884,192 @@ export default function NovoLead({ userData, onNavigate }) {
             />
             <Btn onClick={handleCreateOrigin} loading={creatingOrigin}>Salvar origem</Btn>
           </div>
-        )}
+        ) : null}
 
-        {originsError && <InfoBox type="warning">{originsError}</InfoBox>}
+        {originsError ? <InfoBox type="warning">{originsError}</InfoBox> : null}
 
-        {selectedOrigin?.systemKey === 'indicacao' && (
-          <div style={{ display: 'grid', gap: '14px' }}>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Quem indicou?</label>
-              <input
-                value={form.indicationName}
-                onChange={(event) => setForm((current) => ({ ...current, indicationName: event.target.value }))}
-                placeholder="Digite o nome de quem indicou"
-                style={uiStyles.input}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <Btn variant="secondary" onClick={openMyLeadsSelector}>
-                <Users size={15} /> Meus leads
-              </Btn>
-              {form.indicationLeadId && (
-                <span style={{ fontSize: '12px', fontWeight: 800, color: colors.success }}>
-                  Lead vinculado: {form.indicationName}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {selectedOrigin?.systemKey === 'acao_crescimento' && (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Acao em andamento</label>
-            <select
-              value={form.originSourceId || ''}
-              onChange={(event) => {
-                const selected = growthActions.find((item) => item.id === event.target.value);
-                setForm((current) => ({
-                  ...current,
-                  originSourceType: selected ? 'action_plan' : null,
-                  originSourceId: selected?.id || null,
-                  originSourceName: selected?.name || null,
-                }));
-              }}
-              style={uiStyles.select}
-            >
-              <option value="">Selecione a acao</option>
-              {growthActions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            {growthActionsError && <InfoBox type="warning">{growthActionsError}</InfoBox>}
-          </div>
-        )}
-
-        {selectedOrigin?.systemKey === 'acao_parceria' && (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Evento / acao parceira</label>
-            <select
-              value={form.originSourceId || ''}
-              onChange={(event) => {
-                const selected = partnershipSources.find((item) => item.id === event.target.value);
-                setForm((current) => ({
-                  ...current,
-                  originSourceType: selected?.sourceType || null,
-                  originSourceId: selected?.id || null,
-                  originSourceName: selected?.name || null,
-                }));
-              }}
-              style={uiStyles.select}
-            >
-              <option value="">Selecione a parceria</option>
-              {partnershipSources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            {partnershipError && <InfoBox type="warning">{partnershipError}</InfoBox>}
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-
-  const renderStepTwo = () => (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      {renderOriginSelector()}
-
-      <Card title="Produto de interesse" subtitle="Escolha a categoria e o produto principal do lead.">
-        <div style={{ ...uiStyles.formRow, marginBottom: '16px' }}>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Categoria</label>
-            <select
-              value={form.categoria}
-              onChange={(event) => setForm((current) => ({ ...current, categoria: event.target.value, produto: '' }))}
-              style={uiStyles.select}
-            >
-              <option value="">Selecione a categoria</option>
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Produto</label>
-            <select value={form.produto} onChange={(event) => handleFieldChange('produto', event.target.value)} style={uiStyles.select}>
-              <option value="">Selecione o produto</option>
-              {filteredProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <InfoBox type="info">
-          O lead pode ser criado com dados pessoais incompletos. O importante aqui e garantir a loja, a origem e o produto.
-        </InfoBox>
-      </Card>
-    </div>
-  );
-
-  const renderSummaryCard = (icon, label, value, accent, helper) => (
-    <div
-      key={label}
-      style={{
-        padding: '16px',
-        borderRadius: '18px',
-        border: '1px solid var(--border)',
-        background: 'linear-gradient(135deg, rgba(15,23,42,0.02), rgba(37,99,235,0.04))',
-        display: 'grid',
-        gap: '8px',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: accent }}>
-        {icon}
-        <span style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
-      </div>
-      <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-main)', lineHeight: 1.45 }}>
-        {value || '-'}
-      </div>
-      {helper && <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{helper}</div>}
-    </div>
-  );
-
-  const renderStepThree = () => (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <Card
-        title="Status inicial do lead"
-        subtitle="Defina como esse lead entra no seu funil e complete o descarte quando necessario."
-        style={{
-          background: 'linear-gradient(135deg, rgba(239,68,68,0.03), rgba(37,99,235,0.04))',
-        }}
-      >
-        <div style={{ display: 'grid', gap: '16px' }}>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-              {STATUS_OPTIONS.map((status) => {
-                const active = form.status === status;
-                const accent = status === 'Descartado' ? colors.danger : status === 'Instalado' ? colors.success : status === 'Contratado' ? colors.primary : colors.warning;
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => handleStatusChange(status)}
-                    style={{
-                      textAlign: 'left',
-                      borderRadius: '16px',
-                      padding: '14px 16px',
-                      border: `1px solid ${active ? accent : 'var(--border)'}`,
-                      background: active ? `${accent}16` : 'var(--bg-app)',
-                      boxShadow: active ? `0 10px 24px ${accent}22` : 'none',
-                      cursor: 'pointer',
-                      display: 'grid',
-                      gap: '6px',
-                    }}
-                  >
-                    <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--text-main)' }}>{status}</span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      {status === 'Descartado' ? 'Registra perda e motivo' : 'Entra no funil com este status'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {form.status === 'Descartado' && (
-            <div style={{ display: 'grid', gap: '14px', padding: '16px', borderRadius: '18px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-              <div style={{ display: 'grid', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 900, color: colors.danger, textTransform: 'uppercase' }}>Motivo do descarte</label>
-                <select
-                  value={form.discardMotive}
-                  onChange={(event) => {
-                    if (event.target.value === NEW_LEAD_DISCARD_REASON_VALUE) {
-                      setShowNewDiscardReasonCreator(true);
-                      return;
-                    }
-                    setShowNewDiscardReasonCreator(false);
-                    setDiscardReasonError('');
-                    setForm((current) => ({
-                      ...current,
-                      discardMotive: event.target.value,
-                      ...(event.target.value === 'Fidelidade em outro Provedor' ? {} : { fidelityMonth: '' }),
-                    }));
-                  }}
-                  style={uiStyles.select}
-                >
-                  <option value="">Selecione um motivo</option>
-                  {discardReasons.map((reason) => <option key={reason.id} value={reason.name}>{reason.name}</option>)}
-                  <option value={NEW_LEAD_DISCARD_REASON_VALUE}>Inserir motivo</option>
-                </select>
+        {selectedOrigin?.systemKey === 'indicacao' ? (
+          <Card size="sm" style={{ background: 'rgba(22,163,74,0.05)', borderColor: 'rgba(22,163,74,0.18)' }}>
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: colors.success, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Mini fluxo de indicacao
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  Digite o nome de quem indicou ou vincule um lead que ja esta no seu portal.
+                </div>
               </div>
 
-              {showNewDiscardReasonCreator && (
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <FieldLabel>Quem indicou?</FieldLabel>
+                <input
+                  value={form.indicationName}
+                  onChange={(event) => setForm((current) => ({ ...current, indicationName: event.target.value }))}
+                  placeholder="Digite o nome de quem indicou"
+                  style={uiStyles.input}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <Btn variant="secondary" onClick={openMyLeadsSelector}>
+                  <Users size={15} /> Meus leads
+                </Btn>
+                {form.indicationLeadId ? (
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: colors.success }}>
+                    Lead vinculado: {form.indicationName}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        {selectedOrigin?.systemKey === 'acao_crescimento' ? (
+          <Card size="sm" style={{ background: 'rgba(59,130,246,0.05)', borderColor: 'rgba(59,130,246,0.16)' }}>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 900, color: colors.info, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Acao do Hub vinculada
+              </div>
+              <select
+                value={form.originSourceId || ''}
+                onChange={(event) => {
+                  const selected = growthActions.find((item) => item.id === event.target.value);
+                  setForm((current) => ({
+                    ...current,
+                    originSourceType: selected ? 'action_plan' : null,
+                    originSourceId: selected?.id || null,
+                    originSourceName: selected?.name || null,
+                  }));
+                  if (selected?.id) {
+                    advanceToNextRequiredSection('origin');
+                  }
+                }}
+                style={uiStyles.select}
+              >
+                <option value="">Selecione a acao</option>
+                {growthActions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              {growthActionsError ? <InfoBox type="warning">{growthActionsError}</InfoBox> : null}
+            </div>
+          </Card>
+        ) : null}
+
+        {selectedOrigin?.systemKey === 'acao_parceria' ? (
+          <Card size="sm" style={{ background: 'rgba(217,119,6,0.05)', borderColor: 'rgba(217,119,6,0.16)' }}>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 900, color: colors.warning, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Evento ou acao parceira
+              </div>
+              <select
+                value={form.originSourceId || ''}
+                onChange={(event) => {
+                  const selected = partnershipSources.find((item) => item.id === event.target.value);
+                  setForm((current) => ({
+                    ...current,
+                    originSourceType: selected?.sourceType || null,
+                    originSourceId: selected?.id || null,
+                    originSourceName: selected?.name || null,
+                  }));
+                  if (selected?.id) {
+                    advanceToNextRequiredSection('origin');
+                  }
+                }}
+                style={uiStyles.select}
+              >
+                <option value="">Selecione a parceria</option>
+                {partnershipSources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              {partnershipError ? <InfoBox type="warning">{partnershipError}</InfoBox> : null}
+            </div>
+          </Card>
+        ) : null}
+      </div>
+    </SectionShell>
+  );
+
+  const renderOfferBlock = () => (
+    <SectionShell
+      id="offer"
+      title="Oferta"
+      helper="Defina rapidamente categoria, produto e status inicial. Se houver descarte, o motivo aparece no mesmo momento."
+      accent={colors.success}
+      active={activeSection === 'offer'}
+      state={offerComplete ? 'complete' : 'pending'}
+      summary={selectedProduct?.name ? `${selectedProduct.name} • ${form.status}` : 'Selecione categoria, produto e status inicial.'}
+      onSelect={scrollToSection}
+      warning={showSubmitErrors && offerIssues.length ? offerIssues[0] : ''}
+    >
+      <div style={{ display: 'grid', gap: '18px' }}>
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <FieldLabel>Categoria</FieldLabel>
+          <LeadChoiceGrid options={categoryCards} value={form.categoria} onChange={handleCategoryChange} size="sm" />
+        </div>
+
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <FieldLabel>Produto</FieldLabel>
+          {filteredProducts.length > 0 ? (
+            <LeadChoiceGrid
+              options={productCards}
+              value={form.produto}
+              onChange={handleProductChange}
+              columns="repeat(auto-fit, minmax(220px, 1fr))"
+              size="sm"
+            />
+          ) : (
+            <InfoBox type="info">Escolha uma categoria primeiro para liberar a lista de produtos.</InfoBox>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <FieldLabel>Status inicial</FieldLabel>
+          <LeadChoiceGrid
+            options={STATUS_OPTIONS.map((status) => ({
+              value: status.value,
+              label: status.label,
+              helper: status.helper,
+              accent: status.accent,
+              Icon: status.Icon,
+            }))}
+            value={form.status}
+            onChange={handleStatusChange}
+            size="sm"
+          />
+        </div>
+
+        {form.status === 'Descartado' ? (
+          <Card size="sm" style={{ background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.18)' }}>
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: colors.danger, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Motivo do descarte
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  O motivo aparece no mesmo bloco da oferta para manter a decisao contextual e rastreavel.
+                </div>
+              </div>
+
+              <select
+                value={form.discardMotive}
+                onChange={(event) => {
+                  if (event.target.value === NEW_LEAD_DISCARD_REASON_VALUE) {
+                    setShowNewDiscardReasonCreator(true);
+                    return;
+                  }
+                  setShowNewDiscardReasonCreator(false);
+                  setDiscardReasonError('');
+                  setForm((current) => ({ ...current, discardMotive: event.target.value }));
+                  if (event.target.value) {
+                    advanceToNextRequiredSection('offer');
+                  }
+                }}
+                style={uiStyles.select}
+              >
+                <option value="">Selecione um motivo</option>
+                {discardReasons.map((reason) => <option key={reason.id} value={reason.name}>{reason.name}</option>)}
+                <option value={NEW_LEAD_DISCARD_REASON_VALUE}>Inserir motivo</option>
+              </select>
+
+              {showNewDiscardReasonCreator ? (
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <input
                     value={newDiscardReasonName}
@@ -783,96 +1079,152 @@ export default function NovoLead({ userData, onNavigate }) {
                   />
                   <Btn onClick={handleCreateDiscardReason} loading={creatingDiscardReason}>Salvar motivo</Btn>
                 </div>
-              )}
+              ) : null}
 
-              {discardReasonError && <InfoBox type="warning">{discardReasonError}</InfoBox>}
+              {discardReasonError ? <InfoBox type="warning">{discardReasonError}</InfoBox> : null}
+            </div>
+          </Card>
+        ) : null}
+      </div>
+    </SectionShell>
+  );
 
-              {form.discardMotive === 'Fidelidade em outro Provedor' && (
+  const renderClientBlock = () => (
+    <SectionShell
+      id="client"
+      title="Cliente e localizacao"
+      helper="Aqui entram os detalhes opcionais e a localizacao. O mapa vira o centro da confirmacao geografica do lead."
+      accent={colors.info}
+      active={activeSection === 'client'}
+      state={clientTouched ? 'complete' : 'optional'}
+      summary={clientTouched ? 'Dados complementares e localizacao ja iniciados.' : 'Opcional por enquanto: complete so o que fizer sentido agora.'}
+      onSelect={scrollToSection}
+    >
+      <div style={{ display: 'grid', gap: '18px' }}>
+        <Card size="sm" style={{ background: 'rgba(59,130,246,0.04)', borderColor: 'rgba(59,130,246,0.14)' }}>
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <div style={{ display: 'grid', gap: '6px' }}>
+              <FieldLabel>Nome do cliente</FieldLabel>
+              <div style={{ position: 'relative' }}>
+                <User size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  value={form.nome}
+                  onChange={(event) => handleFieldChange('nome', event.target.value)}
+                  placeholder="Nome do cliente"
+                  style={{ ...uiStyles.input, paddingLeft: '38px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {OPTIONAL_CLIENT_FIELDS.map((field) => {
+                const opened = optionalFieldsOpen[field.key] || Boolean(form[field.key]);
+                return (
+                  <button
+                    key={field.key}
+                    type="button"
+                    onClick={() => openClientField(field.key)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '999px',
+                      border: `1px solid ${opened ? colors.info : 'var(--border)'}`,
+                      background: opened ? 'rgba(59,130,246,0.10)' : 'var(--bg-app)',
+                      color: opened ? colors.info : 'var(--text-main)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <field.Icon size={14} /> {field.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+              {optionalFieldsOpen.tel || form.tel ? (
                 <div style={{ display: 'grid', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 900, color: colors.danger, textTransform: 'uppercase' }}>Mes do fim da fidelidade</label>
-                  <input
-                    type="month"
-                    value={form.fidelityMonth}
-                    onChange={(event) => handleFieldChange('fidelityMonth', event.target.value)}
-                    style={uiStyles.input}
-                  />
+                  <FieldLabel>Telefone</FieldLabel>
+                  <input value={form.tel} onChange={handlePhoneChange} placeholder="(00) 00000-0000" style={uiStyles.input} />
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card
-        title="Resumo do lead"
-        subtitle="Uma leitura mais ilustrativa do que sera salvo no CRM."
-        style={{
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.04), rgba(16,185,129,0.04))',
-        }}
-      >
-        <div style={{ display: 'grid', gap: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-            {[
-              {
-                label: 'Cliente',
-                value: form.nome || 'Nao informado',
-                icon: <User size={16} />,
-                accent: colors.primary,
-                helper: form.tel || 'Sem telefone registrado ainda',
-              },
-              {
-                label: 'Loja / Cidade',
-                value: selectedCity?.name || selectedCity?.nome || 'Nao informada',
-                icon: <Home size={16} />,
-                accent: colors.success,
-                helper: 'Base principal de atribuicao do lead',
-              },
-              {
-                label: 'Origem',
-                value: form.originName || 'Nao informada',
-                icon: <Tag size={16} />,
-                accent: colors.warning,
-                helper: selectedOrigin?.systemKey === 'indicacao' ? `Indicacao: ${form.indicationName || 'Nao definida'}` : 'Canal de entrada selecionado',
-              },
-              {
-                label: 'Produto',
-                value: selectedProduct?.name || 'Nao informado',
-                icon: <Zap size={16} />,
-                accent: colors.purple,
-                helper: selectedCategory?.name || 'Categoria nao informada',
-              },
-              {
-                label: 'Endereco',
-                value: [form.logradouro, form.numero, form.bairro].filter(Boolean).join(', ') || 'Nao informado',
-                icon: <MapPin size={16} />,
-                accent: colors.info,
-                helper: form.geoLat && form.geoLng
-                  ? `Coordenadas confirmadas (${normalizeLeadGeoStatus(form.geoStatus)})`
-                  : 'Endereco ainda sem ponto confirmado',
-              },
-              {
-                label: 'Status de entrada',
-                value: form.status,
-                icon: <ShieldAlert size={16} />,
-                accent: form.status === 'Descartado' ? colors.danger : colors.primary,
-                helper: form.status === 'Descartado' ? `Motivo: ${form.discardMotive || 'Pendente'}` : 'Lead entra ativo no funil',
-              },
-            ].map((item) => renderSummaryCard(item.icon, item.label, item.value, item.accent, item.helper))}
-          </div>
-
-          <div style={{ padding: '18px 20px', borderRadius: '20px', background: 'rgba(15,23,42,0.04)', border: '1px solid var(--border)', display: 'grid', gap: '10px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Pronto para salvar
-            </div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1.6 }}>
-              {form.status === 'Descartado'
-                ? 'Esse lead sera salvo como descarte, com motivo registrado para analise futura.'
-                : 'Esse lead sera salvo no funil e podera evoluir normalmente entre negociacao, contratado e instalado.'}
+              ) : null}
+              {optionalFieldsOpen.email || form.email ? (
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <FieldLabel>Email</FieldLabel>
+                  <input value={form.email} onChange={(event) => { openClientField('email'); handleFieldChange('email', event.target.value); }} placeholder="cliente@exemplo.com" style={uiStyles.input} />
+                </div>
+              ) : null}
+              {optionalFieldsOpen.cpf || form.cpf ? (
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <FieldLabel>CPF</FieldLabel>
+                  <input value={form.cpf} onChange={(event) => { openClientField('cpf'); handleFieldChange('cpf', event.target.value); }} placeholder="000.000.000-00" style={uiStyles.input} />
+                </div>
+              ) : null}
             </div>
           </div>
-        </div>
-      </Card>
-    </div>
+        </Card>
+
+        <Card size="sm" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.07), rgba(6,182,212,0.05))', borderColor: 'rgba(37,99,235,0.14)' }}>
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                O mapa e a forma principal de confirmar o ponto. O endereco manual fica como apoio secundario.
+              </div>
+              <Btn onClick={() => setMapOpen(true)}>
+                <MapPin size={15} /> Escolher no mapa
+              </Btn>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setManualAddressOpen((current) => !current)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: '999px',
+                border: `1px solid ${manualAddressOpen ? colors.primary : 'var(--border)'}`,
+                background: manualAddressOpen ? 'rgba(37,99,235,0.10)' : 'var(--bg-card)',
+                color: manualAddressOpen ? colors.primary : 'var(--text-main)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                width: 'fit-content',
+              }}
+            >
+              <Home size={14} /> {manualAddressOpen ? 'Ocultar endereco manual' : 'Preencher endereco manual'}
+            </button>
+
+            {form.geoLat && form.geoLng ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '999px', background: 'rgba(16,185,129,0.12)', color: colors.success, fontSize: '12px', fontWeight: 900 }}>
+                <CheckCircle2 size={14} /> Localizacao confirmada
+              </span>
+            ) : null}
+
+            {manualAddressOpen || form.logradouro || form.numero || form.bairro ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <FieldLabel>Logradouro</FieldLabel>
+                  <input value={form.logradouro} onChange={(event) => handleAddressFieldChange('logradouro', event.target.value)} placeholder="Rua / Avenida" style={uiStyles.input} />
+                </div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <FieldLabel>Numero</FieldLabel>
+                  <input value={form.numero} onChange={(event) => handleAddressFieldChange('numero', event.target.value)} placeholder="123" style={uiStyles.input} />
+                </div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <FieldLabel>Bairro</FieldLabel>
+                  <input value={form.bairro} onChange={(event) => handleAddressFieldChange('bairro', event.target.value)} placeholder="Centro" style={uiStyles.input} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      </div>
+    </SectionShell>
   );
 
   if (catalogLoading) {
@@ -884,111 +1236,41 @@ export default function NovoLead({ userData, onNavigate }) {
   }
 
   return (
-    <div className="animated-view animate-fadeIn" style={{ display: 'grid', gap: '24px', width: '100%', paddingBottom: '40px' }}>
-      <Card
-        size="lg"
-        style={{
-          background: 'linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))',
-          borderColor: 'rgba(148,163,184,0.18)',
-          color: '#fff',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'rgba(255,255,255,0.72)', fontWeight: 800 }}>
-              <PlusCircle size={18} /> Registrar novo lead
+    <div className="animated-view animate-fadeIn" style={{ display: 'grid', gap: '24px', width: '100%', paddingBottom: '42px' }}>
+      <LeadFlowProgress
+        sections={flowSections}
+        activeSection={activeSection}
+        onSelect={scrollToSection}
+        headline="Capturar nova oportunidade"
+        subtitle="Uma jornada mais humana, guiada e direta para registrar leads sem cara de sistema."
+        cityLabel={selectedCity?.name || selectedCity?.nome || userData?.cityName || 'Loja ainda nao definida'}
+        readyCount={[contextComplete, originComplete, offerComplete, clientTouched].filter(Boolean).length}
+        totalCount={flowSections.length}
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, 0.9fr)', gap: '22px', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gap: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 700 }}>
+              O fluxo agora prioriza escolhas clicaveis e mantem os campos opcionais compactos ate voce precisar deles.
             </div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' }}>
-                Novo lead do CRM Atendente
-              </h1>
-              <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.74)', fontWeight: 600 }}>
-                Passo {step} de 3: {currentStepTitle}
-              </p>
-            </div>
+            <Btn variant="secondary" onClick={() => onNavigate?.('clientes')}><ArrowLeft size={15} /> Voltar ao funil</Btn>
           </div>
 
-          <div style={{ display: 'grid', gap: '10px', minWidth: '240px' }}>
-            <div style={{ padding: '14px 16px', borderRadius: '18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.58)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800 }}>
-                Loja atual
-              </div>
-              <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900 }}>
-                {selectedCity?.name || selectedCity?.nome || userData?.cityName || 'Nao definida'}
-              </div>
-            </div>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.72)', fontWeight: 700 }}>
-              Fluxo mais direto: preencha, revise e salve sem excesso de etapas.
-            </div>
-          </div>
+          {renderContextBlock()}
+          {renderOriginBlock()}
+          {renderOfferBlock()}
+          {renderClientBlock()}
         </div>
-      </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-        {STEP_CONFIG.map((item) => {
-          const active = step === item.id;
-          const done = step > item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleStepSelect(item.id)}
-              style={{
-                textAlign: 'left',
-                borderRadius: '20px',
-                padding: '16px 18px',
-                border: `1px solid ${active ? item.accent : 'var(--border)'}`,
-                background: active ? `${item.accent}14` : done ? 'rgba(16,185,129,0.08)' : 'var(--bg-card)',
-                boxShadow: active ? `0 14px 34px ${item.accent}20` : 'var(--shadow-sm)',
-                cursor: 'pointer',
-                display: 'grid',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '14px', background: active ? `${item.accent}22` : 'rgba(15,23,42,0.05)', color: active ? item.accent : 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <item.Icon size={18} />
-                </div>
-                <span style={{ fontSize: '11px', fontWeight: 900, color: done ? colors.success : active ? item.accent : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {done ? 'Concluido' : active ? 'Em foco' : `Etapa ${item.id}`}
-                </span>
-              </div>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--text-main)' }}>{item.title}</div>
-                <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{item.subtitle}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 700 }}>
-          Os dados pessoais continuam opcionais e podem ser complementados depois.
-        </div>
-        <Btn variant="secondary" onClick={() => onNavigate?.('clientes')}><ArrowLeft size={15} /> Voltar ao funil</Btn>
-      </div>
-
-      {step === 1 && renderStepOne()}
-      {step === 2 && renderStepTwo()}
-      {step === 3 && renderStepThree()}
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <Btn variant="secondary" onClick={() => setStep((current) => Math.max(1, current - 1))} disabled={step === 1}>
-          <ArrowLeft size={15} /> Etapa anterior
-        </Btn>
-
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {step < 3 ? (
-            <Btn onClick={handleNext}>
-              Proxima etapa <ChevronRight size={15} />
-            </Btn>
-          ) : (
-            <Btn onClick={handleSubmit} loading={loading}>
-              <CheckCircle2 size={15} /> Salvar lead
-            </Btn>
-          )}
-        </div>
+        <LeadDraftSummary
+          items={summaryItems}
+          readyToSave={readyToSave}
+          missingEssentials={missingEssentials}
+          loading={loading}
+          onSubmit={handleSubmit}
+          onJumpToSection={scrollToSection}
+        />
       </div>
 
       <LeadAddressMapModal
@@ -1007,6 +1289,7 @@ export default function NovoLead({ userData, onNavigate }) {
               geoFormattedAddress: location.geoFormattedAddress || '',
               geoStatus: normalizeLeadGeoStatus(location.geoStatus || LEAD_GEO_STATUS.PENDING),
             }));
+          setManualAddressOpen(true);
           setMapOpen(false);
         }}
       />
@@ -1046,6 +1329,7 @@ export default function NovoLead({ userData, onNavigate }) {
                       indicationName: lead.customerName || lead.customerPhone || lead.customerEmail || 'Lead sem nome',
                     }));
                     setMyLeadsOpen(false);
+                    advanceToNextRequiredSection('origin');
                   }}
                   style={{
                     textAlign: 'left',

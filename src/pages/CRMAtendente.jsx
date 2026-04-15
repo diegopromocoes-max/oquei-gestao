@@ -1,32 +1,41 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import {
+  Activity,
   BarChart3,
   BookMarked,
   BookOpen,
   Building2,
   CalendarDays,
+  ChevronRight,
+  CircleDashed,
   FileCheck,
   FileSpreadsheet,
   Globe,
   Info,
   Link as LinkIcon,
+  MessageSquareQuote,
   MapPinned,
   Megaphone,
   PlusCircle,
   Router,
   Share2,
+  Sparkles,
+  Target,
+  TrendingUp,
   Users,
   Wallet,
 } from 'lucide-react';
 
 import LayoutGlobal from '../components/LayoutGlobal';
-import { Btn, Card, InfoBox, KpiCard, Page, styles as uiStyles } from '../components/ui';
+import { Btn, Card, InfoBox, Page, styles as uiStyles } from '../components/ui';
 import {
+  listGrowthActionsForCity,
   listenAtendenteStats,
   listenMessages,
   listenPublicAbsenceCalendar,
 } from '../services/atendenteDashboardService';
+import { listMyRhRequests } from '../services/atendenteRhService';
 import NovoLead from './NovoLead';
 import MeusLeads from './MeusLeads';
 import RelatorioLeads from '../components/RelatorioLeads';
@@ -73,6 +82,135 @@ function formatStoreLabel(userData) {
       return lower.charAt(0).toUpperCase() + lower.slice(1);
     })
     .join(' ');
+}
+
+function clampMetric(value, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function MetricDialCard({ label, value, suffix = '', percent = 0, accent, helper, icon, tone = 'neutral' }) {
+  const safePercent = clampMetric(percent);
+  const gradient = `conic-gradient(${accent} ${safePercent * 0.75}%, rgba(148,163,184,0.15) ${safePercent * 0.75}% 75%, rgba(148,163,184,0.08) 75% 100%)`;
+  const Icon = icon;
+  const toneStyles = {
+    success: { glow: `${accent}33`, soft: `${accent}14` },
+    warning: { glow: `${accent}33`, soft: `${accent}14` },
+    danger: { glow: `${accent}33`, soft: `${accent}14` },
+    neutral: { glow: `${accent}26`, soft: `${accent}12` },
+  };
+  const toneStyle = toneStyles[tone] || toneStyles.neutral;
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: '24px',
+        border: '1px solid var(--border)',
+        background: `linear-gradient(160deg, ${toneStyle.soft}, rgba(255,255,255,0.02) 45%, rgba(15,23,42,0.02))`,
+        padding: '20px',
+        boxShadow: `0 18px 40px ${toneStyle.glow}`,
+        display: 'grid',
+        gap: '16px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {label}
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {helper}
+          </div>
+        </div>
+        <div
+          style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '14px',
+            background: `${accent}18`,
+            color: accent,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Icon size={18} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+        <div
+          style={{
+            width: '96px',
+            height: '96px',
+            borderRadius: '50%',
+            background: gradient,
+            display: 'grid',
+            placeItems: 'center',
+            position: 'relative',
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              width: '66px',
+              height: '66px',
+              borderRadius: '50%',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              display: 'grid',
+              placeItems: 'center',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4)',
+            }}
+          >
+            <span style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-main)' }}>{Math.round(safePercent)}%</span>
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: '30px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.04em', lineHeight: 1 }}>
+            {value}
+            {suffix}
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '13px', fontWeight: 700, color: accent }}>
+            Índice operacional do momento
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PulseTile({ label, value, helper, accent, icon, onClick }) {
+  const Icon = icon;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        textAlign: 'left',
+        padding: '18px',
+        borderRadius: '20px',
+        border: '1px solid var(--border)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+        display: 'grid',
+        gap: '10px',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '14px', background: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={18} />
+        </div>
+        {onClick && <ChevronRight size={16} color="var(--text-muted)" />}
+      </div>
+      <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+      <div style={{ fontSize: '26px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.04em' }}>{value}</div>
+      <div style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.55 }}>{helper}</div>
+    </button>
+  );
 }
 
 function EscalaAtendenteView() {
@@ -190,6 +328,8 @@ export default function CRMAtendente({ userData }) {
   const [statsError, setStatsError] = useState('');
   const [messages, setMessages] = useState([]);
   const [messagesError, setMessagesError] = useState('');
+  const [rhPendingCount, setRhPendingCount] = useState(0);
+  const [growthActions, setGrowthActions] = useState([]);
 
   useEffect(() => {
     if (!userData?.uid) return undefined;
@@ -228,6 +368,30 @@ export default function CRMAtendente({ userData }) {
     };
   }, [userData?.cityId, userData?.uid]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!userData?.uid) return undefined;
+
+    Promise.all([
+      listMyRhRequests(userData.uid),
+      listGrowthActionsForCity(userData.cityId),
+    ])
+      .then(([rhRequests, actions]) => {
+        if (cancelled) return;
+        setRhPendingCount((rhRequests || []).filter((item) => String(item.status || '').toLowerCase() === 'pendente').length);
+        setGrowthActions(actions || []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRhPendingCount(0);
+        setGrowthActions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userData?.cityId, userData?.uid]);
+
   const MENU_ITEMS = [
     { id: 'inicio', label: 'Início', icon: Globe, section: 'Geral', color: '#10b981' },
     { id: 'graficos', label: 'Meus Gráficos', icon: BarChart3, section: 'Geral', color: '#ec4899' },
@@ -253,6 +417,65 @@ export default function CRMAtendente({ userData }) {
     setActiveView: setActiveTab,
   });
   const menuItems = allowedModules.length ? allowedModules : MENU_ITEMS;
+  const dashboardStyles = {
+    heroStatCard: {
+      padding: '16px 18px',
+      borderRadius: '22px',
+      background: 'rgba(255,255,255,0.11)',
+      border: '1px solid rgba(255,255,255,0.16)',
+      display: 'grid',
+      gap: '6px',
+      boxShadow: '0 20px 32px rgba(2,6,23,0.16)',
+      backdropFilter: 'blur(8px)',
+    },
+    heroStatLabel: {
+      fontSize: '11px',
+      fontWeight: 900,
+      color: 'rgba(255,255,255,0.66)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em',
+    },
+    heroStatValue: {
+      fontSize: '32px',
+      fontWeight: 900,
+      color: '#ffffff',
+      letterSpacing: '-0.05em',
+      lineHeight: 1.05,
+    },
+    heroStatHelper: {
+      fontSize: '13px',
+      color: 'rgba(255,255,255,0.76)',
+      lineHeight: 1.55,
+    },
+    sideInsightCard: {
+      padding: '18px',
+      borderRadius: '24px',
+      background: 'rgba(15,23,42,0.26)',
+      border: '1px solid rgba(255,255,255,0.14)',
+      display: 'grid',
+      gap: '14px',
+      boxShadow: '0 22px 40px rgba(2,6,23,0.22)',
+      backdropFilter: 'blur(10px)',
+    },
+    sideInsightHeader: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '11px',
+      fontWeight: 900,
+      color: 'rgba(255,255,255,0.7)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em',
+    },
+    sideInsightFooter: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '13px',
+      color: 'rgba(255,255,255,0.8)',
+      lineHeight: 1.5,
+    },
+  };
 
   const DashboardInicio = () => {
     const firstName = userData?.name?.split(' ')[0] || 'Consultor';
@@ -260,11 +483,25 @@ export default function CRMAtendente({ userData }) {
     const storeLabel = formatStoreLabel(userData);
     const greeting = getGreetingPeriod();
     const profilePhoto = userData?.photo || userData?.photoURL || userData?.avatarUrl || '';
+    const greetingLine = {
+      'Bom dia': `Manha em movimento, ${firstName}.`,
+      'Boa tarde': `Tarde de conversao, ${firstName}.`,
+      'Boa noite': `Noite de fechamento, ${firstName}.`,
+    }[greeting] || `Painel do seu turno, ${firstName}.`;
+    const conversionTone = stats.conversionRate >= 45 ? 'success' : stats.conversionRate >= 25 ? 'warning' : 'danger';
+    const plansPulse = stats.totalSales ? (stats.planos / Math.max(stats.totalSales, 1)) * 100 : 0;
+    const migrationsPulse = stats.totalSales ? (stats.migracoes / Math.max(stats.totalSales, 1)) * 100 : 0;
+    const svasPulse = stats.totalSales ? (stats.svas / Math.max(stats.totalSales, 1)) * 100 : 0;
+    const remindersCount = messages.length + rhPendingCount + growthActions.length;
+    const topDiscardReason = stats.topDiscardReason || 'Sem descartes relevantes no periodo';
+    const averageTicketValue = stats.averageTicket > 0
+      ? stats.averageTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      : 'Sem ticket medio';
 
     return (
       <Page
-        title="Visão Geral do CRM Atendente"
-        subtitle={`Bem-vindo, ${firstName}. Aqui está o resumo do seu CRM em ${currentMonthName}.`}
+        title={null}
+        subtitle={null}
         actions={(
           <Btn onClick={() => setActiveTab('nova_venda')}>
             <PlusCircle size={16} /> Registrar lead
@@ -274,146 +511,170 @@ export default function CRMAtendente({ userData }) {
         <Card
           size="lg"
           style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(37,99,235,0.06))',
-            borderColor: 'rgba(16,185,129,0.18)',
+            background: 'linear-gradient(135deg, rgba(10,37,64,0.96), rgba(17,94,89,0.92) 54%, rgba(21,128,61,0.9))',
+            borderColor: 'rgba(148,163,184,0.18)',
+            color: '#f8fafc',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', alignItems: 'stretch' }}>
-            <div style={{ display: 'grid', gap: '16px', flex: '1 1 420px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '16px',
-                    background: 'rgba(37,99,235,0.12)',
-                    color: '#2563eb',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 10px 24px rgba(37,99,235,0.12)',
-                  }}
-                >
-                  <Building2 size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Loja de atendimento
-                  </div>
-                  <div style={{ marginTop: '6px', fontSize: '28px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>
-                    {storeLabel}
-                  </div>
-                </div>
-              </div>
+          <div style={{ display: 'grid', gap: '28px', position: 'relative' }}>
+            <div
+              style={{
+                position: 'absolute',
+                inset: 'auto -120px -160px auto',
+                width: '320px',
+                height: '320px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0) 68%)',
+                pointerEvents: 'none',
+              }}
+            />
 
-              <div style={{ display: 'grid', gap: '8px' }}>
-                <div style={{ fontSize: '30px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.04em', lineHeight: 1.1 }}>
-                  {greeting}, {firstName}.
-                </div>
-                <div style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 600, maxWidth: '720px', lineHeight: 1.6 }}>
-                  Seu painel acompanha captacao, conversao e rotina comercial da unidade <strong style={{ color: 'var(--text-main)' }}>{storeLabel}</strong>, com foco total no seu funil do mes.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ padding: '10px 14px', borderRadius: '14px', background: 'var(--bg-card)', border: '1px solid var(--border)', fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Planos <strong style={{ color: 'var(--text-main)' }}>{stats.planos}</strong>
-                </div>
-                <div style={{ padding: '10px 14px', borderRadius: '14px', background: 'var(--bg-card)', border: '1px solid var(--border)', fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Migracoes <strong style={{ color: 'var(--text-main)' }}>{stats.migracoes}</strong>
-                </div>
-                <div style={{ padding: '10px 14px', borderRadius: '14px', background: 'var(--bg-card)', border: '1px solid var(--border)', fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  SVAs <strong style={{ color: 'var(--text-main)' }}>{stats.svas}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gap: '12px', minWidth: '280px', flex: '0 1 320px' }}>
-              <div
-                style={{
-                  padding: '18px',
-                  borderRadius: '20px',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  boxShadow: '0 10px 24px rgba(15,23,42,0.06)',
-                }}
-              >
-                {profilePhoto ? (
-                  <img
-                    src={profilePhoto}
-                    alt={userData?.name || 'Atendente'}
-                    style={{ width: '58px', height: '58px', borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--border)', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '24px', flexWrap: 'wrap', alignItems: 'stretch', position: 'relative' }}>
+              <div style={{ display: 'grid', gap: '18px', flex: '1 1 480px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <span
                     style={{
-                      width: '58px',
-                      height: '58px',
-                      borderRadius: '18px',
-                      background: 'linear-gradient(135deg, rgba(37,99,235,0.15), rgba(16,185,129,0.18))',
-                      color: '#2563eb',
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '22px',
-                      fontWeight: 900,
-                      flexShrink: 0,
+                      gap: '8px',
+                      padding: '10px 14px',
+                      borderRadius: '999px',
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
                     }}
                   >
-                    {firstName.charAt(0).toUpperCase()}
+                    <Building2 size={14} />
+                    {storeLabel}
+                  </span>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '10px 14px',
+                      borderRadius: '999px',
+                      background: 'rgba(15,23,42,0.24)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'rgba(255,255,255,0.84)',
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    Resumo de {currentMonthName}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.68)' }}>
+                    Dashboard do atendente
                   </div>
-                )}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '11px', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    Atendente responsavel
+                  <div style={{ fontSize: '38px', fontWeight: 900, letterSpacing: '-0.05em', lineHeight: 1.04 }}>
+                    {greetingLine}
                   </div>
-                  <div style={{ marginTop: '6px', fontSize: '18px', fontWeight: 900, color: 'var(--text-main)', lineHeight: 1.25 }}>
-                    {userData?.name || 'Usuario'}
+                  <div style={{ fontSize: '15px', lineHeight: 1.7, color: 'rgba(255,255,255,0.82)', maxWidth: '760px' }}>
+                    Um painel mais limpo para acompanhar seu ritmo comercial, a saúde do funil e os pontos que pedem atenção antes do próximo atendimento.
                   </div>
-                  <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    CRM da unidade {storeLabel}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
+                  <div style={dashboardStyles.heroStatCard}>
+                    <div style={dashboardStyles.heroStatLabel}>Captação no mês</div>
+                    <div style={dashboardStyles.heroStatValue}>{stats.totalLeads}</div>
+                    <div style={dashboardStyles.heroStatHelper}>leads registrados no seu funil</div>
+                  </div>
+                  <div style={dashboardStyles.heroStatCard}>
+                    <div style={dashboardStyles.heroStatLabel}>Fechamentos</div>
+                    <div style={dashboardStyles.heroStatValue}>{stats.totalSales}</div>
+                    <div style={dashboardStyles.heroStatHelper}>{Math.round(stats.conversionRate || 0)}% de conversão atual</div>
+                  </div>
+                  <div style={dashboardStyles.heroStatCard}>
+                    <div style={dashboardStyles.heroStatLabel}>Ticket médio</div>
+                    <div style={{ ...dashboardStyles.heroStatValue, fontSize: '24px' }}>{averageTicketValue}</div>
+                    <div style={dashboardStyles.heroStatHelper}>referência financeira do período</div>
                   </div>
                 </div>
               </div>
 
-              <div style={{ padding: '16px 18px', borderRadius: '18px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pipeline em foco</div>
-                <div style={{ marginTop: '6px', fontSize: '22px', fontWeight: 900, color: 'var(--text-main)' }}>
-                  {stats.totalLeads} leads no mes
+              <div style={{ display: 'grid', gap: '14px', minWidth: '280px', flex: '0 1 340px' }}>
+                <div
+                  style={{
+                    padding: '18px',
+                    borderRadius: '24px',
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.16)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    boxShadow: '0 22px 40px rgba(2,6,23,0.22)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  {profilePhoto ? (
+                    <img
+                      src={profilePhoto}
+                      alt={userData?.name || 'Atendente'}
+                      style={{ width: '60px', height: '60px', borderRadius: '20px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '60px',
+                        height: '60px',
+                        borderRadius: '20px',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.08))',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '24px',
+                        fontWeight: 900,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {firstName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '11px', fontWeight: 900, color: 'rgba(255,255,255,0.64)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Consultora responsável
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '20px', fontWeight: 900, color: '#ffffff', lineHeight: 1.25 }}>
+                      {userData?.name || 'Usuário'}
+                    </div>
+                    <div style={{ marginTop: '4px', fontSize: '13px', color: 'rgba(255,255,255,0.76)', fontWeight: 600 }}>
+                      Operação concentrada em {storeLabel}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  {stats.totalSales} vendas registradas no mesmo periodo
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div style={{ display: 'none' }}>
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Sua loja
-              </div>
-              <div style={{ marginTop: '8px', fontSize: '30px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>
-                {userData?.cityName || userData?.cityId || 'Loja não vinculada'}
-              </div>
-              <div style={{ marginTop: '10px', fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                Planos: <strong>{stats.planos}</strong> · Migrações: <strong>{stats.migracoes}</strong> · SVAs: <strong>{stats.svas}</strong>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gap: '10px', minWidth: '220px' }}>
-              <div style={{ padding: '14px 16px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pipeline em foco</div>
-                <div style={{ marginTop: '6px', fontSize: '20px', fontWeight: 900, color: 'var(--text-main)' }}>
-                  {stats.totalLeads} leads no mês
-                </div>
-              </div>
-              <div style={{ padding: '14px 16px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Fechamentos</div>
-                <div style={{ marginTop: '6px', fontSize: '20px', fontWeight: 900, color: 'var(--text-main)' }}>
-                  {stats.totalSales} vendas registradas
+                <div style={dashboardStyles.sideInsightCard}>
+                  <div style={dashboardStyles.sideInsightHeader}>
+                    <Activity size={16} />
+                    Leitura rápida do momento
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', lineHeight: 1.15 }}>
+                    {stats.totalSales > 0 ? `${stats.totalSales} vendas em andamento no fechamento do mês` : 'Seu funil está pronto para ganhar tração'}
+                  </div>
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <div style={dashboardStyles.sideInsightFooter}>
+                      <TrendingUp size={14} />
+                      Conversão atual em {Math.round(stats.conversionRate || 0)}%
+                    </div>
+                    <div style={dashboardStyles.sideInsightFooter}>
+                      <CircleDashed size={14} />
+                      Principal motivo de perda: {topDiscardReason}
+                    </div>
+                    <div style={dashboardStyles.sideInsightFooter}>
+                      <MessageSquareQuote size={14} />
+                      {remindersCount} ponto(s) pedindo sua atenção hoje
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -422,12 +683,79 @@ export default function CRMAtendente({ userData }) {
 
         {statsError && <InfoBox type="danger">{statsError}</InfoBox>}
 
-        <div style={uiStyles.grid4}>
-          <KpiCard label="Leads captados" valor={stats.totalLeads} icon={<Users size={16} />} accent="#2563eb" />
-          <KpiCard label="Vendas fechadas" valor={stats.totalSales} icon={<PlusCircle size={16} />} accent="#10b981" />
-          <KpiCard label="Planos novos" valor={stats.planos} icon={<BarChart3 size={16} />} accent="#7c3aed" />
-          <KpiCard label="Migrações" valor={stats.migracoes} icon={<FileSpreadsheet size={16} />} accent="#f59e0b" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <MetricDialCard
+            label="Conversão comercial"
+            value={stats.totalSales}
+            percent={stats.conversionRate}
+            accent="#10b981"
+            helper={`${stats.totalLeads} leads puxando o funil do mês`}
+            icon={Target}
+            tone={conversionTone}
+          />
+          <MetricDialCard
+            label="Ritmo de planos"
+            value={stats.planos}
+            percent={plansPulse}
+            accent="#2563eb"
+            helper="Percentual de planos dentro das vendas registradas"
+            icon={TrendingUp}
+            tone="neutral"
+          />
+          <MetricDialCard
+            label="Migrações"
+            value={stats.migracoes}
+            percent={migrationsPulse}
+            accent="#f59e0b"
+            helper="Espaço do mix dedicado a migrações no período"
+            icon={Activity}
+            tone={migrationsPulse > 35 ? 'warning' : 'neutral'}
+          />
+          <MetricDialCard
+            label="SVA e mix"
+            value={stats.svas}
+            percent={svasPulse}
+            accent="#7c3aed"
+            helper="Adesão de serviços agregados nas vendas do mês"
+            icon={Sparkles}
+            tone={svasPulse > 20 ? 'success' : 'neutral'}
+          />
         </div>
+
+        <Card title="Pulso da operação" subtitle="Indicadores extras para priorizar o dia antes das ações rápidas">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+            <PulseTile
+              label="RH"
+              value={rhPendingCount}
+              helper={rhPendingCount > 0 ? 'solicitação(ões) aguardando acompanhamento' : 'sem pendências de RH no momento'}
+              accent="#f59e0b"
+              icon={FileCheck}
+              onClick={() => setActiveTab('rh')}
+            />
+            <PulseTile
+              label="Conversão"
+              value={`${Math.round(stats.conversionRate || 0)}%`}
+              helper={stats.totalSales > 0 ? `${stats.totalSales} venda(s) em ${stats.totalLeads} lead(s)` : 'acompanhe o gráfico para ganhar tração'}
+              accent="#10b981"
+              icon={BarChart3}
+              onClick={() => setActiveTab('graficos')}
+            />
+            <PulseTile
+              label="Lembretes"
+              value={remindersCount}
+              helper={messages.length > 0 ? `${messages.length} aviso(s) no mural e rotinas ativas` : 'sem novos avisos no painel agora'}
+              accent="#06b6d4"
+              icon={MessageSquareQuote}
+            />
+            <PulseTile
+              label="Ações de crescimento"
+              value={growthActions.length}
+              helper={growthActions.length > 0 ? 'movimentos ativos da loja para acompanhar' : 'nenhuma ação aberta para sua unidade'}
+              accent="#ec4899"
+              icon={Megaphone}
+            />
+          </div>
+        </Card>
 
         <Card title="Ações rápidas" subtitle="Atalhos mais usados no dia a dia do atendente">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
@@ -444,9 +772,9 @@ export default function CRMAtendente({ userData }) {
                 style={{
                   textAlign: 'left',
                   padding: '18px',
-                  borderRadius: '16px',
+                  borderRadius: '18px',
                   border: '1px solid var(--border)',
-                  background: 'var(--bg-app)',
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(15,23,42,0.03))',
                   cursor: 'pointer',
                   display: 'grid',
                   gap: '10px',
