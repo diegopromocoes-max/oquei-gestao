@@ -48,6 +48,9 @@ function normalizeLeadForEdit(lead) {
     status: lead.status || 'Em negociacao',
     discardMotive: lead.discardMotive || '',
     fidelityMonth: lead.fidelityMonth || '',
+    // Datas de ciclo de vida (editáveis para correção retroativa)
+    contractedDate: lead.contractedDate || '',
+    installedDate: lead.installedDate || '',
   };
 }
 
@@ -554,6 +557,57 @@ export default function MeusLeads({ userData, onNavigate }) {
                 <div style={{ display: 'grid', gap: '6px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Origem atual</label>
                   <input value={updateModal.origin || updateModal.originName || 'Nao informada'} readOnly style={{ ...uiStyles.input, background: 'var(--bg-app)' }} />
+                </div>
+              </div>
+
+              {/* ── Datas de ciclo de vida ─────────────────────────────────────────
+                  Preenchidas automaticamente ao arrastar no Kanban.
+                  O atendente pode corrigir aqui caso a data tenha sido registrada errada
+                  (ex: instalação retroativa ou contrato assinado em data diferente de hoje). */}
+              <div style={{ marginTop: '8px', padding: '14px', borderRadius: '14px', background: 'rgba(37,99,235,0.04)', border: '1px solid rgba(37,99,235,0.12)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 900, color: colors.primary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+                  Datas do ciclo de vida
+                </div>
+                <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                  <div style={{ display: 'grid', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Prospecção (abertura)
+                    </label>
+                    <input
+                      type="date"
+                      value={updateModal.date || ''}
+                      readOnly
+                      title="Data de abertura do lead — definida na criacao e nao editavel"
+                      style={{ ...uiStyles.input, background: 'var(--bg-app)', cursor: 'not-allowed' }}
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Data de abertura — nao editavel</span>
+                  </div>
+                  <div style={{ display: 'grid', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Contratação (venda ganha)
+                    </label>
+                    <input
+                      type="date"
+                      value={updateModal.contractedDate || ''}
+                      onChange={(event) => setUpdateModal((current) => ({ ...current, contractedDate: event.target.value }))}
+                      style={uiStyles.input}
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Preenchido auto ao mover para Contratado</span>
+                  </div>
+                  <div style={{ display: 'grid', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: colors.success, textTransform: 'uppercase' }}>
+                      Instalação (ativação) ★ meta
+                    </label>
+                    <input
+                      type="date"
+                      value={updateModal.installedDate || ''}
+                      onChange={(event) => setUpdateModal((current) => ({ ...current, installedDate: event.target.value }))}
+                      style={{ ...uiStyles.input, borderColor: colors.success + '60' }}
+                    />
+                    <span style={{ fontSize: '10px', color: colors.success, fontWeight: 700 }}>
+                      Esta data define o mes da meta — editavel para retroativos
+                    </span>
+                  </div>
                 </div>
               </div>
 

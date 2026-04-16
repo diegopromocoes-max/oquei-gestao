@@ -112,28 +112,56 @@
       "collectionGroup": "leads",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "attendantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "monthKey",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "attendantId", "order": "ASCENDING" },
+        { "fieldPath": "monthKey", "order": "ASCENDING" }
       ]
     },
     {
       "collectionGroup": "leads",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "attendantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
+        { "fieldPath": "attendantId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "supervisorId", "order": "ASCENDING" },
+        { "fieldPath": "monthKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "contractedMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "clusterId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "contractedMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "attendantId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "installMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "clusterId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "installMonthKey", "order": "ASCENDING" },
+        { "fieldPath": "attendantId", "order": "ASCENDING" }
       ]
     },
     {

@@ -155,8 +155,24 @@ service cloud.firestore {
     }
 
     // ── 2. Leads e CRM ──────────────────────────────────────────────────────
+    // Função auxiliar: supervisor acessa lead se for do seu cluster
+    // (via clusterId do lead) OU se for explicitamente o supervisor registrado.
+    function isSupervisorOfLead(data) {
+      return isSupervisor() && (
+        sameCluster(data.clusterId)
+        || sameClusterByStore(data.cityId)
+        || data.supervisorId == request.auth.uid
+        || data.supervisorUid == request.auth.uid
+        || sameClusterByEmployee(data.attendantId)
+      );
+    }
+
     match /leads/{docId} {
-      allow read: if isAuth() && (isGrowthOrAbove() || (isAttendant() && isOwnLead(resource.data)));
+      allow read: if isAuth() && (
+        isGrowthOrAbove()
+        || (isAttendant() && isOwnLead(resource.data))
+        || isSupervisorOfLead(resource.data)
+      );
       allow create: if isAuth() && (
         isCoordinator()
         || isSupervisor()

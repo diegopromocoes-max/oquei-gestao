@@ -225,6 +225,7 @@ function buildSalesData(salesScope = {}) {
   const totals = salesScope.totals || {};
   const clusterSalesGoal = toNumber(totals.goalP) > 0 ? toNumber(totals.goalP) : Math.max(toNumber(totals.p), 1);
   const clusterInstallsGoal = toNumber(totals.p) > 0 ? toNumber(totals.p) : Math.max(toNumber(totals.i), 1);
+  const scopedOfficialLeads = salesScope.officialLeads || salesScope.leads || [];
 
   return {
     cluster: {
@@ -242,7 +243,7 @@ function buildSalesData(salesScope = {}) {
       installsGoal: toNumber(item.salesPlanos) > 0 ? toNumber(item.salesPlanos) : Math.max(toNumber(item.installedPlanos), 1),
       backlog: Math.max(0, toNumber(item.salesPlanos) - toNumber(item.installedPlanos)),
     })),
-    topSellers: buildTopSellers(salesScope.leads || [], salesScope.cities || []),
+    topSellers: buildTopSellers(scopedOfficialLeads, salesScope.cities || []),
   };
 }
 
@@ -394,7 +395,7 @@ function buildMegaData(cityMetrics = []) {
 }
 
 function buildTickerMessages(salesScope = {}, netAddsLabel = '+0') {
-  const salesMessages = [...(salesScope.leads || [])]
+  const salesMessages = [...(salesScope.officialLeads || salesScope.leads || [])]
     .filter((lead) => isSaleLead(lead))
     .sort((left, right) => getLeadSortValue(right) - getLeadSortValue(left))
     .slice(0, 8)

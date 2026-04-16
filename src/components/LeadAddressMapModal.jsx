@@ -4,6 +4,7 @@ import { CheckCircle2, Crosshair, MapPin, Navigation, Search } from 'lucide-reac
 import { Btn, Card, InfoBox, Modal, colors, styles as uiStyles } from './ui';
 import { addProfessionalTileLayer, createLeafletPinIcon, loadLeafletAssets, reverseGeocode, searchAddress } from '../lib/openStreetMap';
 import {
+  getLeadCoordinates,
   LEAD_GEO_STATUS,
   buildLeadAddressLabel,
   hasValidLeadCoordinates,
@@ -14,8 +15,9 @@ import {
 const DEFAULT_CENTER = { lat: -20.8113, lng: -49.3758 };
 
 function pickInitialCenter(location) {
-  if (hasValidLeadCoordinates(location)) {
-    return { lat: Number(location.geoLat), lng: Number(location.geoLng) };
+  const coordinates = getLeadCoordinates(location);
+  if (coordinates) {
+    return coordinates;
   }
   return DEFAULT_CENTER;
 }

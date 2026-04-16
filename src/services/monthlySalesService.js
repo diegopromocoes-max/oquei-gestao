@@ -1,6 +1,14 @@
 import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 
 import { db } from '../firebase';
+import {
+  buildStoreWorkingDaysMap,
+  bucketLeadByBusinessType,
+  buildPlanCarryoverFromPreviousMonth,
+  buildPlanStoreMetrics,
+  buildSecondaryCategoryMetrics,
+  buildAttendantCards,
+} from './salesDashboardModel';
 
 const SALE_STATUSES = new Set(['Contratado', 'Instalado']);
 const INSTALL_STATUSES = new Set(['Instalado']);
@@ -32,13 +40,59 @@ function normalizeMonthKey(value) {
   return /^\d{4}-\d{2}$/.test(String(value || '')) ? String(value) : DEFAULT_MONTH;
 }
 
+function dedupeDocsById(items = []) {
+  const seen = new Map();
+  items.forEach((item) => {
+    if (!item?.id) return;
+    if (!seen.has(item.id)) {
+      seen.set(item.id, item);
+    }
+  });
+  return [...seen.values()];
+}
+
+function matchesMonthField(lead = {}, fieldName, monthKey) {
+  return String(lead?.[fieldName] || '').trim() === normalizeMonthKey(monthKey);
+}
+
+function matchesOpenedMonth(lead = {}, monthKey) {
+  return String(lead?.monthKey || '').trim() === normalizeMonthKey(monthKey);
+}
+
+function matchesLifecycleMonth(lead = {}, monthKey) {
+  return (
+    matchesMonthField(lead, 'contractedMonthKey', monthKey)
+    || matchesMonthField(lead, 'installMonthKey', monthKey)
+    || matchesOpenedMonth(lead, monthKey)
+  );
+}
+
+// Mantido por compatibilidade com consumidores legados (wallboardService, etc.)
 function normalizeLeadType(value = '') {
-  const safeValue = String(value || '').toLowerCase();
+  const safeValue = String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
   if (safeValue.includes('migra')) return 'Migracao';
-  if (safeValue.includes('sva')) return 'SVA';
+  if (
+    safeValue.includes('sva')
+    || safeValue.includes('servicos adicionais')
+    || safeValue.includes('servico adicional')
+  ) return 'SVA';
   return 'Plano Novo';
 }
 
+function getPreviousMonthKey(monthKey) {
+  const [year, month] = normalizeMonthKey(monthKey).split('-').map(Number);
+  const prev = new Date(year, month - 2, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getFirstDayOfPeriod(monthKey) {
+  return `${normalizeMonthKey(monthKey)}-01`;
+}
+
+// Calendário global simplificado — mantido para backward compat com consumidores externos
 function getCalendarForMonth(monthKey, holidays = []) {
   const [year, month] = normalizeMonthKey(monthKey).split('-').map(Number);
   const lastDay = new Date(year, month, 0).getDate();
@@ -205,10 +259,14 @@ function buildScopedCities(cities = [], { scope, clusterId }) {
 function buildStoreData({
   stores = [],
   leads = [],
+  prevMonthLeads = [],
   monthlyGoals = {},
   monthlyAttendantGoals = {},
   attendantUsersByCity = {},
   calendar,
+  workingDaysMap,
+  monthKey,
+  firstDayOfPeriod,
   clusterFilter = 'all',
   cityFilter = 'all',
 }) {
@@ -224,9 +282,15 @@ function buildStoreData({
 
   return targetStores.map((store) => {
     const storeLeads = leads.filter((lead) => {
-      const cityId = String(lead.cityId || '');
-      const cityName = String(lead.cityName || '');
-      return cityId === String(store.id) || cityId === String(store.name || store.nome || '') || cityName === String(store.name || store.nome || '');
+      const cityId = String(lead.cityId || '').trim();
+      const cityName = normalizeText(lead.cityName || '');
+      return cityId === String(store.id) || cityName === normalizeText(store.name || store.nome || '');
+    });
+
+    const storePrevLeads = prevMonthLeads.filter((lead) => {
+      const cityId = String(lead.cityId || '').trim();
+      const cityName = normalizeText(lead.cityName || '');
+      return cityId === String(store.id) || cityName === normalizeText(store.name || store.nome || '');
     });
 
     const goal = monthlyGoals[store.id] || {};
@@ -238,40 +302,80 @@ function buildStoreData({
       attendantUsersByCity,
     });
     const attendantGoalSummary = sumSyncedAttendantGoals(cityGoalDocs);
-    const salesPlanos = storeLeads.filter((lead) => SALE_STATUSES.has(lead.status) && normalizeLeadType(lead.leadType || lead.categoryName || lead.productName) === 'Plano Novo').length;
-    const installedPlanos = storeLeads.filter((lead) => INSTALL_STATUSES.has(lead.status) && normalizeLeadType(lead.leadType || lead.categoryName || lead.productName) === 'Plano Novo').length;
-    const salesSVA = storeLeads.filter((lead) => SALE_STATUSES.has(lead.status) && normalizeLeadType(lead.leadType || lead.categoryName || lead.productName) === 'SVA').length;
-    const salesMigracoes = storeLeads.filter((lead) => SALE_STATUSES.has(lead.status) && normalizeLeadType(lead.leadType || lead.categoryName || lead.productName) === 'Migracao').length;
 
     const fallbackPlanGoal = buildStorefrontGoalSnapshot(goal);
-    const metaPlanos = hasSyncedAttendantGoals ? attendantGoalSummary.plans : fallbackPlanGoal;
+    const goalPlansOfficial = hasSyncedAttendantGoals ? attendantGoalSummary.plans : fallbackPlanGoal;
+
+    // Dias úteis por loja — usa mapa per-store; fallback para calendário global
+    const storeWorkingDays = workingDaysMap?.get(store.id) || {
+      total: calendar?.total || 22,
+      elapsed: calendar?.worked || 1,
+      remaining: calendar?.remaining || 21,
+    };
+
+    const carryover = buildPlanCarryoverFromPreviousMonth(storePrevLeads, firstDayOfPeriod);
+
+    const planMetrics = buildPlanStoreMetrics({
+      storeLeads,
+      workingDays: storeWorkingDays,
+      goalPlansOfficial,
+      previousMonthCarryoverPlans: carryover,
+      monthKey,
+    });
+
+    const svaMetrics = buildSecondaryCategoryMetrics({
+      storeLeads,
+      monthKey,
+      category: 'sva',
+      goal: hasSyncedAttendantGoals ? attendantGoalSummary.sva : (parseInt(goal.sva, 10) || 0),
+    });
+
+    const migrationMetrics = buildSecondaryCategoryMetrics({
+      storeLeads,
+      monthKey,
+      category: 'migrations',
+      goal: parseInt(goal.migrations, 10) || 0,
+    });
 
     return {
       id: store.id,
       city: store.name || store.nome || store.id,
       clusterId: store.clusterId || '',
-      metaPlanos,
-      salesPlanos,
-      installedPlanos,
-      salesSVA,
-      metaSVA: hasSyncedAttendantGoals ? attendantGoalSummary.sva : (parseInt(goal.sva, 10) || 0),
-      salesMigracoes,
-      metaMigracoes: parseInt(goal.migrations, 10) || 0,
-      projSales: calendar.worked > 0 ? Math.floor((salesPlanos / calendar.worked) * calendar.total) : 0,
+
+      // --- novos campos do modelo ---
+      ...planMetrics,
+      sva: svaMetrics,
+      migrations: migrationMetrics,
       attendantGoalSource: hasSyncedAttendantGoals ? 'individual' : 'store',
+
+      // --- campos legados mantidos para backward compat ---
+      metaPlanos: goalPlansOfficial,
+      salesPlanos: planMetrics.salesGrossPlans,
+      installedPlanos: planMetrics.installedPlansOfficial,
+      salesSVA: svaMetrics.realized,
+      metaSVA: svaMetrics.goal,
+      salesMigracoes: migrationMetrics.realized,
+      metaMigracoes: migrationMetrics.goal,
+      projSales: planMetrics.projectedMonthSalesPlans,
     };
-  }).sort((left, right) => right.salesPlanos - left.salesPlanos);
+  }).sort((left, right) => right.salesGrossPlans - left.salesGrossPlans);
 }
 
 function buildTotals({ storeData = [], calendar, monthlyClusterGoals = {}, clusterFilter = 'all', uniqueClusters = [] }) {
   const totals = storeData.reduce((accumulator, store) => ({
-    p: accumulator.p + store.salesPlanos,
-    i: accumulator.i + store.installedPlanos,
+    p: accumulator.p + store.salesGrossPlans,
+    i: accumulator.i + store.installedPlansOfficial,
     ss: accumulator.ss + store.salesSVA,
     m: accumulator.m + store.salesMigracoes,
-    gp: accumulator.gp + store.metaPlanos,
+    gp: accumulator.gp + store.goalPlansOfficial,
     gm: accumulator.gm + store.metaMigracoes,
     gs: accumulator.gs + store.metaSVA,
+    salesGrossPlans: accumulator.salesGrossPlans + store.salesGrossPlans,
+    installedPlansOfficial: accumulator.installedPlansOfficial + store.installedPlansOfficial,
+    pendingInstallationsCurrentMonth: accumulator.pendingInstallationsCurrentMonth + store.pendingInstallationsCurrentMonth,
+    previousMonthCarryoverPlans: accumulator.previousMonthCarryoverPlans + store.previousMonthCarryoverPlans,
+    projectedMonthSalesPlans: accumulator.projectedMonthSalesPlans + store.projectedMonthSalesPlans,
+    installedPlansProjectionOfficial: accumulator.installedPlansProjectionOfficial + store.installedPlansProjectionOfficial,
   }), {
     p: 0,
     i: 0,
@@ -280,6 +384,12 @@ function buildTotals({ storeData = [], calendar, monthlyClusterGoals = {}, clust
     gp: 0,
     gm: 0,
     gs: 0,
+    salesGrossPlans: 0,
+    installedPlansOfficial: 0,
+    pendingInstallationsCurrentMonth: 0,
+    previousMonthCarryoverPlans: 0,
+    projectedMonthSalesPlans: 0,
+    installedPlansProjectionOfficial: 0,
   });
 
   let clusterGoalMigracoes = 0;
@@ -293,7 +403,7 @@ function buildTotals({ storeData = [], calendar, monthlyClusterGoals = {}, clust
     hasClusterGoals = true;
   });
 
-  const workRatio = calendar.total / (calendar.worked || 1);
+  const workRatio = (calendar?.total || 22) / (calendar?.worked || 1);
   const goalP = totals.gp;
   const goalM = hasClusterGoals ? clusterGoalMigracoes : totals.gm;
   const goalS = totals.gs;
@@ -304,9 +414,14 @@ function buildTotals({ storeData = [], calendar, monthlyClusterGoals = {}, clust
     goalM,
     goalS,
     goalSales: goalP + goalM + goalS,
+    contractedP: totals.salesGrossPlans,
+    installedP: totals.installedPlansOfficial,
+    pendingInstallations: totals.pendingInstallationsCurrentMonth,
+    projInstalledP: totals.installedPlansProjectionOfficial,
+    // projeções legadas (backward compat)
     projP: Math.floor(totals.p * workRatio),
     projM: Math.floor(totals.m * workRatio),
-    projI: Math.floor(totals.i * workRatio),
+    projI: totals.installedPlansProjectionOfficial,
     projS: Math.floor(totals.ss * workRatio),
   };
 }
@@ -317,7 +432,7 @@ function buildSvaAnalysis(leads = []) {
   const cityCounts = {};
 
   leads
-    .filter((lead) => normalizeLeadType(lead.leadType || lead.categoryName || lead.productName) === 'SVA' && SALE_STATUSES.has(lead.status))
+    .filter((lead) => normalizeLeadType(lead.categoryName || lead.leadType || lead.productName) === 'SVA' && SALE_STATUSES.has(lead.status))
     .forEach((lead) => {
       const productName = lead.productName || 'Outros';
       const sellerName = lead.attendantName || 'N/D';
@@ -341,6 +456,9 @@ function emptyScopePayload(monthKey = DEFAULT_MONTH) {
     cities: [],
     users: [],
     leads: [],
+    officialLeads: [],
+    prevRelevantLeads: [],
+    prevMonthLeads: [],
     holidays: [],
     monthlyGoals: {},
     monthlyClusterGoals: {},
@@ -348,30 +466,23 @@ function emptyScopePayload(monthKey = DEFAULT_MONTH) {
     globalCalendar: getCalendarForMonth(monthKey, []),
     uniqueClusters: [],
     storeData: [],
+    attendantCards: [],
     totals: {
-      p: 0,
-      i: 0,
-      ss: 0,
-      m: 0,
-      gp: 0,
-      gm: 0,
-      gs: 0,
-      goalP: 0,
-      goalM: 0,
-      goalS: 0,
-      goalSales: 0,
-      projP: 0,
-      projM: 0,
-      projI: 0,
-      projS: 0,
+      p: 0, i: 0, ss: 0, m: 0,
+      gp: 0, gm: 0, gs: 0,
+      goalP: 0, goalM: 0, goalS: 0, goalSales: 0,
+      projP: 0, projM: 0, projI: 0, projS: 0,
+      contractedP: 0, installedP: 0, pendingInstallations: 0, projInstalledP: 0,
+      salesGrossPlans: 0, installedPlansOfficial: 0,
+      pendingInstallationsCurrentMonth: 0,
+      previousMonthCarryoverPlans: 0, projectedMonthSalesPlans: 0,
+      installedPlansProjectionOfficial: 0,
     },
     salesCount: 0,
     installedCount: 0,
-    svaAnalysis: {
-      radarData: [],
-      topSellers: [],
-      topCities: [],
-    },
+    svaAnalysis: { radarData: [], topSellers: [], topCities: [] },
+    topAttendants: [],
+    openedLeadsCount: 0,
   };
 }
 
@@ -380,16 +491,38 @@ export function buildScopedSalesView(rawPayload = emptyScopePayload(), { cluster
   const globalCalendar = payload.globalCalendar || getCalendarForMonth(payload.monthKey, payload.holidays);
   const uniqueClusters = Array.from(new Set((payload.cities || []).map((city) => city.clusterId).filter(Boolean)));
   const attendantUsersByCity = buildAttendantUsersByCity(payload.users || []);
+  const firstDayOfPeriod = getFirstDayOfPeriod(payload.monthKey);
+  const openedLeads = payload.leads || [];
+  const officialLeads = payload.officialLeads || payload.leads || [];
+  const previousRelevantLeads = payload.prevRelevantLeads || payload.prevMonthLeads || [];
+
+  // Mapa de dias úteis por loja usando calendário operacional
+  let workingDaysMap;
+  try {
+    workingDaysMap = buildStoreWorkingDaysMap(
+      payload.cities || [],
+      payload.holidays || [],
+      payload.monthKey,
+    );
+  } catch {
+    workingDaysMap = new Map();
+  }
+
   const storeData = buildStoreData({
     stores: payload.cities || [],
-    leads: payload.leads || [],
+    leads: officialLeads,
+    prevMonthLeads: previousRelevantLeads,
     monthlyGoals: payload.monthlyGoals || {},
     monthlyAttendantGoals: payload.monthlyAttendantGoals || {},
     attendantUsersByCity,
     calendar: globalCalendar,
+    workingDaysMap,
+    monthKey: payload.monthKey,
+    firstDayOfPeriod,
     clusterFilter,
     cityFilter,
   });
+
   const totals = buildTotals({
     storeData,
     calendar: globalCalendar,
@@ -397,7 +530,8 @@ export function buildScopedSalesView(rawPayload = emptyScopePayload(), { cluster
     clusterFilter,
     uniqueClusters,
   });
-  const visibleLeads = (payload.leads || []).filter((lead) => {
+
+  const matchesScopedFilters = (lead) => {
     if (clusterFilter !== 'all' && String(lead.clusterId || lead.cluster || '') !== String(clusterFilter)) {
       return false;
     }
@@ -407,6 +541,20 @@ export function buildScopedSalesView(rawPayload = emptyScopePayload(), { cluster
       return cityId === String(cityFilter) || cityName === String(cityFilter);
     }
     return true;
+  };
+
+  const visibleLeads = officialLeads.filter(matchesScopedFilters);
+  const visibleOpenedLeads = openedLeads.filter(matchesScopedFilters);
+
+  const attendantCards = buildAttendantCards({
+    leads: visibleLeads,
+    prevMonthLeads: previousRelevantLeads,
+    monthKey: payload.monthKey,
+    firstDayOfPeriod,
+    workingDaysMap,
+    monthlyAttendantGoalsByCity: payload.monthlyAttendantGoals || {},
+    attendantUsersByCity,
+    monthlyGoals: payload.monthlyGoals || {},
   });
 
   return {
@@ -415,9 +563,26 @@ export function buildScopedSalesView(rawPayload = emptyScopePayload(), { cluster
     uniqueClusters,
     storeData,
     totals,
+    attendantCards,
+    topAttendants: attendantCards
+      .map((item) => ({
+        attendantId: item.attendantId,
+        attendantName: item.attendantName,
+        installs: item.installedPlansOfficial || 0,
+        sales: item.salesGrossPlans || 0,
+        goal: item.goalPlansOfficial || 0,
+        projection: item.installedPlansProjectionOfficial || 0,
+        cityId: item.cityId || '',
+        cityName: item.cityName || '',
+      }))
+      .sort((left, right) => {
+        if (right.installs !== left.installs) return right.installs - left.installs;
+        return right.sales - left.sales;
+      }),
     salesCount: visibleLeads.filter((lead) => SALE_STATUSES.has(lead.status)).length,
     installedCount: visibleLeads.filter((lead) => INSTALL_STATUSES.has(lead.status)).length,
     svaAnalysis: buildSvaAnalysis(visibleLeads),
+    openedLeadsCount: visibleOpenedLeads.length,
   };
 }
 
@@ -429,6 +594,9 @@ function summarizeScopePayload({
   cities,
   users,
   leads,
+  officialLeads,
+  prevMonthLeads,
+  prevRelevantLeads,
   holidays,
   monthlyGoals,
   monthlyClusterGoals,
@@ -436,21 +604,32 @@ function summarizeScopePayload({
 }) {
   const cityMaps = buildCityMaps(cities);
   const scopedCities = buildScopedCities(cities, { scope, clusterId });
-  const scopedLeads = filterLeadsByScope(leads, { scope, clusterId, attendantId }, cityMaps).map((lead) => {
+  const mapScopedLead = (lead) => {
     const resolvedCity = resolveLeadCity(lead, cityMaps);
     const resolvedClusterId = resolveLeadClusterId(lead, cityMaps);
+    const canonicalCityId = String(resolvedCity?.id || lead.cityId || '').trim();
     return {
       ...lead,
-      cityName: lead.cityName || resolvedCity?.name || resolvedCity?.nome || lead.cityId || '',
+      cityId: canonicalCityId || String(lead.cityId || '').trim(),
+      cityName: lead.cityName || resolvedCity?.name || resolvedCity?.nome || canonicalCityId || lead.cityId || '',
       clusterId: lead.clusterId || resolvedClusterId || '',
     };
-  });
+  };
+
+  const scopedLeads = filterLeadsByScope(leads, { scope, clusterId, attendantId }, cityMaps).map(mapScopedLead);
+  const scopedOfficialLeads = filterLeadsByScope(officialLeads || leads, { scope, clusterId, attendantId }, cityMaps).map(mapScopedLead);
+
+  const scopedPrevLeads = filterLeadsByScope(prevMonthLeads || [], { scope, clusterId, attendantId }, cityMaps).map(mapScopedLead);
+  const scopedPrevRelevantLeads = filterLeadsByScope(prevRelevantLeads || prevMonthLeads || [], { scope, clusterId, attendantId }, cityMaps).map(mapScopedLead);
 
   return buildScopedSalesView({
     monthKey,
     cities: scopedCities,
     users,
     leads: scopedLeads,
+    officialLeads: dedupeDocsById(scopedOfficialLeads),
+    prevMonthLeads: scopedPrevLeads,
+    prevRelevantLeads: dedupeDocsById(scopedPrevRelevantLeads),
     holidays,
     monthlyGoals: buildMonthlyGoalsMap(monthlyGoals),
     monthlyClusterGoals: buildMonthlyClusterGoalsMap(monthlyClusterGoals),
@@ -474,6 +653,14 @@ function buildLeadsQuery(scope, monthKey, attendantId) {
   return query(collection(db, 'leads'), ...constraints);
 }
 
+function buildLeadFieldQuery(fieldName, monthKey) {
+  return query(collection(db, 'leads'), where(fieldName, '==', monthKey));
+}
+
+function buildAttendantUniverseQuery(attendantId) {
+  return query(collection(db, 'leads'), where('attendantId', '==', attendantId));
+}
+
 function buildGoalsQuery(scope, monthKey, clusterId, collectionName) {
   const constraints = [where('month', '==', monthKey)];
   if (scope === 'cluster' && clusterId && collectionName === 'monthly_cluster_goals') {
@@ -482,7 +669,7 @@ function buildGoalsQuery(scope, monthKey, clusterId, collectionName) {
   return query(collection(db, collectionName), ...constraints);
 }
 
-function buildUsersQuery(scope, clusterId) {
+function buildUsersQuery() {
   return collection(db, 'users');
 }
 
@@ -492,18 +679,28 @@ function buildAttendantGoalsQuery(monthKey) {
 
 export function listenMonthlySalesScope({ scope = 'global', monthKey = DEFAULT_MONTH, clusterId = '', attendantId = '', callback, onError }) {
   const normalizedMonth = normalizeMonthKey(monthKey);
+  const prevMonth = getPreviousMonthKey(normalizedMonth);
+
   const state = {
     cities: null,
     users: null,
     leads: null,
+    officialLeads: null,
+    prevMonthLeads: null,
+    prevRelevantLeads: null,
     holidays: null,
     monthlyGoals: null,
     monthlyClusterGoals: null,
     monthlyAttendantGoals: null,
+    contractedMonthLeads: scope === 'attendant' ? [] : null,
+    installedMonthLeads: scope === 'attendant' ? [] : null,
+    prevContractedMonthLeads: scope === 'attendant' ? [] : null,
   };
 
-  const emit = () => {
-    if (Object.values(state).some((value) => value === null)) return;
+  const emitSnapshot = () => {
+    if ([state.cities, state.users, state.leads, state.officialLeads, state.prevMonthLeads, state.prevRelevantLeads, state.holidays, state.monthlyGoals, state.monthlyClusterGoals, state.monthlyAttendantGoals].some((value) => value === null)) {
+      return;
+    }
     callback?.(summarizeScopePayload({
       monthKey: normalizedMonth,
       scope,
@@ -512,6 +709,9 @@ export function listenMonthlySalesScope({ scope = 'global', monthKey = DEFAULT_M
       cities: state.cities,
       users: state.users,
       leads: state.leads,
+      officialLeads: state.officialLeads,
+      prevMonthLeads: state.prevMonthLeads,
+      prevRelevantLeads: state.prevRelevantLeads,
       holidays: state.holidays,
       monthlyGoals: state.monthlyGoals,
       monthlyClusterGoals: state.monthlyClusterGoals,
@@ -519,43 +719,141 @@ export function listenMonthlySalesScope({ scope = 'global', monthKey = DEFAULT_M
     }));
   };
 
+  const reconcileLeadSets = () => {
+    if (scope !== 'attendant') {
+      if ([state.leads, state.prevMonthLeads, state.contractedMonthLeads, state.installedMonthLeads, state.prevContractedMonthLeads].some((value) => value === null)) {
+        return;
+      }
+
+      state.officialLeads = dedupeDocsById([
+        ...(state.leads || []),
+        ...(state.contractedMonthLeads || []),
+        ...(state.installedMonthLeads || []),
+      ]);
+      state.prevRelevantLeads = dedupeDocsById([
+        ...(state.prevMonthLeads || []),
+        ...(state.prevContractedMonthLeads || []),
+      ]);
+    }
+
+    emitSnapshot();
+  };
+
   const safeListen = (ref, key) => onSnapshot(
     ref,
     (snapshot) => {
       state[key] = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-      emit();
+      reconcileLeadSets();
     },
     (error) => {
       state[key] = [];
       onError?.(error);
-      emit();
+      reconcileLeadSets();
     },
   );
 
   const unsubscribers = [
     safeListen(buildCitiesQuery(scope, clusterId), 'cities'),
-    safeListen(buildUsersQuery(scope, clusterId), 'users'),
-    safeListen(buildLeadsQuery(scope, normalizedMonth, attendantId), 'leads'),
+    safeListen(buildUsersQuery(), 'users'),
     safeListen(collection(db, 'holidays'), 'holidays'),
     safeListen(buildGoalsQuery(scope, normalizedMonth, clusterId, 'monthly_goals'), 'monthlyGoals'),
     safeListen(buildGoalsQuery(scope, normalizedMonth, clusterId, 'monthly_cluster_goals'), 'monthlyClusterGoals'),
     safeListen(buildAttendantGoalsQuery(normalizedMonth), 'monthlyAttendantGoals'),
   ];
 
+  if (scope === 'attendant' && attendantId) {
+    unsubscribers.push(onSnapshot(
+      buildAttendantUniverseQuery(attendantId),
+      (snapshot) => {
+        const attendantLeads = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+        state.leads = attendantLeads.filter((lead) => matchesOpenedMonth(lead, normalizedMonth));
+        state.prevMonthLeads = attendantLeads.filter((lead) => matchesOpenedMonth(lead, prevMonth));
+        state.prevRelevantLeads = attendantLeads.filter((lead) => matchesLifecycleMonth(lead, prevMonth));
+        state.officialLeads = attendantLeads.filter((lead) => matchesLifecycleMonth(lead, normalizedMonth));
+        reconcileLeadSets();
+      },
+      (error) => {
+        state.leads = [];
+        state.prevMonthLeads = [];
+        state.prevRelevantLeads = [];
+        state.officialLeads = [];
+        onError?.(error);
+        reconcileLeadSets();
+      },
+    ));
+  } else {
+    unsubscribers.push(
+      safeListen(buildLeadsQuery(scope, normalizedMonth, attendantId), 'leads'),
+      safeListen(buildLeadsQuery(scope, prevMonth, attendantId), 'prevMonthLeads'),
+      safeListen(buildLeadFieldQuery('contractedMonthKey', normalizedMonth), 'contractedMonthLeads'),
+      safeListen(buildLeadFieldQuery('installMonthKey', normalizedMonth), 'installedMonthLeads'),
+      safeListen(buildLeadFieldQuery('contractedMonthKey', prevMonth), 'prevContractedMonthLeads'),
+    );
+  }
+
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe?.());
 }
 
 export async function loadMonthlySalesScope({ scope = 'global', monthKey = DEFAULT_MONTH, clusterId = '', attendantId = '' }) {
   const normalizedMonth = normalizeMonthKey(monthKey);
-  const [citiesSnap, usersSnap, leadsSnap, holidaysSnap, goalsSnap, clusterGoalsSnap, attendantGoalsSnap] = await Promise.all([
+  const prevMonth = getPreviousMonthKey(normalizedMonth);
+
+  const baseReads = await Promise.all([
     getDocs(buildCitiesQuery(scope, clusterId)),
-    getDocs(buildUsersQuery(scope, clusterId)),
-    getDocs(buildLeadsQuery(scope, normalizedMonth, attendantId)),
+    getDocs(buildUsersQuery()),
     getDocs(collection(db, 'holidays')),
     getDocs(buildGoalsQuery(scope, normalizedMonth, clusterId, 'monthly_goals')),
     getDocs(buildGoalsQuery(scope, normalizedMonth, clusterId, 'monthly_cluster_goals')),
     getDocs(buildAttendantGoalsQuery(normalizedMonth)),
   ]);
+
+  const [
+    citiesSnap,
+    usersSnap,
+    holidaysSnap,
+    goalsSnap,
+    clusterGoalsSnap,
+    attendantGoalsSnap,
+  ] = baseReads;
+
+  let leads = [];
+  let officialLeads = [];
+  let prevMonthLeads = [];
+  let prevRelevantLeads = [];
+
+  if (scope === 'attendant' && attendantId) {
+    const universeSnap = await getDocs(buildAttendantUniverseQuery(attendantId));
+    const attendantLeads = universeSnap.docs.map((document) => ({ id: document.id, ...document.data() }));
+    leads = attendantLeads.filter((lead) => matchesOpenedMonth(lead, normalizedMonth));
+    officialLeads = attendantLeads.filter((lead) => matchesLifecycleMonth(lead, normalizedMonth));
+    prevMonthLeads = attendantLeads.filter((lead) => matchesOpenedMonth(lead, prevMonth));
+    prevRelevantLeads = attendantLeads.filter((lead) => matchesLifecycleMonth(lead, prevMonth));
+  } else {
+    const [
+      leadsSnap,
+      prevLeadsSnap,
+      contractedSnap,
+      installedSnap,
+      prevContractedSnap,
+    ] = await Promise.all([
+      getDocs(buildLeadsQuery(scope, normalizedMonth, attendantId)),
+      getDocs(buildLeadsQuery(scope, prevMonth, attendantId)),
+      getDocs(buildLeadFieldQuery('contractedMonthKey', normalizedMonth)),
+      getDocs(buildLeadFieldQuery('installMonthKey', normalizedMonth)),
+      getDocs(buildLeadFieldQuery('contractedMonthKey', prevMonth)),
+    ]);
+    leads = leadsSnap.docs.map((document) => ({ id: document.id, ...document.data() }));
+    prevMonthLeads = prevLeadsSnap.docs.map((document) => ({ id: document.id, ...document.data() }));
+    officialLeads = dedupeDocsById([
+      ...leads,
+      ...contractedSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
+      ...installedSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
+    ]);
+    prevRelevantLeads = dedupeDocsById([
+      ...prevMonthLeads,
+      ...prevContractedSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
+    ]);
+  }
 
   return summarizeScopePayload({
     monthKey: normalizedMonth,
@@ -564,7 +862,10 @@ export async function loadMonthlySalesScope({ scope = 'global', monthKey = DEFAU
     attendantId,
     cities: citiesSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
     users: usersSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
-    leads: leadsSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
+    leads,
+    officialLeads,
+    prevMonthLeads,
+    prevRelevantLeads,
     holidays: holidaysSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
     monthlyGoals: goalsSnap.docs.map((document) => ({ id: document.id, ...document.data() })),
     monthlyClusterGoals: clusterGoalsSnap.docs.map((document) => ({ id: document.id, ...document.data() })),

@@ -199,11 +199,13 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
   useEffect(() => { setAlertaDismissed(false); }, [data.absences?.faltas]);
 
   const stats = useMemo(() => ({
-    vendasMes: Number(data.sales?.totals?.p || 0),
+    vendasInstaladas: Number(data.sales?.totals?.installedP || 0),
+    vendasFechadas: Number(data.sales?.totals?.contractedP || 0),
     metaVendas: Number(data.sales?.totals?.goalP || 0),
     migracoesMes: Number(data.sales?.totals?.m || 0),
     svasMes: Number(data.sales?.totals?.ss || 0),
     metaSva: Number(data.sales?.totals?.goalS || 0),
+    pendingInstallations: Number(data.sales?.totals?.pendingInstallations || 0),
     alertasRh: (data.peopleOps?.rhPendentes?.length || 0) + (data.peopleOps?.absencePendentes?.length || 0),
   }), [data]);
 
@@ -235,34 +237,55 @@ export default function DashboardCoordenador({ userData, setActiveView }) {
         <button type="button" onClick={carregarDados} style={styles.refreshBtn}><RefreshCw size={20} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /></button>
       </div>
       <div style={styles.grid4}>
-        <GaugeCard title="Venda de planos" subtitle="Total das lojas fisicas contra a meta comercial consolidada" current={stats.vendasMes} target={stats.metaVendas} accent={colors.success} icon={TrendingUp} currentLabel="Vendidos" targetLabel="Meta planos" helper="Leitura oficial da performance comercial das lojas fisicas neste mes." />
-        <GaugeCard title="Migracoes realizadas" subtitle="Volume mensal de mudancas de plano efetivamente concluido" current={stats.migracoesMes} target={Math.max(stats.migracoesMes, 1)} accent={colors.warning} icon={Activity} currentLabel="Realizadas" targetLabel="Base atual" helper="Painel rapido do fluxo de migracoes ja convertidas no periodo." />
+        <GaugeCard title="Instalacoes executadas" subtitle="Venda instalada e o numero oficial que vale para a meta do mes" current={stats.vendasInstaladas} target={stats.metaVendas} accent={colors.success} icon={Zap} currentLabel="Instaladas" targetLabel="Meta planos" helper="Leitura oficial da performance comercial das lojas fisicas neste mes." />
+        <GaugeCard title="Vendas fechadas" subtitle="Contratos assinados no mes, antes da camada de instalacao" current={stats.vendasFechadas} target={stats.metaVendas} accent={colors.primary} icon={FileCheck} currentLabel="Fechadas" targetLabel="Meta planos" helper="Mostra o volume comercial fechado e o gap que ainda precisa instalar." />
         <GaugeCard title="SVA vendidos" subtitle="Servicos adicionais vendidos frente a meta mensal total" current={stats.svasMes} target={stats.metaSva} accent={colors.purple} icon={Zap} currentLabel="Vendidos" targetLabel="Meta SVA" helper="Acompanhe a aderencia do time ao objetivo de servicos agregados." />
         <GaugeCard title="Avisos RH pendentes" subtitle="Itens que ainda precisam de decisao ou encaminhamento da coordenacao" current={stats.alertasRh} target={Math.max(6, stats.alertasRh || 0)} accent={stats.alertasRh > 0 ? colors.danger : colors.info} icon={ShieldAlert} currentLabel="Pendencias" targetLabel="Faixa critica" inverse helper="Quanto mais proximo de zero, mais limpa esta a operacao de RH." />
       </div>
+
+      {stats.pendingInstallations > 0 ? (
+        <div style={{ ...styles.panel, marginBottom: 24, borderLeft: `4px solid ${colors.warning}`, background: 'rgba(245,158,11,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <AlertCircle size={18} color={colors.warning} />
+            <strong style={{ color: colors.warning }}>
+              {stats.pendingInstallations} {stats.pendingInstallations === 1 ? 'venda fechada ainda aguarda instalacao' : 'vendas fechadas ainda aguardam instalacao'}
+            </strong>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Enquanto nao instalar, nao entra na meta oficial.
+            </span>
+          </div>
+        </div>
+      ) : null}
       <div style={{ marginBottom: 40 }}>
         <SectionHeader icon={UserCheck} title="Faltas e Escala" subtitle="Monitoramento das ausencias em aberto, coberturas e risco operacional por loja." actionLabel="Ver todas" onAction={() => setActiveView('faltas')} color={colors.primary} />
         {faltas.length === 0 ? <div style={styles.goodState}><CheckCircle2 size={30} style={{ opacity: 0.6 }} /><strong>Cobertura completa</strong><span>Nenhuma falta registrada para os proximos dias.</span></div> : <div style={styles.faltasGrid}>{faltas.map((falta) => <FaltaCard key={falta.id} falta={falta} floaters={floaters} onNavigate={() => setActiveView('faltas')} onCoverageChange={handleCoverageChange} />)}</div>}
       </div>
 
       <div style={{ marginBottom: 40 }}>
-        <SectionHeader icon={TrendingUp} title="Inteligencia Comercial" subtitle="Leitura resumida do Painel Vendas global com evolucao, projeção e desempenho das lojas." actionLabel="Abrir Painel Vendas" onAction={() => setActiveView('vendas')} color={colors.success} />
+        <SectionHeader icon={TrendingUp} title="Inteligencia Comercial" subtitle="Leitura resumida do Painel Vendas global, priorizando instalacoes como numero oficial de meta." actionLabel="Abrir Painel Vendas" onAction={() => setActiveView('vendas')} color={colors.success} />
         <div style={styles.grid3}>
           <div style={styles.panel}>
-            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><TrendingUp size={15} color={colors.success} />Evolucao mensal</div><div style={styles.feedSubtitle}>Ultimos 6 meses de vendas de planos.</div></div></div>
+            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><TrendingUp size={15} color={colors.success} />Evolucao mensal</div><div style={styles.feedSubtitle}>Ultimos 6 meses de instalacoes de planos contra a meta.</div></div></div>
             <div style={{ padding: '10px 0', height: 110, background: 'linear-gradient(180deg, rgba(16,185,129,0.06), rgba(16,185,129,0.01))', borderRadius: 16, border: '1px solid rgba(16,185,129,0.12)' }}>
               <svg viewBox="0 0 280 88" style={{ width: '100%', height: '100%' }}>
                 <path d={sparkPath((data.sales?.evolution || []).map((item) => Number(item.sales || 0)))} fill="none" stroke={colors.success} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div style={styles.evolutionLabels}>{(data.sales?.evolution || []).map((item) => <div key={item.monthKey}><span>{item.label}</span><strong>{item.sales}</strong></div>)}</div>
-            <div style={styles.summaryBox}><div><span style={styles.summaryLabel}>Projecao</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.projP)}</strong></div><div style={{ textAlign: 'right' }}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.goalP)}</strong></div></div>
+            <div style={styles.summaryBox}><div><span style={styles.summaryLabel}>Projecao instalada</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.projInstalledP)}</strong></div><div style={{ textAlign: 'right' }}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryValue}>{formatNumber(data.sales?.totals?.goalP)}</strong></div></div>
           </div>
           <div style={styles.panel}>
-            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><Target size={15} color={colors.primary} />Projecao e ritmo</div><div style={styles.feedSubtitle}>Comparativo entre fechado, meta e projeção do mês.</div></div></div>
-            <div style={styles.kpiRow}><div style={styles.kpiBox}><span style={styles.summaryLabel}>Fechado</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.p)}</strong></div><div style={styles.kpiBox}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.goalP)}</strong></div></div>
-            <div style={styles.progressBg}><div style={styles.progressFill(Math.min(100, ((Number(data.sales?.totals?.projP || 0) / Math.max(Number(data.sales?.totals?.goalP || 1), 1)) * 100)), Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.primary)} /></div>
-            <div style={styles.progressLegend}><span>Projecao: {formatNumber(data.sales?.totals?.projP)}</span><span style={{ color: Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.danger }}>{Number(data.sales?.totals?.projP || 0) >= Number(data.sales?.totals?.goalP || 0) ? 'Acima do pacing' : 'Pede aceleracao'}</span></div>
+            <div style={styles.feedHeader}><div><div style={styles.feedTitle}><Target size={15} color={colors.primary} />Projecao e ritmo</div><div style={styles.feedSubtitle}>Comparativo entre instalado, fechado, meta e projeção do mês.</div></div></div>
+            <div style={styles.kpiRow}>
+              <div style={styles.kpiBox}><span style={styles.summaryLabel}>Instalado</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.installedP)}</strong></div>
+              <div style={styles.kpiBox}><span style={styles.summaryLabel}>Fechado</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.contractedP)}</strong></div>
+            </div>
+            <div style={styles.kpiRow}>
+              <div style={styles.kpiBox}><span style={styles.summaryLabel}>Meta</span><strong style={styles.summaryBig}>{formatNumber(data.sales?.totals?.goalP)}</strong></div>
+              <div style={styles.kpiBox}><span style={styles.summaryLabel}>Pendentes</span><strong style={{ ...styles.summaryBig, color: colors.warning }}>{formatNumber(data.sales?.totals?.pendingInstallations)}</strong></div>
+            </div>
+            <div style={styles.progressBg}><div style={styles.progressFill(Math.min(100, ((Number(data.sales?.totals?.projInstalledP || 0) / Math.max(Number(data.sales?.totals?.goalP || 1), 1)) * 100)), Number(data.sales?.totals?.projInstalledP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.primary)} /></div>
+            <div style={styles.progressLegend}><span>Projecao instalada: {formatNumber(data.sales?.totals?.projInstalledP)}</span><span style={{ color: Number(data.sales?.totals?.projInstalledP || 0) >= Number(data.sales?.totals?.goalP || 0) ? colors.success : colors.danger }}>{Number(data.sales?.totals?.projInstalledP || 0) >= Number(data.sales?.totals?.goalP || 0) ? 'Acima do pacing' : 'Pede aceleracao'}</span></div>
             <div style={styles.clusterWrap}>{(data.sales?.clusterSummary || []).slice(0, 3).map((item) => <div key={item.clusterId} style={styles.clusterChip}><span>{item.clusterId}</span><strong>{Math.round((item.score || 0) * 100)}%</strong></div>)}</div>
           </div>
           <div style={styles.panel}>

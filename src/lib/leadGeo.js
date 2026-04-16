@@ -13,8 +13,30 @@ export function normalizeLeadGeoStatus(value) {
   return VALID_GEO_STATUS.has(normalized) ? normalized : LEAD_GEO_STATUS.PENDING;
 }
 
+function parseCoordinateValue(rawValue) {
+  if (rawValue === null || rawValue === undefined) return null;
+  const normalized = String(rawValue).trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function hasValidLeadCoordinates(value) {
-  return Number.isFinite(Number(value?.geoLat)) && Number.isFinite(Number(value?.geoLng));
+  const lat = parseCoordinateValue(value?.geoLat);
+  const lng = parseCoordinateValue(value?.geoLng);
+  return (
+    lat !== null && lng !== null
+    && lat >= -90 && lat <= 90
+    && lng >= -180 && lng <= 180
+  );
+}
+
+export function getLeadCoordinates(value = {}) {
+  if (!hasValidLeadCoordinates(value)) return null;
+  return {
+    lat: Number(String(value.geoLat).trim()),
+    lng: Number(String(value.geoLng).trim()),
+  };
 }
 
 export function hasLeadAddressText(value = {}) {
@@ -38,7 +60,12 @@ export function buildLeadAddressLabel(value = {}) {
     value.addressNeighborhood || value.bairro,
   ].filter(Boolean).join(' - ');
 
-  return primary || String(value.address || '').trim() || String(value.geoFormattedAddress || '').trim() || 'Nao informado';
+  return (
+    primary
+    || String(value.address || '').trim()
+    || String(value.geoFormattedAddress || '').trim()
+    || 'Nao informado'
+  );
 }
 
 export function parseLeadCoordinateInput(rawValue = '') {
@@ -51,7 +78,7 @@ export function parseLeadCoordinateInput(rawValue = '') {
     return { ok: false, error: 'Cole as coordenadas em formato decimal, como -20.8113, -49.3758.' };
   }
 
-  if (/[A-Za-z°'"]/.test(normalized)) {
+  if (/[A-Za-z°'"]/u.test(normalized)) {
     return { ok: false, error: 'Use apenas coordenadas decimais simples, sem graus ou letras.' };
   }
 
@@ -60,22 +87,22 @@ export function parseLeadCoordinateInput(rawValue = '') {
     : normalized.split(' ').map((item) => item.trim()).filter(Boolean);
 
   if (pieces.length !== 2) {
-    return { ok: false, error: 'Informe latitude e longitude em dois valores decimais.' };
+    return { ok: false, error: 'Informe latitude e longitude separados por virgula.' };
   }
 
-  if (!pieces.every((item) => /^-?\d+(\.\d+)?$/.test(item))) {
-    return { ok: false, error: 'Formato invalido. Use ponto decimal, por exemplo: -20.8113, -49.3758.' };
+  const lat = parseCoordinateValue(pieces[0]);
+  const lng = parseCoordinateValue(pieces[1]);
+
+  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, error: 'Valores invalidos. Use numeros decimais como -20.8113, -49.3758.' };
   }
 
-  const lat = Number(pieces[0]);
-  const lng = Number(pieces[1]);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return { ok: false, error: 'Nao foi possivel interpretar essas coordenadas.' };
+  if (lat < -90 || lat > 90) {
+    return { ok: false, error: 'Latitude invalida. Deve estar entre -90 e 90.' };
   }
 
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    return { ok: false, error: 'Coordenadas fora do intervalo valido de latitude e longitude.' };
+  if (lng < -180 || lng > 180) {
+    return { ok: false, error: 'Longitude invalida. Deve estar entre -180 e 180.' };
   }
 
   return { ok: true, lat, lng };

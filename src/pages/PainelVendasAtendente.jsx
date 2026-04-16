@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
-  DollarSign,
   Gauge,
   PieChart as PieChartIcon,
   Target,
@@ -33,6 +32,8 @@ import { db } from '../firebase';
 import { Card, DataTable, Empty, InfoBox, KpiCard, Page, colors, moeda, styles as uiStyles } from '../components/ui';
 import { listenAttendantLeadsByMonth } from '../services/atendenteAnalyticsService';
 import { listenMetaIndividualAtendente } from '../services/metas';
+import { listenMonthlySalesScope } from '../services/monthlySalesService';
+import { normalizeLeadType } from '../services/leads';
 
 const STATUS_PALETTE = {
   'Em negociacao': '#f97316',
@@ -118,9 +119,11 @@ function buildGoalProjectionData({ monthKey, goal, leads = [], holidays = [], ci
   const workingDays = buildWorkingDays(monthKey, holidays, cityId);
   const plansTarget = toNumber(goal?.plansTarget);
   const salesByDate = leads.reduce((accumulator, lead) => {
-    const isPlanSale = (lead?.status === 'Contratado' || lead?.status === 'Instalado') && lead?.leadType === 'Plano Novo';
-    if (!isPlanSale) return accumulator;
-    const dateKey = String(lead?.date || '').slice(0, 10);
+    const isPlanInstall = lead?.status === 'Instalado'
+      && normalizeLeadType(lead?.categoryName || lead?.leadType || lead?.productName) === 'Plano Novo'
+      && String(lead?.installMonthKey || lead?.monthKey || '') === String(monthKey || '');
+    if (!isPlanInstall) return accumulator;
+    const dateKey = String(lead?.installedDate || lead?.date || '').slice(0, 10);
     if (!dateKey) return accumulator;
     accumulator[dateKey] = (accumulator[dateKey] || 0) + 1;
     return accumulator;
@@ -308,6 +311,14 @@ export default function PainelVendasAtendente({ userData }) {
   const [goalLoading, setGoalLoading] = useState(true);
   const [goalError, setGoalError] = useState('');
   const [holidays, setHolidays] = useState([]);
+  const [salesScope, setSalesScope] = useState({
+    contractedP: 0,
+    contractedM: 0,
+    contractedS: 0,
+    installedP: 0,
+    pendingInstallations: 0,
+    goalP: 0,
+  });
 
   useEffect(() => {
     if (!userData?.uid) {
@@ -382,6 +393,33 @@ export default function PainelVendasAtendente({ userData }) {
     };
   }, [selectedMonth, userData?.uid]);
 
+  useEffect(() => {
+    if (!userData?.uid) {
+      setSalesScope({ contractedP: 0, contractedM: 0, contractedS: 0, installedP: 0, pendingInstallations: 0, goalP: 0 });
+      return undefined;
+    }
+
+    return listenMonthlySalesScope({
+      scope: 'attendant',
+      attendantId: userData.uid,
+      monthKey: selectedMonth,
+      callback: (scope) => {
+        setSalesScope({
+          contractedP: toNumber(scope?.totals?.contractedP),
+          contractedM: toNumber(scope?.totals?.contractedM),
+          contractedS: toNumber(scope?.totals?.contractedS),
+          installedP: toNumber(scope?.totals?.installedP),
+          pendingInstallations: toNumber(scope?.totals?.pendingInstallations),
+          goalP: toNumber(scope?.totals?.goalP),
+        });
+      },
+      onError: (firebaseError) => {
+        console.warn('Nao foi possivel carregar o escopo comercial do atendente:', firebaseError);
+        setSalesScope({ contractedP: 0, contractedM: 0, contractedS: 0, installedP: 0, pendingInstallations: 0, goalP: 0 });
+      },
+    });
+  }, [selectedMonth, userData?.uid]);
+
   const statusChartData = useMemo(() => buildSummaryEntries(summary.statusSummary), [summary.statusSummary]);
   const discardReasonData = useMemo(() => buildDiscardChartData(summary.discardReasonSummary), [summary.discardReasonSummary]);
   const mixChartData = useMemo(() => buildMixChartData(summary), [summary]);
@@ -399,7 +437,12 @@ export default function PainelVendasAtendente({ userData }) {
   );
   const plansTarget = toNumber(goal?.plansTarget);
   const svaTarget = toNumber(goal?.svaTarget);
-  const plansReachedPercent = plansTarget > 0 ? Number(((summary.planos / plansTarget) * 100).toFixed(1)) : 0;
+  const installedPlans = toNumber(salesScope.installedP);
+  const closedPlans = toNumber(salesScope.contractedP);
+  const migrationSales = toNumber(salesScope.contractedM);
+  const svaSales = toNumber(salesScope.contractedS);
+  const pendingInstalls = toNumber(salesScope.pendingInstallations);
+  const plansReachedPercent = plansTarget > 0 ? Number(((installedPlans / plansTarget) * 100).toFixed(1)) : 0;
 
   const columns = useMemo(
     () => [
@@ -449,7 +492,7 @@ export default function PainelVendasAtendente({ userData }) {
   return (
     <Page
       title="Meus Graficos"
-      subtitle="Uma leitura mais executiva do seu funil, do valor gerado e dos gargalos que travam suas conversoes."
+      subtitle="Leitura executiva do seu funil, com vendas por contratacao no mes e meta oficial por instalacoes do mes."
       actions={(
         <input
           type="month"
@@ -464,6 +507,11 @@ export default function PainelVendasAtendente({ userData }) {
       )}
       {goalError && (
         <InfoBox type="warning">{goalError}</InfoBox>
+      )}
+      {!goalLoading && !goal && !goalError && (
+        <InfoBox type="info">
+          Seu supervisor ainda nao configurou as metas individuais para este mes. Os indicadores de conversao e funil funcionam normalmente — apenas as barras de progresso de meta ficarao zeradas ate a distribuicao ser feita.
+        </InfoBox>
       )}
       {goal?.distributionStatus === 'stale' && (
         <InfoBox type="warning">
@@ -489,7 +537,7 @@ export default function PainelVendasAtendente({ userData }) {
               {summary.totalLeads} leads monitorados no periodo
             </div>
             <div style={{ maxWidth: '700px', fontSize: '14px', lineHeight: 1.6, color: 'rgba(255,255,255,0.76)' }}>
-              O painel cruza volume, conversao, valor e perdas para te mostrar onde voce esta performando bem e onde o funil esta vazando.
+              A leitura principal separa captacao, contratacao e instalacao. O funil mostra a entrada do mes, mas as vendas oficiais usam a data de contratacao e a meta usa a data de instalacao.
             </div>
           </div>
 
@@ -510,10 +558,10 @@ export default function PainelVendasAtendente({ userData }) {
 
       <div style={uiStyles.grid2}>
         <GoalGaugeCard
-          current={summary.planos}
+          current={installedPlans}
           target={plansTarget}
           title="Meta de planos"
-          subtitle={goalLoading ? 'Carregando sua meta individual...' : 'Velocimetro da sua meta mensal de planos'}
+          subtitle={goalLoading ? 'Carregando sua meta individual...' : 'Velocimetro da sua meta mensal de instalacoes'}
           accent={colors.primary}
         />
 
@@ -531,21 +579,28 @@ export default function PainelVendasAtendente({ userData }) {
               label="% da meta"
               value={`${plansReachedPercent}%`}
               accent={colors.primary}
-              helper={plansTarget > 0 ? `${summary.planos} de ${plansTarget} planos fechados` : 'Cadastre ou distribua a meta individual para acompanhar o alcance'}
+              helper={plansTarget > 0 ? `${installedPlans} de ${plansTarget} instalacoes validadas para a meta` : 'Cadastre ou distribua a meta individual para acompanhar o alcance'}
             />
             <PulseMetric
               icon={<TrendingUp size={16} />}
               label="Meta SVA"
-              value={`${summary.svas}/${svaTarget || 0}`}
+              value={`${svaSales}/${svaTarget || 0}`}
               accent={colors.purple}
-              helper={svaTarget > 0 ? `Meta sugerida de SVA baseada em 40% da meta de planos` : 'Sem meta SVA disponivel para este periodo'}
+              helper={svaTarget > 0 ? 'SVA entra na leitura pela data de contratacao, sem depender da ativacao.' : 'Sem meta SVA disponivel para este periodo'}
+            />
+            <PulseMetric
+              icon={<AlertTriangle size={16} />}
+              label="Gap de instalacao"
+              value={pendingInstalls}
+              accent={colors.warning}
+              helper={pendingInstalls > 0 ? 'Contratos do mes ainda aguardando baixa de instalacao.' : 'Nenhum contrato pendente de instalar neste mes.'}
             />
           </div>
 
           {goalLoading ? (
             <div style={{ padding: '42px 0', textAlign: 'center', color: 'var(--text-muted)' }}>Carregando curva de meta...</div>
           ) : projectionData.length === 0 ? (
-            <Empty icon="..." title="Sem base para projeção" description="Assim que houver meta individual e dias uteis no mes, a linha ideal aparece aqui." />
+            <Empty icon="..." title="Sem base para projecao" description="Assim que houver meta individual e instalacoes no mes, a curva oficial aparece aqui." />
           ) : (
             <ChartCanvas height={290}>
               {({ width, height }) => (
@@ -565,9 +620,11 @@ export default function PainelVendasAtendente({ userData }) {
 
       <div style={uiStyles.grid4}>
         <KpiCard label="Leads" valor={summary.totalLeads} icon={<Users size={16} />} accent={colors.primary} />
-        <KpiCard label="Vendas" valor={summary.totalSales} icon={<Target size={16} />} accent={colors.success} />
+        <KpiCard label="Planos fechados" valor={closedPlans} icon={<Target size={16} />} accent={colors.info} />
+        <KpiCard label="Planos instalados" valor={installedPlans} icon={<CheckCircle2 size={16} />} accent={colors.success} />
+        <KpiCard label="SVA vendidos" valor={svaSales} icon={<TrendingUp size={16} />} accent={colors.purple} />
+        <KpiCard label="Migracoes" valor={migrationSales} icon={<Activity size={16} />} accent={colors.warning} />
         <KpiCard label="Descartados" valor={summary.totalDiscarded} icon={<XCircle size={16} />} accent={colors.danger} />
-        <KpiCard label="Valor fechado" valor={moeda(summary.totalValue)} icon={<DollarSign size={16} />} accent={colors.purple} />
       </div>
 
       <div style={uiStyles.grid2}>
@@ -760,9 +817,9 @@ export default function PainelVendasAtendente({ userData }) {
             <PulseMetric
               icon={<CheckCircle2 size={16} />}
               label="Instalados"
-              value={summary.totalInstalled}
+              value={installedPlans}
               accent={colors.primary}
-              helper="Leads que ja chegaram na camada mais forte do fechamento."
+              helper="Instalacoes que ja contam oficialmente para sua meta do mes."
             />
           </div>
 
@@ -798,7 +855,7 @@ export default function PainelVendasAtendente({ userData }) {
       {!loading && leads.length === 0 && !error && (
         <Card>
           <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-            Este modulo considera apenas os seus leads do mes selecionado. Conforme novos registros entram, os indicadores se atualizam em tempo real.
+            Este modulo cruza captacao, contratacao e instalacao do mes selecionado. Assim, uma venda aberta antes mas contratada ou instalada agora entra corretamente na leitura oficial.
           </p>
         </Card>
       )}

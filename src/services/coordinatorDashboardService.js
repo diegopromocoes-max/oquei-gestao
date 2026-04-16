@@ -73,7 +73,7 @@ function hasPendingCoverage(absence = {}) {
 
 function buildPerformanceScore(item = {}) {
   const meta = toNumber(item.metaPlanos);
-  const sales = toNumber(item.salesPlanos);
+  const sales = toNumber(item.installedPlanos ?? item.salesPlanos);
   if (meta <= 0) return sales > 0 ? 1 : 0;
   return sales / meta;
 }
@@ -83,11 +83,11 @@ function buildStoreRankings(storeData = []) {
     .filter((item) => item.city)
     .map((item) => ({
       city: item.city,
-      salesPlanos: toNumber(item.salesPlanos),
+      salesPlanos: toNumber(item.installedPlanos ?? item.salesPlanos),
       metaPlanos: toNumber(item.metaPlanos),
       projection: toNumber(item.projSales),
       score: buildPerformanceScore(item),
-      gap: toNumber(item.salesPlanos) - toNumber(item.metaPlanos),
+      gap: toNumber(item.installedPlanos ?? item.salesPlanos) - toNumber(item.metaPlanos),
     }));
 
   const ranked = [...storesWithSignal].sort((left, right) => {
@@ -114,7 +114,7 @@ function buildClusterSummary(storeData = []) {
       });
     }
     const current = clusterMap.get(clusterId);
-    current.salesPlanos += toNumber(item.salesPlanos);
+    current.salesPlanos += toNumber(item.installedPlanos ?? item.salesPlanos);
     current.metaPlanos += toNumber(item.metaPlanos);
     current.projection += toNumber(item.projSales);
   });
@@ -139,7 +139,18 @@ function createEmptyPayload(monthKey) {
     monthKey: normalizeMonthKey(monthKey),
     sales: {
       scope: null,
-      totals: { p: 0, goalP: 0, m: 0, ss: 0, goalS: 0, projP: 0 },
+      totals: {
+        p: 0,
+        goalP: 0,
+        m: 0,
+        ss: 0,
+        goalS: 0,
+        projP: 0,
+        projInstalledP: 0,
+        contractedP: 0,
+        installedP: 0,
+        pendingInstallations: 0,
+      },
       evolution: [],
       topStores: [],
       bottomStores: [],
@@ -201,9 +212,10 @@ export async function loadCoordinatorDashboardData({ userData, monthKey } = {}) 
         return {
           monthKey: historyMonth,
           label: formatMonthLabel(historyMonth),
-          sales: toNumber(scope?.totals?.p),
+          sales: toNumber(scope?.totals?.installedP),
+          closed: toNumber(scope?.totals?.contractedP),
           goal: toNumber(scope?.totals?.goalP),
-          projection: toNumber(scope?.totals?.projP),
+          projection: toNumber(scope?.totals?.projInstalledP),
           sva: toNumber(scope?.totals?.ss),
           svaGoal: toNumber(scope?.totals?.goalS),
         };
@@ -303,6 +315,10 @@ export async function loadCoordinatorDashboardData({ userData, monthKey } = {}) 
         ss: toNumber(salesScope?.totals?.ss),
         goalS: toNumber(salesScope?.totals?.goalS),
         projP: toNumber(salesScope?.totals?.projP),
+        projInstalledP: toNumber(salesScope?.totals?.projInstalledP),
+        contractedP: toNumber(salesScope?.totals?.contractedP),
+        installedP: toNumber(salesScope?.totals?.installedP),
+        pendingInstallations: toNumber(salesScope?.totals?.pendingInstallations),
       },
       evolution: salesHistory,
       topStores,

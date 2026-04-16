@@ -3,22 +3,30 @@ import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'f
 import { db } from '../firebase';
 import { summarizeAttendantLeads } from './atendenteAnalyticsService';
 
+// Normaliza cityId para lowercase para evitar mismatch entre o cadastro do atendente
+// e o campo "to" da mensagem enviada pelo supervisor (ex: "centro" vs "Centro").
+function normalizeCityId(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function uniqueRecipients(cityId, uid) {
-  return Array.from(new Set(['all', cityId, uid].filter(Boolean)));
+  const normalized = normalizeCityId(cityId);
+  // Inclui tanto o valor original quanto o normalizado para cobrir
+  // mensagens gravadas antes desta correção.
+  return Array.from(new Set(['all', cityId, normalized, uid].filter(Boolean)));
 }
 
 export function listenAtendenteStats(uid, monthKey, callback, onError) {
   const q = query(
     collection(db, 'leads'),
     where('attendantId', '==', uid),
-    where('monthKey', '==', monthKey),
   );
 
   return onSnapshot(
     q,
     (snapshot) => {
       const leads = snapshot.docs.map((document) => document.data());
-      callback(summarizeAttendantLeads(leads), null);
+      callback(summarizeAttendantLeads(leads, monthKey), null);
     },
     (error) => {
       onError?.(error);

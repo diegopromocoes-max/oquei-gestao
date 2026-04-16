@@ -16,6 +16,7 @@ import {
 import LeadAddressMapModal from '../components/LeadAddressMapModal';
 import { Btn, Card, InfoBox, Modal, Page, colors, styles as uiStyles } from '../components/ui';
 import {
+  getLeadCoordinates,
   LEAD_GEO_STATUS,
   buildLeadAddressLabel,
   hasValidLeadCoordinates,
@@ -151,6 +152,7 @@ function buildPopupHtml(lead) {
 }
 
 function normalizeLeadForEdit(lead) {
+  const coordinates = getLeadCoordinates(lead);
   return {
     ...lead,
     id: lead?.id || '',
@@ -161,8 +163,8 @@ function normalizeLeadForEdit(lead) {
     logradouro: lead.addressStreet || '',
     numero: lead.addressNumber || '',
     bairro: lead.addressNeighborhood || '',
-    geoLat: lead.geoLat || null,
-    geoLng: lead.geoLng || null,
+    geoLat: coordinates?.lat ?? null,
+    geoLng: coordinates?.lng ?? null,
     geoStatus: normalizeLeadGeoStatus(lead.geoStatus),
     geoFormattedAddress: lead.geoFormattedAddress || '',
     status: lead.status || 'Em negociacao',
@@ -219,13 +221,13 @@ function isMeaningfulBounds(bounds) {
 
 function leadInsideBounds(lead, selectionBounds) {
   if (!selectionBounds) return true;
-  const lat = Number(lead.geoLat);
-  const lng = Number(lead.geoLng);
+  const coordinates = getLeadCoordinates(lead);
+  if (!coordinates) return false;
   return (
-    lat >= selectionBounds.south
-    && lat <= selectionBounds.north
-    && lng >= selectionBounds.west
-    && lng <= selectionBounds.east
+    coordinates.lat >= selectionBounds.south
+    && coordinates.lat <= selectionBounds.north
+    && coordinates.lng >= selectionBounds.west
+    && coordinates.lng <= selectionBounds.east
   );
 }
 
@@ -430,7 +432,18 @@ export default function MeuMapaLeads({ userData }) {
         });
 
         mapInstanceRef.current = map;
-        L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+
+        // Leaflet's Control.Scale calls containerPointToLatLng during its first
+        // _update, which requires the container to have a non-zero size.
+        // Adding it inside whenReady (fired after the first setView completes and
+        // the container is fully sized) prevents the "Invalid LatLng (NaN, NaN)" crash
+        // that happens when the tab renders with a zero-height container.
+        map.whenReady(() => {
+          if (cancelled) return;
+          L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+          // Force a size recalculation in case the flex container settled after init
+          map.invalidateSize({ animate: false });
+        });
 
         const finalizeSelection = (shouldCommit) => {
           const draftBounds = selectionDraftBoundsRef.current;
@@ -591,9 +604,13 @@ export default function MeuMapaLeads({ userData }) {
 
     const L = window.L;
     const bounds = L.latLngBounds([]);
+    let plottedMarkers = 0;
 
     visibleLeads.forEach((lead) => {
-      const position = [Number(lead.geoLat), Number(lead.geoLng)];
+      const coordinates = getLeadCoordinates(lead);
+      if (!coordinates) return;
+
+      const position = [coordinates.lat, coordinates.lng];
       const marker = L.marker(position, {
         icon: createLeafletPinIcon(markerColorForStatus(lead.status)),
       }).addTo(mapInstanceRef.current);
@@ -614,9 +631,10 @@ export default function MeuMapaLeads({ userData }) {
 
       markersRef.current.push(marker);
       bounds.extend(position);
+      plottedMarkers += 1;
     });
 
-    if (visibleLeads.length > 0) {
+    if (plottedMarkers > 0 && bounds.isValid()) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [54, 54] });
     }
   }, [visibleLeads]);
@@ -630,8 +648,14 @@ export default function MeuMapaLeads({ userData }) {
   const handleCenterMap = () => {
     if (!mapInstanceRef.current || !window.L || visibleLeads.length === 0) return;
     const bounds = window.L.latLngBounds([]);
-    visibleLeads.forEach((lead) => bounds.extend([Number(lead.geoLat), Number(lead.geoLng)]));
-    mapInstanceRef.current.fitBounds(bounds, { padding: [54, 54] });
+    visibleLeads.forEach((lead) => {
+      const coordinates = getLeadCoordinates(lead);
+      if (!coordinates) return;
+      bounds.extend([coordinates.lat, coordinates.lng]);
+    });
+    if (bounds.isValid()) {
+      mapInstanceRef.current.fitBounds(bounds, { padding: [54, 54] });
+    }
   };
 
   const handleToggleFullscreen = async () => {
